@@ -585,7 +585,9 @@ const saved = await agent([
 ].join('\n'), { label: 'save', phase: 'Save', model: 'haiku', effort: 'low', schema: WRITE_SCHEMA })
 
 const expected = files.map((f) => f.path)
-const notWritten = expected.filter((p) => !saved || saved.written.indexOf(p) < 0)
+// The writer may report absolute Windows paths; compare by the repo-relative ending.
+const slash = (p) => p.replace(/\\/g, '/')
+const notWritten = expected.filter((p) => !saved || !saved.written.some((w) => slash(w).endsWith(p)))
 if (notWritten.length) log('Not saved: ' + notWritten.join(', '))
 
 // ---- The judge: the only agent that reads the plan's proposed decisions
