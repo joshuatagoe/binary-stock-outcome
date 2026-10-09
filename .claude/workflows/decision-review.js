@@ -6,7 +6,8 @@ export const meta = {
     { title: 'Research', detail: 'one blind researcher per group, questions only', model: 'sonnet' },
     { title: 'Verify', detail: 'reopen the source behind every CONFIRMED claim', model: 'sonnet' },
     { title: 'Save', detail: 'one writer saves the verified findings', model: 'haiku' },
-    { title: 'Judge', detail: 'verdicts for decisions, briefings for open questions', model: 'opus' },
+    { title: 'Judge', detail: 'one judge per group: verdicts and briefings', model: 'opus' },
+    { title: 'Cross-check', detail: 'one pass for conflicts between groups', model: 'opus' },
   ],
 }
 
@@ -350,7 +351,6 @@ if (!/^[a-z0-9-]+$/.test(A.label || '')) throw new Error('args.label must be low
 const RUN = A.groups && A.groups.length ? A.groups : [1, 2, 3, 4, 5, 6, 7]
 for (const g of RUN) if (!GROUPS[g]) throw new Error('unknown group ' + g)
 const TAG = A.date + '-' + A.label
-log('Run ' + TAG + ': groups ' + RUN.join(', '))
 
 const RESEARCH_SCHEMA = {
   type: 'object',
@@ -434,8 +434,13 @@ const JUDGE_SCHEMA = {
       type: 'array',
       items: {
         type: 'object',
-        required: ['item', 'verdict'],
-        properties: { item: { type: 'string' }, verdict: { type: 'string', enum: ['Holds', 'Holds with a caveat', 'Contested', 'Your call'] } },
+        required: ['item', 'source', 'verdict', 'why'],
+        properties: {
+          item: { type: 'string' },
+          source: { type: 'string', description: 'copied from the plan: spec, owner, Claude proposal, or a mix' },
+          verdict: { type: 'string', enum: ['Holds', 'Holds with a caveat', 'Contested', 'Your call'] },
+          why: { type: 'string', description: 'one sentence' },
+        },
       },
     },
     briefings: { type: 'array', items: { type: 'string' } },
@@ -443,33 +448,64 @@ const JUDGE_SCHEMA = {
   },
 }
 
-const storyPaths = (ids) => ids.map((s) => 'docs/stories/' + STORIES[s].folder + '/story.md')
+const CROSS_SCHEMA = {
+  type: 'object',
+  required: ['path', 'conflicts'],
+  properties: {
+    path: { type: 'string' },
+    conflicts: { type: 'array', items: { type: 'string' }, description: 'conflicts between groups, one line each' },
+  },
+}
 
-function researchPrompt(g) {
-  const G = GROUPS[g]
+const storyPaths = (ids) => ids.map((s) => 'docs/stories/' + STORIES[s].folder + '/story.md')
+const pad = (n) => (n < 10 ? '0' : '') + n
+
+// Groups with many items are split across two researchers; the second slice numbers its findings from .51.
+const SLICES = {
+  2: [['D5', 'D9', 'D13', 'D15', 'D20', 'D21', 'A1', 'Q5', 'Q6', 'Q28', 'Q31', 'Q38'], ['D14', 'D16', 'D25', 'Q4', 'Q11', 'Q17', 'Q18', 'Q21', 'Q29', 'Q41']],
+  4: [['D8', 'D26', 'D28', 'Q2', 'Q3', 'Q13', 'Q16', 'Q20', 'Q36', 'Q37', 'Q48'], ['D1', 'D2', 'A4', 'Q27', 'Q30', 'Q39', 'Q43', 'Q45']],
+}
+for (const g of Object.keys(SLICES)) {
+  if (SLICES[g].flat().slice().sort().join() !== GROUPS[g].items.slice().sort().join()) throw new Error('the slices of group ' + g + ' do not match its items')
+}
+const unitsFor = (g) => (SLICES[g] || [GROUPS[g].items]).map((items, k, all) => ({
+  g: g, items: items, first: k * 50 + 1, label: 'G' + g + (all.length > 1 ? 'ab'[k] : ''),
+}))
+const UNITS = RUN.reduce((acc, g) => acc.concat(unitsFor(g)), [])
+log('Run ' + TAG + ': groups ' + RUN.join(', ') + '. Agents: ' + UNITS.length + ' researchers, up to ' + UNITS.length + ' checkers, 1 writer, ' + RUN.length + ' judges' + (RUN.length > 1 ? ', 1 cross-group pass' : ''))
+
+function researchPrompt(u) {
+  const G = GROUPS[u.g]
+  const part = u.items.length < G.items.length ? ' Another researcher covers the other items in that file; answer only yours.' : ''
   return [
-    'You are the group ' + g + ' researcher (' + G.name + ') in the Meridian stage 1 decision review.',
+    'You are a group ' + u.g + ' researcher (' + G.name + ') in the Meridian stage 1 decision review.',
     '',
-    'Read first: your questions in ' + G.input + '; your story files: ' + storyPaths(G.stories).join(', ') + '; and the spec at ' + SPEC + ' (open it by that exact path).',
+    'Read first: the questions in ' + G.input + '; the story files ' + storyPaths(G.stories).join(', ') + '; and the spec at ' + SPEC + ' (open it by that exact path).',
     'Do not open docs/DECISIONS.md, docs/planning/ or any plan file: they hold proposed answers and this review is blind. Write no files.',
     '',
-    'For every item in the input file (' + G.items.join(', ') + '), return one entry in `items`:',
+    'Your items: ' + u.items.join(', ') + '.' + part + ' Return one entry in `items` for each:',
     '- decision: `summary` = your leading answer; `counter_case` = the strongest case against it.',
     '- open question: `summary` = the options with their evidence, without picking one; `counter_case` = what evidence would change the picture.',
     '',
-    'Back every point with `findings`. Number them F' + g + '.01, F' + g + '.02, ... Tag each with the items it serves and the story IDs it serves (' + G.stories.join(', ') + '); use an empty story list when it serves no single story.',
+    'How deep to go:',
+    '- For every item, open at least two outside sources, at least one of them primary: official documentation, a project repository or announcement, a regulator, or an exchange. The spec is context. Quote it only when an item turns on its wording; it does not count toward the two.',
+    '- Look as hard for evidence against your leading answer as for evidence that supports it.',
+    '- Before you return, try at least one more search for each gap. Keep in `gaps` only what you still could not find.',
+    '- Run independent searches and page reads in parallel.',
+    '',
+    'Back every point with `findings`. Number them F' + u.g + '.' + pad(u.first) + ', F' + u.g + '.' + pad(u.first + 1) + ', and so on. Tag each with the items it serves and the story IDs it serves (' + G.stories.join(', ') + '); use an empty story list when it serves no single story.',
     'Label every finding: CONFIRMED only if you opened the primary source and it says this; SECONDARY for third-party write-ups or search snippets; UNCONFIRMED otherwise, or when sources contradict each other. Give each source its URL, title and the short passage that supports the claim.',
     G.legal
       ? 'Use the legal lens only: law, regulation, licensing and market practice, with sources. This is not legal advice; never claim the product is compliant, legal or regulated.'
       : 'Use three lenses and set `lens` on each finding: venues (how real venues do it), technical (the technical facts), user (what the user needs).',
-    'Prefer primary sources and current ones (today is ' + A.date + '). Put what you could not find in `gaps`.',
+    'Prefer current sources (today is ' + A.date + ').',
   ].join('\n')
 }
 
-function verifyPrompt(g, report) {
+function verifyPrompt(u, report) {
   const confirmed = report.findings.filter((f) => f.label === 'CONFIRMED')
   return [
-    'You are the source checker for group ' + g + ' (' + GROUPS[g].name + ') in the Meridian stage 1 decision review. Write no files.',
+    'You are the source checker for ' + u.label + ' (group ' + u.g + ', ' + GROUPS[u.g].name + ') in the Meridian stage 1 decision review. Write no files.',
     '',
     'For each finding below, open its source URLs yourself (WebFetch) and check that the page actually says what the claim and quote say.',
     '- It does, on a primary source: label_after = CONFIRMED.',
@@ -481,7 +517,7 @@ function verifyPrompt(g, report) {
   ].join('\n')
 }
 
-function merge(g, report, verify) {
+function applyChecks(report, verify) {
   const checks = {}
   for (const c of (verify && verify.checks) || []) checks[c.id] = c
   const findings = report.findings.map((f) => {
@@ -491,12 +527,21 @@ function merge(g, report, verify) {
     if (c.label_after === 'CONFIRMED') return Object.assign({}, f, { verification: 'held: ' + c.note })
     return Object.assign({}, f, { label: c.label_after, verification: 'downgraded from CONFIRMED: ' + c.note })
   })
-  const covered = report.items.map((i) => i.item)
+  return { items: report.items, gaps: report.gaps, findings: findings }
+}
+
+function combine(g, parts) {
+  const items = [], gaps = [], findings = []
+  for (const p of parts) { items.push(...p.items); gaps.push(...p.gaps); findings.push(...p.findings) }
+  const covered = items.map((i) => i.item)
   const missing = GROUPS[g].items.filter((i) => covered.indexOf(i) < 0)
+  const ids = findings.map((f) => f.id)
+  const dupes = ids.filter((id, i) => ids.indexOf(id) !== i)
   const badStories = findings.filter((f) => f.stories.some((s) => !STORIES[s])).map((f) => f.id)
   if (missing.length) log('Group ' + g + ': no answer for ' + missing.join(', '))
+  if (dupes.length) log('Group ' + g + ': duplicate finding IDs ' + dupes.join(', '))
   if (badStories.length) log('Group ' + g + ': unknown story IDs in ' + badStories.join(', '))
-  return { group: g, items: report.items, gaps: report.gaps, findings: findings, missing: missing }
+  return { group: g, items: items, gaps: gaps, findings: findings, missing: missing }
 }
 
 function findingBlock(f) {
@@ -533,23 +578,29 @@ function storyHeader(s) {
   return '# Research: ' + s + ' ' + STORIES[s].title + '\n\nAppend-only. A finding later shown wrong gets a dated correction line below it, never an edit.\n'
 }
 
-// ---- Research and verify, each group on its own (no barrier between the two stages)
-const results = await pipeline(
-  RUN,
-  (g) => agent(researchPrompt(g), { label: 'research:G' + g, phase: 'Research', agentType: 'researcher', schema: RESEARCH_SCHEMA }),
-  async (report, g) => {
-    if (!report) { log('Group ' + g + ': the researcher returned nothing'); return null }
+const reportPath = (g) => 'docs/research/reports/' + TAG + '-G' + g + '.md'
+const judgePath = (g) => 'docs/research/decision-review-' + TAG + '-G' + g + '.md'
+
+// ---- Research and check, each slice on its own (no barrier between the two stages)
+const unitResults = await pipeline(
+  UNITS,
+  (u) => agent(researchPrompt(u), { label: 'research:' + u.label, phase: 'Research', agentType: 'researcher', effort: 'high', schema: RESEARCH_SCHEMA }),
+  async (report, u) => {
+    if (!report) { log(u.label + ': the researcher returned nothing'); return null }
     const n = report.findings.filter((f) => f.label === 'CONFIRMED').length
-    const verify = n ? await agent(verifyPrompt(g, report), { label: 'verify:G' + g, phase: 'Verify', model: 'sonnet', schema: VERIFY_SCHEMA }) : { checks: [] }
-    return merge(g, report, verify)
+    const verify = n ? await agent(verifyPrompt(u, report), { label: 'verify:' + u.label, phase: 'Verify', model: 'sonnet', schema: VERIFY_SCHEMA }) : { checks: [] }
+    return { unit: u, checked: applyChecks(report, verify) }
   },
 )
-const done = results.filter(Boolean)
+const done = RUN.map((g) => {
+  const parts = unitResults.filter((r) => r && r.unit.g === g).map((r) => r.checked)
+  return parts.length ? combine(g, parts) : null
+}).filter(Boolean)
 if (!done.length) return { run: TAG, error: 'no group produced a report' }
 
 // ---- One writer saves everything, so no two agents ever write the same file (barrier: needs every group's findings)
 const files = []
-for (const r of done) files.push({ path: 'docs/research/reports/' + TAG + '-G' + r.group + '.md', mode: 'create', header: '', content: groupReport(r) })
+for (const r of done) files.push({ path: reportPath(r.group), mode: 'create', header: '', content: groupReport(r) })
 const perStory = {}
 const cross = []
 for (const r of done) {
@@ -590,25 +641,54 @@ const slash = (p) => p.replace(/\\/g, '/')
 const notWritten = expected.filter((p) => !saved || !saved.written.some((w) => slash(w).endsWith(p)))
 if (notWritten.length) log('Not saved: ' + notWritten.join(', '))
 
-// ---- The judge: the only agent that reads the plan's proposed decisions
-phase('Judge')
-const reportPaths = done.map((r) => 'docs/research/reports/' + TAG + '-G' + r.group + '.md')
-const judgeItems = done.reduce((acc, r) => acc.concat(GROUPS[r.group].items), [])
-const judge = await agent([
-  'You are the judge of the Meridian stage 1 decision review, run ' + TAG + '. The reader is the project owner, who is new to finance and blockchain: use plain words and define each term the first time it appears.',
-  '',
-  'Read: the verified group reports ' + reportPaths.join(', ') + '; the input files ' + done.map((r) => GROUPS[r.group].input).join(', ') + '; and the dated plan copy ' + PLAN_COPY + ', which holds the proposed decisions (D, A) and the open questions (Q) with the owner\'s directions so far. You are the only agent in this review that reads the plan.',
-  'Only CONFIRMED and SECONDARY findings carry weight. Say so whenever a verdict rests on an UNCONFIRMED finding. Cite finding IDs.',
-  '',
-  'Cover exactly these items: ' + judgeItems.join(', ') + '.',
-  '- Each decision or assumption (D, A): compare the plan\'s proposal with the evidence and give a verdict: Holds, Holds with a caveat, Contested, or Your call, with two to four sentences on why.',
-  '- Each open question (Q): a briefing with (1) the term explained, (2) one worked example in dollars using the running example (' + RUNNING_EXAMPLE + '), (3) the options with their evidence, (4) what each answer commits the owner to. You may add a clearly labelled recommendation; never answer for the owner.',
-  '- Conflicts: any place where findings for different items or groups pull against each other.',
-  '',
-  'Write the result to docs/research/decision-review-' + TAG + '.md: a one-paragraph summary, a verdict table (columns: item, source, verdict, why; source is copied from the plan: spec, owner, Claude proposal, or a mix), the briefings, the conflicts, and the weakest spots in the evidence. If that file already exists, do not overwrite it; return its path with empty lists. Write no other file.',
-].join('\n'), { label: 'judge', phase: 'Judge', model: 'opus', schema: JUDGE_SCHEMA })
+// ---- One judge per group: the only agents, with the cross-check, that read the plan's proposed decisions
+function judgePrompt(g) {
+  const G = GROUPS[g]
+  return [
+    'You are the judge for group ' + g + ' (' + G.name + ') in the Meridian stage 1 decision review, run ' + TAG + '. The reader is the project owner, who is new to finance and blockchain: use plain words and define each term the first time it appears.',
+    '',
+    'Read: the verified group report ' + reportPath(g) + '; the input file ' + G.input + '; and the dated plan copy ' + PLAN_COPY + ', which holds the proposed decisions (D, A) and the open questions (Q) with the owner\'s directions so far.',
+    'Only CONFIRMED and SECONDARY findings carry weight. Say so whenever a verdict rests on an UNCONFIRMED finding. Cite finding IDs.',
+    '',
+    'Cover exactly these items: ' + G.items.join(', ') + '.',
+    '- Each decision or assumption (D, A): compare the plan\'s proposal with the evidence and give a verdict: Holds, Holds with a caveat, Contested, or Your call, with two to four sentences on why.',
+    '- Each open question (Q): a briefing with (1) the term explained, (2) one worked example in dollars using the running example (' + RUNNING_EXAMPLE + '), (3) the options with their evidence, (4) what each answer commits the owner to. You may add a clearly labelled recommendation; never answer for the owner. Where the owner has already given a direction, also give that direction a verdict.',
+    '- Conflicts: any place where findings in this group, or findings and the plan, pull against each other.',
+    '',
+    'Write the result to ' + judgePath(g) + ': a one-paragraph summary, a verdict table (columns: item, source, verdict, why; source is copied from the plan: spec, owner, Claude proposal, or a mix), the briefings, the conflicts, and the weakest spots in the evidence. If that file already exists, do not overwrite it; return its path with empty lists. Write no other file.',
+    'In `verdicts`, return every item you gave a verdict, with its source and a one-sentence why.',
+  ].join('\n')
+}
 
-const count = (r, key, val) => r.findings.filter((f) => f[key] === val).length
+phase('Judge')
+const judged = (await parallel(done.map((r) => () =>
+  agent(judgePrompt(r.group), { label: 'judge:G' + r.group, phase: 'Judge', model: 'opus', schema: JUDGE_SCHEMA })
+    .then((j) => (j ? { group: r.group, judge: j } : null))))).filter(Boolean)
+const notJudged = done.map((r) => r.group).filter((g) => !judged.some((j) => j.group === g))
+if (notJudged.length) log('No judge result for groups ' + notJudged.join(', '))
+
+// ---- One pass across groups, only when more than one group ran
+let crossCheck = null
+if (judged.length > 1) {
+  phase('Cross-check')
+  const table = ['| Item | Group | Source | Verdict | Why |', '|---|---|---|---|---|']
+  for (const j of judged) for (const v of j.judge.verdicts) table.push('| ' + [v.item, j.group, v.source, v.verdict, v.why].map((c) => String(c).replace(/\|/g, '/')).join(' | ') + ' |')
+  crossCheck = await agent([
+    'You are the cross-group check of the Meridian stage 1 decision review, run ' + TAG + '. The reader is the project owner, who is new to finance and blockchain: use plain words.',
+    '',
+    'Read the group judges\' reports ' + judged.map((j) => judgePath(j.group)).join(', ') + ' and, where you need the evidence behind them, the group reports ' + judged.map((j) => reportPath(j.group)).join(', ') + '. The dated plan copy is ' + PLAN_COPY + '.',
+    'Do not re-judge items; the group judges did that. Your job:',
+    '1. Conflicts between groups: places where a finding or verdict in one group pulls against another group\'s, for example a data-licensing finding against a decision to show live prices. Cite items and finding IDs on both sides.',
+    '2. A one-paragraph summary of the whole review for the owner.',
+    '3. The weakest spots in the evidence across all groups.',
+    '',
+    'Write docs/research/decision-review-' + TAG + '.md with: the summary; the verdict table below, copied exactly; the conflicts between groups; the weakest spots; and links to each group\'s judge report and group report. If that file already exists, do not overwrite it; return its path with an empty list. Write no other file.',
+    '',
+    table.join('\n'),
+  ].join('\n'), { label: 'cross-check', phase: 'Cross-check', model: 'opus', schema: CROSS_SCHEMA })
+}
+
+const count = (r, val) => r.findings.filter((f) => f.label === val).length
 return {
   run: TAG,
   groups: done.map((r) => ({
@@ -616,12 +696,14 @@ return {
     items_answered: r.items.length,
     items_missing: r.missing,
     findings: r.findings.length,
-    labels: { CONFIRMED: count(r, 'label', 'CONFIRMED'), SECONDARY: count(r, 'label', 'SECONDARY'), UNCONFIRMED: count(r, 'label', 'UNCONFIRMED') },
+    labels: { CONFIRMED: count(r, 'CONFIRMED'), SECONDARY: count(r, 'SECONDARY'), UNCONFIRMED: count(r, 'UNCONFIRMED') },
     held: r.findings.filter((f) => f.verification.indexOf('held') === 0).length,
     downgraded: r.findings.filter((f) => f.verification.indexOf('downgraded') === 0).length,
+    gaps: r.gaps.length,
   })),
   files_expected: expected,
   files_not_saved: notWritten,
   skipped: saved ? saved.skipped : [],
-  judge: judge,
+  judges: judged.map((j) => ({ group: j.group, path: j.judge.path, verdicts: j.judge.verdicts.map((v) => v.item + ': ' + v.verdict), conflicts: j.judge.conflicts.length })),
+  cross_check: crossCheck,
 }
