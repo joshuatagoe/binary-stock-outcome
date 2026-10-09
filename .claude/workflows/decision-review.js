@@ -1,11 +1,10 @@
 export const meta = {
   name: 'decision-review',
-  description: 'Meridian stage 1 decision review: blind research per story group, source checks, one writer, Opus judge',
-  whenToUse: 'Stage 1 decision review (and the stage 3 rerun). Pass args {date: "YYYY-MM-DD", label: "pilot" or "full", groups: [1..7]}.',
+  description: 'Meridian decision review: blind research per story group and source checks, then (stage judge) Opus judges per group and a cross-group check',
+  whenToUse: 'Stage 1 decision review (and the stage 3 rerun), in three steps: (1) run with args {date: "YYYY-MM-DD", label: "full", groups: [1..7]} for research and checks; (2) save the files from that run with node scripts/save-review.mjs; (3) run again with the same args plus stage: "judge".',
   phases: [
     { title: 'Research', detail: 'one blind researcher per group, questions only', model: 'sonnet' },
     { title: 'Verify', detail: 'reopen the source behind every CONFIRMED claim', model: 'sonnet' },
-    { title: 'Save', detail: 'one writer saves the verified findings', model: 'haiku' },
     { title: 'Judge', detail: 'one judge per group: verdicts and briefings', model: 'opus' },
     { title: 'Cross-check', detail: 'one pass for conflicts between groups', model: 'opus' },
   ],
@@ -349,6 +348,8 @@ const A = args || {}
 if (!/^\d{4}-\d{2}-\d{2}$/.test(A.date || '')) throw new Error('args.date must be YYYY-MM-DD')
 if (!/^[a-z0-9-]+$/.test(A.label || '')) throw new Error('args.label must be lowercase letters, digits or dashes')
 const RUN = A.groups && A.groups.length ? A.groups : [1, 2, 3, 4, 5, 6, 7]
+if ([undefined, 'research', 'judge', 'render'].indexOf(A.stage) < 0) throw new Error('args.stage must be research (the default), judge, or render')
+if (A.stage === 'render' && !A.replay) throw new Error('stage "render" is only for save-review.mjs, which replays a finished run without calling any agent')
 for (const g of RUN) if (!GROUPS[g]) throw new Error('unknown group ' + g)
 const TAG = A.date + '-' + A.label
 
@@ -416,15 +417,6 @@ const VERIFY_SCHEMA = {
   },
 }
 
-const WRITE_SCHEMA = {
-  type: 'object',
-  required: ['written', 'skipped'],
-  properties: {
-    written: { type: 'array', items: { type: 'string' } },
-    skipped: { type: 'array', items: { type: 'string' }, description: 'create-only files that already existed' },
-  },
-}
-
 const JUDGE_SCHEMA = {
   type: 'object',
   required: ['path', 'verdicts', 'briefings', 'conflicts'],
@@ -472,7 +464,7 @@ const unitsFor = (g) => (SLICES[g] || [GROUPS[g].items]).map((items, k, all) => 
   g: g, items: items, first: k * 50 + 1, label: 'G' + g + (all.length > 1 ? 'ab'[k] : ''),
 }))
 const UNITS = RUN.reduce((acc, g) => acc.concat(unitsFor(g)), [])
-log('Run ' + TAG + ': groups ' + RUN.join(', ') + '. Agents: ' + UNITS.length + ' researchers, up to ' + UNITS.length + ' checkers, 1 writer, ' + RUN.length + ' judges' + (RUN.length > 1 ? ', 1 cross-group pass' : ''))
+log('Run ' + TAG + ', stage ' + (A.stage || 'research') + ': groups ' + RUN.join(', ') + '. Agents: ' + (A.stage === 'judge' ? RUN.length + ' judges' + (RUN.length > 1 ? ', 1 cross-group pass' : '') : UNITS.length + ' researchers, up to ' + UNITS.length + ' checkers'))
 
 function researchPrompt(u) {
   const G = GROUPS[u.g]
@@ -578,11 +570,23 @@ function storyHeader(s) {
   return '# Research: ' + s + ' ' + STORIES[s].title + '\n\nAppend-only. A finding later shown wrong gets a dated correction line below it, never an edit.\n'
 }
 
+const count = (r, val) => r.findings.filter((f) => f.label === val).length
+const stats = (r) => ({
+  group: r.group,
+  items_answered: r.items.length,
+  items_missing: r.missing,
+  findings: r.findings.length,
+  labels: { CONFIRMED: count(r, 'CONFIRMED'), SECONDARY: count(r, 'SECONDARY'), UNCONFIRMED: count(r, 'UNCONFIRMED') },
+  held: r.findings.filter((f) => f.verification.indexOf('held') === 0).length,
+  downgraded: r.findings.filter((f) => f.verification.indexOf('downgraded') === 0).length,
+  gaps: r.gaps.length,
+})
+
 const reportPath = (g) => 'docs/research/reports/' + TAG + '-G' + g + '.md'
 const judgePath = (g) => 'docs/research/decision-review-' + TAG + '-G' + g + '.md'
 
-// args.stage 'judge' reruns only the judges and the cross-check, on group reports already saved for this run.
-let done, saved = null, expected = [], notWritten = []
+// stage 'judge' runs only the judges and the cross-check, on the group reports save-review.mjs saved for this run.
+let done
 if (A.stage === 'judge') {
   log('Judge only: using the saved group reports ' + RUN.map(reportPath).join(', '))
   done = RUN.map((g) => ({ group: g, items: [], gaps: [], findings: [], missing: [] }))
@@ -604,7 +608,7 @@ if (A.stage === 'judge') {
   }).filter(Boolean)
   if (!done.length) return { run: TAG, error: 'no group produced a report' }
 
-  // ---- One writer saves everything, so no two agents ever write the same file (barrier: needs every group's findings)
+  // ---- The files this run produces (barrier: needs every group's findings). One writer per file: save-review.mjs, never an agent.
   const files = []
   for (const r of done) files.push({ path: reportPath(r.group), mode: 'create', header: '', content: groupReport(r) })
   const perStory = {}
@@ -631,23 +635,15 @@ if (A.stage === 'judge') {
     })
   }
 
-  phase('Save')
-  saved = await agent([
-    'Save these ' + files.length + ' files in the repo. Copy each `content` byte for byte: do not reformat, shorten, fix or summarize anything.',
-    '- mode "create": create the file. If it already exists, do not touch it; list it in `skipped`.',
-    '- mode "append": if the file exists, add one blank line and then `content` at its end, keeping everything already there. If it does not exist, create it with `header`, one blank line, then `content`.',
-    'Create folders as needed. Return the paths you wrote.',
-    '',
-    JSON.stringify(files),
-  ].join('\n'), { label: 'save', phase: 'Save', model: 'haiku', effort: 'low', schema: WRITE_SCHEMA })
-
-  expected = files.map((f) => f.path)
-  // The writer may report absolute Windows paths; compare by the repo-relative ending.
-  const slash = (p) => p.replace(/\\/g, '/')
-  notWritten = expected.filter((p) => !saved || !saved.written.some((w) => slash(w).endsWith(p)))
-  if (notWritten.length) log('Not saved: ' + notWritten.join(', '))
-  // Never judge from missing files: stop here and say what is missing.
-  if (notWritten.length) return { run: TAG, error: 'files not saved; save them, then rerun with stage "judge"', files_not_saved: notWritten, skipped: saved ? saved.skipped : [] }
+  // No agent copies these files: save-review.mjs replays this run from its journal (stage "render") and writes them exactly.
+  if (A.stage === 'render') return { files: files }
+  return {
+    run: TAG,
+    stage: 'research',
+    groups: done.map(stats),
+    files_to_save: files.map((f) => f.path),
+    next: 'Save: node scripts/save-review.mjs <transcript dir of this run> ' + "'" + JSON.stringify({ date: A.date, label: A.label, groups: RUN }) + "'" + ' (add --write after checking the list). Then rerun this workflow with the same args plus stage judge.',
+  }
 }
 
 // ---- One judge per group: the only agents, with the cross-check, that read the plan's proposed decisions
@@ -697,22 +693,9 @@ if (judged.length > 1) {
   ].join('\n'), { label: 'cross-check', phase: 'Cross-check', model: 'opus', schema: CROSS_SCHEMA })
 }
 
-const count = (r, val) => r.findings.filter((f) => f.label === val).length
 return {
   run: TAG,
-  groups: done.map((r) => ({
-    group: r.group,
-    items_answered: r.items.length,
-    items_missing: r.missing,
-    findings: r.findings.length,
-    labels: { CONFIRMED: count(r, 'CONFIRMED'), SECONDARY: count(r, 'SECONDARY'), UNCONFIRMED: count(r, 'UNCONFIRMED') },
-    held: r.findings.filter((f) => f.verification.indexOf('held') === 0).length,
-    downgraded: r.findings.filter((f) => f.verification.indexOf('downgraded') === 0).length,
-    gaps: r.gaps.length,
-  })),
-  files_expected: expected,
-  files_not_saved: notWritten,
-  skipped: saved ? saved.skipped : [],
+  stage: 'judge',
   judges: judged.map((j) => ({ group: j.group, path: j.judge.path, verdicts: j.judge.verdicts.map((v) => v.item + ': ' + v.verdict), conflicts: j.judge.conflicts.length })),
   cross_check: crossCheck,
 }

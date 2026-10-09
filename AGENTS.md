@@ -28,6 +28,8 @@ A story file (`docs/stories/<id>/story.md`) is frozen once the story map is appr
 
 Decisions live only in `docs/DECISIONS.md` and cite finding IDs. Story and research files hold evidence, not decisions.
 
+The decision review runs in three steps, each started only with the user's OK because each spends money: (1) the `decision-review` workflow with `{date, label, groups}` runs the research and the source checks; (2) `node scripts/save-review.mjs <that run's transcript dir> '<the same args>'` lists the files, and the same command with `--write` saves them exactly from the run's journal (no agent copies them); (3) the workflow again with the same args plus `stage: "judge"` runs the judges and the cross-group check.
+
 ## Submission logs
 
 Required deliverables, from the spec's Technical Requirements and Deployment & Success Criteria:
