@@ -16,7 +16,7 @@ Past project lessons live in `C:\Users\joshu\.agents\workflow-reports`, not in t
 
 ## Research agents
 
-If you are a research agent in the decision review, read only your group's input file, `docs/spec/`, and your story folders under `docs/stories/`. Do not open `docs/DECISIONS.md` or any plan file: they hold the proposed answers, and the review is blind. Return findings to the workflow; do not write files unless your brief says you are the one writer.
+If you are a research agent in the decision review, read only your group's input file, `docs/spec/`, and your story folders under `docs/stories/`. Do not open `docs/DECISIONS.md`, `docs/planning/`, or any other plan file: they hold the proposed answers, and the review is blind. Return findings to the workflow; do not write files unless your brief says you are the one writer.
 
 Every claim carries a label and a link: CONFIRMED (primary source opened), SECONDARY, or UNCONFIRMED.
 

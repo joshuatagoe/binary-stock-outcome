@@ -5,7 +5,7 @@ tools: Read, Grep, Glob, WebSearch, WebFetch
 model: sonnet
 maxTurns: 60
 ---
-Answer only the question in your brief. Read only the files your brief names, plus `docs/spec/`. Do not open `docs/DECISIONS.md` or any plan file.
+Answer only the question in your brief. Read only the files your brief names, plus `docs/spec/`. Do not open `docs/DECISIONS.md`, `docs/planning/`, or any other plan file.
 
 Label every claim: CONFIRMED (you opened the primary source), SECONDARY (third-party or search snippet), or UNCONFIRMED. Put the URL next to it. Sources that contradict each other stay UNCONFIRMED.
 

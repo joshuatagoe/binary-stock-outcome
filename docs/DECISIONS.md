@@ -20,6 +20,7 @@ Product decisions (D-numbers) are added only after the user answers the question
 | P3 | The WSL toolchain (Rust, Solana CLI, Anchor, Node, Surfpool) is installed at M0, not in phase 0. WSL2 with Ubuntu is already present. | Stage 1 research doesn't need it, and the exact versions are pinned in Architecture. | Library reference skills, which need a snippet that has run, wait until then. | Accepted (2026-10-08) |
 | P4 | `WebSearch` and `WebFetch` (all domains) are allowed in the shared `.claude/settings.json`. | Research runs (stages 1 and 3) would otherwise pause for approval on each fetch. | A misled agent could fetch any URL; P5 keeps local secrets out of reach. | Accepted (2026-10-08) |
 | P5 | Reading `.env` is denied in the shared settings. | No agent needs the secrets' values, and denying the read stops them leaving through a fetch (P4). | Secret values can't be inspected through Claude Code; edit `.env` by hand. Checked 2026-10-08: the Read tool and `cat .env` were both refused. | Accepted (2026-10-08) |
+| P6 | The phase 1 plans from the earlier sessions are kept as verbatim, dated snapshots in `docs/planning/`, committed, with an index. They are never edited there. | The user wants to be able to go back and review how the decisions were reached. The live plan files sit in a per-user folder outside the repo. | The snapshots hold the proposed answers, so research agents are told not to read the folder (AGENTS.md, researcher agent). That rule is an instruction, not a permission block. | Accepted (2026-10-09) |
 
 ## Assumptions
 
