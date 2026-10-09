@@ -1,0 +1,29 @@
+# Decisions
+
+Key decisions, why we made them, and what they cost. A new decision is added in the same commit as the work it affects.
+
+Status is **Accepted** (agreed with the user), **Proposed** (awaiting the user), or **Superseded** (replaced; the entry stays and points to its replacement).
+
+Product decisions (D-numbers) are added only after the user answers the question round that follows the stage 1 decision review. Process decisions about how the project is run use P-numbers, so the two series never collide.
+
+## Decision log
+
+| # | Decision | Why | Trade-off | Status |
+|---|---|---|---|---|
+
+## Process decisions
+
+| # | Decision | Why | Trade-off | Status |
+|---|---|---|---|---|
+| P1 | The status board is a Notion database, connected through Notion's hosted MCP server in `.mcp.json`. Link in `docs/status-board.md`. | Same board as the previous Gauntlet project; one board, outside the repo, so no second kanban grows in the docs. | Each machine signs in to Notion once (`/mcp`, OAuth). If Notion is unreachable, work that needs the board stops. | Accepted (2026-10-08) |
+| P2 | The Meridian spec is kept in `docs/spec/` (PDF plus a `pdftotext -layout` text copy), gitignored, and copied into worktrees by `.worktreeinclude`. | The spec is Gauntlet and Peak6's document. The GitHub repo is private today, but this keeps it out of the history if the repo is ever made public. | A folder-wide search skips ignored files, so agents and input files name the spec's file path directly. | Accepted (2026-10-08) |
+| P3 | The WSL toolchain (Rust, Solana CLI, Anchor, Node, Surfpool) is installed at M0, not in phase 0. WSL2 with Ubuntu is already present. | Stage 1 research doesn't need it, and the exact versions are pinned in Architecture. | Library reference skills, which need a snippet that has run, wait until then. | Accepted (2026-10-08) |
+| P4 | `WebSearch` and `WebFetch` (all domains) are allowed in the shared `.claude/settings.json`. | Research runs (stages 1 and 3) would otherwise pause for approval on each fetch. | A misled agent could fetch any URL; P5 keeps local secrets out of reach. | Accepted (2026-10-08) |
+| P5 | Reading `.env` is denied in the shared settings. | No agent needs the secrets' values, and denying the read stops them leaving through a fetch (P4). | Secret values can't be inspected through Claude Code; edit `.env` by hand. Checked 2026-10-08: the Read tool and `cat .env` were both refused. | Accepted (2026-10-08) |
+
+## Assumptions
+
+## Cut, and what's next
+
+| Cut | Why | Next, with more time |
+|---|---|---|

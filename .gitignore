@@ -1,0 +1,13 @@
+# Personal Claude Code settings
+.claude/settings.local.json
+
+# Agent worktrees: each one is its own checkout
+.claude/worktrees/
+
+# The Meridian spec (Gauntlet x Peak6), kept locally for reference and not published.
+# .worktreeinclude copies it into each worktree.
+docs/spec/
+
+# Local environment (.env.example is the committed template)
+.env
+.env*.local
