@@ -581,65 +581,74 @@ function storyHeader(s) {
 const reportPath = (g) => 'docs/research/reports/' + TAG + '-G' + g + '.md'
 const judgePath = (g) => 'docs/research/decision-review-' + TAG + '-G' + g + '.md'
 
-// ---- Research and check, each slice on its own (no barrier between the two stages)
-const unitResults = await pipeline(
-  UNITS,
-  (u) => agent(researchPrompt(u), { label: 'research:' + u.label, phase: 'Research', agentType: 'researcher', effort: 'high', schema: RESEARCH_SCHEMA }),
-  async (report, u) => {
-    if (!report) { log(u.label + ': the researcher returned nothing'); return null }
-    const n = report.findings.filter((f) => f.label === 'CONFIRMED').length
-    const verify = n ? await agent(verifyPrompt(u, report), { label: 'verify:' + u.label, phase: 'Verify', model: 'sonnet', schema: VERIFY_SCHEMA }) : { checks: [] }
-    return { unit: u, checked: applyChecks(report, verify) }
-  },
-)
-const done = RUN.map((g) => {
-  const parts = unitResults.filter((r) => r && r.unit.g === g).map((r) => r.checked)
-  return parts.length ? combine(g, parts) : null
-}).filter(Boolean)
-if (!done.length) return { run: TAG, error: 'no group produced a report' }
+// args.stage 'judge' reruns only the judges and the cross-check, on group reports already saved for this run.
+let done, saved = null, expected = [], notWritten = []
+if (A.stage === 'judge') {
+  log('Judge only: using the saved group reports ' + RUN.map(reportPath).join(', '))
+  done = RUN.map((g) => ({ group: g, items: [], gaps: [], findings: [], missing: [] }))
+} else {
+  // ---- Research and check, each slice on its own (no barrier between the two stages)
+  const unitResults = await pipeline(
+    UNITS,
+    (u) => agent(researchPrompt(u), { label: 'research:' + u.label, phase: 'Research', agentType: 'researcher', effort: 'high', schema: RESEARCH_SCHEMA }),
+    async (report, u) => {
+      if (!report) { log(u.label + ': the researcher returned nothing'); return null }
+      const n = report.findings.filter((f) => f.label === 'CONFIRMED').length
+      const verify = n ? await agent(verifyPrompt(u, report), { label: 'verify:' + u.label, phase: 'Verify', model: 'sonnet', schema: VERIFY_SCHEMA }) : { checks: [] }
+      return { unit: u, checked: applyChecks(report, verify) }
+    },
+  )
+  done = RUN.map((g) => {
+    const parts = unitResults.filter((r) => r && r.unit.g === g).map((r) => r.checked)
+    return parts.length ? combine(g, parts) : null
+  }).filter(Boolean)
+  if (!done.length) return { run: TAG, error: 'no group produced a report' }
 
-// ---- One writer saves everything, so no two agents ever write the same file (barrier: needs every group's findings)
-const files = []
-for (const r of done) files.push({ path: reportPath(r.group), mode: 'create', header: '', content: groupReport(r) })
-const perStory = {}
-const cross = []
-for (const r of done) {
-  for (const f of r.findings) {
-    if (!f.stories.length) cross.push({ g: r.group, f: f })
-    for (const s of f.stories) if (STORIES[s]) (perStory[s] = perStory[s] || []).push({ g: r.group, f: f })
+  // ---- One writer saves everything, so no two agents ever write the same file (barrier: needs every group's findings)
+  const files = []
+  for (const r of done) files.push({ path: reportPath(r.group), mode: 'create', header: '', content: groupReport(r) })
+  const perStory = {}
+  const cross = []
+  for (const r of done) {
+    for (const f of r.findings) {
+      if (!f.stories.length) cross.push({ g: r.group, f: f })
+      for (const s of f.stories) if (STORIES[s]) (perStory[s] = perStory[s] || []).push({ g: r.group, f: f })
+    }
   }
-}
-for (const s of Object.keys(perStory)) {
-  const byGroup = {}
-  for (const x of perStory[s]) (byGroup[x.g] = byGroup[x.g] || []).push(findingBlock(x.f))
-  const body = Object.keys(byGroup).map((g) => runHeading(g) + '\n\n' + byGroup[g].join('\n\n')).join('\n\n')
-  files.push({ path: 'docs/stories/' + STORIES[s].folder + '/research.md', mode: 'append', header: storyHeader(s), content: body })
-}
-if (cross.length) {
-  const byGroup = {}
-  for (const x of cross) (byGroup[x.g] = byGroup[x.g] || []).push(findingBlock(x.f))
-  files.push({
-    path: 'docs/research/cross-cutting.md', mode: 'append',
-    header: '# Cross-cutting research\n\nFindings that serve no single story. Append-only. A finding later shown wrong gets a dated correction line below it, never an edit.\n',
-    content: Object.keys(byGroup).map((g) => runHeading(g) + '\n\n' + byGroup[g].join('\n\n')).join('\n\n'),
-  })
-}
+  for (const s of Object.keys(perStory)) {
+    const byGroup = {}
+    for (const x of perStory[s]) (byGroup[x.g] = byGroup[x.g] || []).push(findingBlock(x.f))
+    const body = Object.keys(byGroup).map((g) => runHeading(g) + '\n\n' + byGroup[g].join('\n\n')).join('\n\n')
+    files.push({ path: 'docs/stories/' + STORIES[s].folder + '/research.md', mode: 'append', header: storyHeader(s), content: body })
+  }
+  if (cross.length) {
+    const byGroup = {}
+    for (const x of cross) (byGroup[x.g] = byGroup[x.g] || []).push(findingBlock(x.f))
+    files.push({
+      path: 'docs/research/cross-cutting.md', mode: 'append',
+      header: '# Cross-cutting research\n\nFindings that serve no single story. Append-only. A finding later shown wrong gets a dated correction line below it, never an edit.\n',
+      content: Object.keys(byGroup).map((g) => runHeading(g) + '\n\n' + byGroup[g].join('\n\n')).join('\n\n'),
+    })
+  }
 
-phase('Save')
-const saved = await agent([
-  'Save these ' + files.length + ' files in the repo. Copy each `content` byte for byte: do not reformat, shorten, fix or summarize anything.',
-  '- mode "create": create the file. If it already exists, do not touch it; list it in `skipped`.',
-  '- mode "append": if the file exists, add one blank line and then `content` at its end, keeping everything already there. If it does not exist, create it with `header`, one blank line, then `content`.',
-  'Create folders as needed. Return the paths you wrote.',
-  '',
-  JSON.stringify(files),
-].join('\n'), { label: 'save', phase: 'Save', model: 'haiku', effort: 'low', schema: WRITE_SCHEMA })
+  phase('Save')
+  saved = await agent([
+    'Save these ' + files.length + ' files in the repo. Copy each `content` byte for byte: do not reformat, shorten, fix or summarize anything.',
+    '- mode "create": create the file. If it already exists, do not touch it; list it in `skipped`.',
+    '- mode "append": if the file exists, add one blank line and then `content` at its end, keeping everything already there. If it does not exist, create it with `header`, one blank line, then `content`.',
+    'Create folders as needed. Return the paths you wrote.',
+    '',
+    JSON.stringify(files),
+  ].join('\n'), { label: 'save', phase: 'Save', model: 'haiku', effort: 'low', schema: WRITE_SCHEMA })
 
-const expected = files.map((f) => f.path)
-// The writer may report absolute Windows paths; compare by the repo-relative ending.
-const slash = (p) => p.replace(/\\/g, '/')
-const notWritten = expected.filter((p) => !saved || !saved.written.some((w) => slash(w).endsWith(p)))
-if (notWritten.length) log('Not saved: ' + notWritten.join(', '))
+  expected = files.map((f) => f.path)
+  // The writer may report absolute Windows paths; compare by the repo-relative ending.
+  const slash = (p) => p.replace(/\\/g, '/')
+  notWritten = expected.filter((p) => !saved || !saved.written.some((w) => slash(w).endsWith(p)))
+  if (notWritten.length) log('Not saved: ' + notWritten.join(', '))
+  // Never judge from missing files: stop here and say what is missing.
+  if (notWritten.length) return { run: TAG, error: 'files not saved; save them, then rerun with stage "judge"', files_not_saved: notWritten, skipped: saved ? saved.skipped : [] }
+}
 
 // ---- One judge per group: the only agents, with the cross-check, that read the plan's proposed decisions
 function judgePrompt(g) {
