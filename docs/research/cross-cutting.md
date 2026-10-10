@@ -309,3 +309,114 @@ A program can create an account itself through one cross-program call only up to
 - Solana's constants reference ([constants reference](https://solana.com/docs/core/constants-reference)) lists `MAX_PERMITTED_DATA_INCREASE` as 10,240 bytes, the most a single call can grow an account.
 
 So a 6,728-byte book can be created inside Create Market, but a 13,384-byte book has to be created first by the client, which is D22's original plan.
+
+### AR.13 [D70] [D75] [D117] [D118] [D119] CONFIRMED where marked
+
+Watchdogs, alert channels and free devnet RPC tiers. Sources: one read-only research agent, plus two pages the main session fetched on 2026-10-10. The fetch tool summarises pages, so quotes are near-verbatim.
+
+**Watchdogs**
+
+- **Healthchecks.io.** The free Hobbyist plan is "Monitor 20 jobs" ([pricing](https://healthchecks.io/pricing/), CONFIRMED). The service is "free for hobby use" ([about](https://healthchecks.io/about/), CONFIRMED). Checks take cron expressions with a per-check time zone and a grace time ([configuring checks](https://healthchecks.io/docs/configuring_checks/), CONFIRMED), and weekdays can be written as `1-5` ([cron](https://healthchecks.io/docs/cron/), CONFIRMED).
+  - The pricing page names no alert integrations for the free plan. Only SMS, WhatsApp and phone-call credits appear, and only under paid plans. Whether Telegram is free is therefore UNCONFIRMED.
+  - It is run by one person, and its about page says "multi-hour outages are possible".
+- **Better Stack.** The free plan is "10 monitors & heartbeats" with "Slack & e-mail alerts" ([pricing](https://betterstack.com/pricing), CONFIRMED). Its heartbeat monitor is set by "Expect a heartbeat every" an interval plus a grace period. The page says nothing about time zones ([heartbeat docs](https://betterstack.com/docs/uptime/cron-and-heartbeat-monitor/), CONFIRMED by the main session).
+- **Cronitor.** "5 monitors", with email and Slack alerts on the free plan (CONFIRMED).
+- **Dead Man's Snitch.** One check free (CONFIRMED).
+- **UptimeRobot.** Interval-based (CONFIRMED).
+
+**Alert channels**
+
+- **ntfy.** No sign-up: "the topic is essentially a password" ([publish docs](https://docs.ntfy.sh/publish/), CONFIRMED).
+- **Telegram.** Free. A bot should "avoid sending more than one message per second" in a single chat ([bots FAQ](https://core.telegram.org/bots/faq), CONFIRMED).
+- **Pushover.** "$4.99 USD one-time purchase", with 10,000 messages a month ([pricing](https://pushover.net/pricing), CONFIRMED).
+- **Discord webhooks.** Free, with limits returned in the response headers (CONFIRMED).
+
+**Free devnet RPC tiers**
+
+- **Alchemy.** The free plan is "30M CU per month", about 15 requests a second, covering "All mainnets & testnets" ([pricing](https://www.alchemy.com/pricing), CONFIRMED). It has a devnet endpoint, `solana-devnet.g.alchemy.com` ([Solana quickstart](https://www.alchemy.com/docs/reference/solana-api-quickstart), CONFIRMED).
+  - Its published costs: getSlot 20 units, getBlockHeight 20, getGenesisHash 10, getTransaction 40, getProgramAccounts 20 ([compute-unit costs](https://www.alchemy.com/docs/reference/compute-unit-costs), CONFIRMED).
+- **Chainstack.** "On Solana Devnet, … 25" requests a second on the free Developer plan, but "getProgramAccounts" is "available only on the paid plans" ([limits](https://docs.chainstack.com/docs/limits), CONFIRMED).
+- **Helius.** The free plan is 1M credits a month at 10 requests a second (CONFIRMED). Whether devnet is included free is UNCONFIRMED.
+- **QuickNode.** A one-month trial only (CONFIRMED).
+- **Triton.** No free tier (CONFIRMED).
+
+### AR.14 [D22] [D30] [D69] [D74] [D125] CONFIRMED where marked
+
+The program toolchain as of 2026-10-10. Release dates are from crates.io, GitHub releases and npm, read by one research agent and by the main session.
+
+**Anchor.** 1.2.1 was created on crates.io on 2026-10-06; 1.2.0 on 2026-09-04 ([crates.io anchor-lang](https://crates.io/api/v1/crates/anchor-lang), CONFIRMED).
+- 1.2.0 says "Return an error instead of panicking when zero-copy account data is undersized" ([CHANGELOG](https://raw.githubusercontent.com/solana-foundation/anchor/master/CHANGELOG.md), CONFIRMED). 1.2.1 adds "support for Solana v4 crates using the solana-v4 feature".
+- 1.1.1 sets anchor-lang's minimum supported Rust version to 1.89.
+- The 1.2.0 release notes say "The recommended Solana version is 4.1.2" ([release notes](https://www.anchor-lang.com/docs/updates/release-notes/1-2-0), CONFIRMED).
+- CVE-2026-45137 affects anchor-lang 1.0.0 up to, but not including, 1.0.2 ([advisory](https://api.github.com/advisories?cve_id=CVE-2026-45137), CONFIRMED).
+
+**Agave.** v4.3.0 is "a stable release suitable for Testnet, Devnet and Mainnet Beta", released 18 September ([release](https://github.com/anza-xyz/agave/releases/tag/v4.3.0), CONFIRMED). Solana's upgrades page lists Agave 4.4 with an "sBPFv3 program requirement for new deployments" (CONFIRMED). Devnet ran 4.4.0-beta.0 on 2026-10-10 (AR.01).
+
+**Rust.** 1.98.0 is dated 2026-08-20 and 1.99.0 is dated 2026-10-01 ([Rust release channel](https://static.rust-lang.org/dist/channel-rust-1.98.0.toml), CONFIRMED by the main session).
+
+**Codama.** codama 1.11.0, @codama/nodes-from-anchor 1.5.6 and @codama/renderers-js 2.5.0 were all released 2026-09-15. renderers-js 2.5.0's generated code needs `@solana/kit` ^8.3.0 (CONFIRMED). Support for Anchor 1.x IDLs is UNCONFIRMED.
+
+**Token-2022 clients.**
+- `spl-token-2022-interface` 3.0.0 added Permissioned Burn; 3.1.2 is dated 2026-09-23 (CONFIRMED).
+- `@solana-program/token-2022` 0.19.0 (npm, 2026-09-21) ships `getPermissionedBurnInstruction` and `getPermissionedBurnCheckedInstruction`. The main session confirmed this by unpacking the package.
+
+**LiteSVM and Mollusk.**
+- `litesvm` and `litesvm-loader` 0.16.0 are dated 2026-08-24; 0.17.0 (2026-09-28) moved to Agave 4.3 crates; 0.18.0 (2026-10-09) needs Rust 1.97.1. `mollusk-svm` 0.15.1 is dated 2026-08-29. All CONFIRMED.
+- Whether their bundled Token-2022 includes Permissioned Burn is UNCONFIRMED.
+
+**Surfpool.** 1.6.0 is dated 18 September. Its time travel is forward-only: "a past target is rejected" ([time travel](https://solana.com/docs/tools/surfpool/sdk/time-travel), CONFIRMED). Anchor 1.x's `anchor test` uses Surfpool by default. Support for WSL is UNCONFIRMED.
+
+**Fuzzers.**
+- Trident's last stable release is 0.12.0 (2025-11-27), with 0.13.0-rc.4 (2026-05-14) after it.
+- Crucible v0.2.1 (4 August) added an Anchor integration in v0.2.0. Anchor's docs describe `anchor fuzz` as "Coverage-guided fuzzing for Solana programs using Crucible" ([fuzzing](https://www.anchor-lang.com/docs/testing/fuzzing), CONFIRMED).
+
+**Verified builds.** solana-verify 0.5.2 is dated 2026-09-21. Solana's docs say "Remote verification through the OtterSec API works only on mainnet" ([verified builds](https://solana.com/docs/programs/verified-builds), CONFIRMED).
+
+**Pyth.** pyth-solana-receiver-sdk 2.0.0 (2026-06-15) depends on anchor-lang 1.0.2. By default its `declare_id!` is the legacy receiver `rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ`; the `pro-compatible` feature switches it to the upgraded receiver. An `Account<PriceUpdateV2>` therefore checks a single owner ([source](https://docs.rs/crate/pyth-solana-receiver-sdk/2.0.0/source/src/lib.rs), CONFIRMED).
+
+### AR.15 [D72] [D75] [D95] [D124] CONFIRMED where marked
+
+The web, backend and hosting choices as of 2026-10-10. One research agent read the sources, and the main session checked npm release dates with `npm view <package> time`.
+
+**Next.js static export.** It does not support "Rewrites, Redirects, Headers, Proxy … Server Actions … Route Handlers that rely on the Request". Client components are prerendered at build time, when "browser APIs like `window` are not available" ([static exports](https://nextjs.org/docs/app/guides/static-exports), CONFIRMED).
+
+**Templates.** Solana lists a `react-vite` template ("React and Vite with Tailwind") and a `nextjs` template ([templates](https://solana.com/developers/templates), CONFIRMED). Solana's docs recommend `@solana/kit` with its plugins and `@solana/kit-plugin-wallet` for wallets ([frontend kit](https://solana.com/docs/frontend/kit), CONFIRMED).
+
+**npm versions released before 2026-09-26** (newest version in brackets):
+
+| Package | Version | Released | Newest |
+|---|---|---|---|
+| vite | 8.3.1 | 2026-09-24 | 8.3.4 |
+| react | 19.3.0 | 2026-09-09 | |
+| react-router | 8.4.0 | 2026-09-15 | |
+| next | 16.3.6 | 2026-09-22 | |
+| @solana/kit | 8.3.0 | 2026-09-09 | 8.4.0, 2026-09-28 |
+| @solana/kit-plugin-wallet | 0.20.0 | 2026-09-10 | |
+| @wallet-ui/react | 4.3.0 | 2026-08-19 | |
+| hono | 4.13.9 | 2026-09-24 | |
+| @hono/node-server | 2.1.1 | 2026-08-14 | |
+| better-sqlite3 | 13.0.3 | 2026-08-05 | |
+| pino | 10.3.1 | 2026-02-09 | |
+| zod | 4.6.5 | 2026-09-13 | |
+| typescript | 6.0.3 | 2026-04-16 | 7.0.2, 2026-07-08 |
+| vitest | 5.0.2 | 2026-09-25 | |
+| @playwright/test | 1.63.0 | 2026-09-04 | |
+| @axe-core/playwright | 4.13.0 | 2026-08-11 | |
+
+@wallet-ui/react 4.3.0 needs `@solana/kit` ^6.1.0 or ^7.0.0. @solana/kit-plugin-wallet 0.20.0 needs `@solana/kit` ^8.2.0.
+
+**Node.** v24 is long-term support until 2028-04-30, and v26 becomes long-term support on 2026-10-28 ([previous releases](https://nodejs.org/en/about/previous-releases), CONFIRMED). The newest v24 before the cutoff is 24.21.0, dated 2026-09-07 ([dist index](https://nodejs.org/dist/index.json), CONFIRMED). `node:sqlite` is a "release candidate" in v24 (CONFIRMED).
+
+**Hosts and storage.**
+- Fly.io: shared-cpu-1x with 256 MB costs $2.19 per 30 days, and volumes cost $0.15 per GB-month. It runs in Secaucus, NJ (ewr). Its proxy serves clients over HTTP/2 ([pricing](https://docs.fly.io/about/pricing), [services](https://docs.fly.io/networking/services), CONFIRMED).
+- Northflank: its Sandbox is "Always-on-compute – no sleeping" (allowances not stated), and the smallest paid plan is $2.70 a month ([pricing](https://northflank.com/pricing), CONFIRMED).
+- Railway ends a request at "up to 15 minutes if data keeps transferring" ([limits](https://docs.railway.com/networking/public-networking/specs-and-limits), CONFIRMED).
+- Render's free services sleep after 15 minutes and can't use disks ([free](https://render.com/docs/free), CONFIRMED).
+- Oracle's Always Free VMs are reclaimed when idle over 7 days (CONFIRMED).
+- Hetzner's US CPX11 price rose from June 2026 (CONFIRMED).
+- Cloud Run requests time out after at most 60 minutes (CONFIRMED).
+- Neon's free plan always auto-suspends after 5 minutes and caps compute at 100 CU-hours a month. Supabase's free projects pause "after 1 week of inactivity" (CONFIRMED).
+- Cloudflare Pages without a 404 page "serves the root (/) for any incoming path" and supports `_headers` ([serving pages](https://developers.cloudflare.com/pages/configuration/serving-pages/), CONFIRMED).
+- Vercel Hobby is for "non-commercial personal use only" (CONFIRMED).
+- Cloudflare R2's free tier is 10 GB-month with free egress (CONFIRMED).
+- Litestream v0.5.17 is dated 31 August, and "Windows is NOT an officially supported platform" (CONFIRMED).

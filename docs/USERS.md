@@ -458,7 +458,7 @@ Out of scope: a multisig on devnet (cut), a server sign-in (cut, D34).
 
 ### F18 — Operator (Operator; S31)
 
-1. Alerts reach a person (the channel is for Architecture). Each says what is wrong and what to do:
+1. Alerts reach the operator's phone in a private Telegram chat, sent by our own bot; Healthchecks.io watches the jobs' check-ins (D117, D118). Each says what is wrong and what to do:
    - "No check-in from the 8:30 job by 8:45 AM ET." (D70)
    - "Bot SOL 0.42, below 1.00. Top up from faucet.solana.com." / "Bot USDC 31.00, below 100.00. Claim at faucet.circle.com." (D32)
    - "No new Pyth price for META since 3:05 PM (65 min)." (PS.03)

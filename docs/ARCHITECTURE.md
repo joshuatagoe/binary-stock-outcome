@@ -746,8 +746,9 @@ A contract is the exact shape of a request: what it sends, who must sign it, whe
 | `GET /api/liveness?weeks=4` | The on-time figures, late markets with their causes, and the heartbeat log | D60, D75 |
 | `GET /api/health` | The time of the primary's last pass, and the chain's progress | D98 and the watchdog |
 | `POST /api/reports` with `{market_key, body, wallet?}` | 202 Accepted; 400 if the body is over 500 characters; 404 if the market is not Under review or Proposed; 429 if rate-limited | D91 |
+| `POST /api/client-errors` with `{page, message, browser, tracker_state}` | 202 Accepted; 429 if rate-limited | Wallet addresses stripped; kept 14 days (D120, §8) |
 
-Errors come back as `{code, message}`. Every endpoint is read-only except problem reports.
+Errors come back as `{code, message}`. Every endpoint is read-only except problem reports and browser error reports.
 
 ### Redeem all (D66, D110)
 
@@ -868,3 +869,181 @@ USERS.md's needs, with how each is checked:
 | Motion | No flashing on price changes when reduced motion is set; never more than three flashes a second | The scan, and a check with reduced motion on |
 | Zoom and small screens | Usable at 200%; reflows at 320 CSS pixels with no sideways scroll except the book | End-to-end runs at 320 px and 200% zoom |
 | Plain words | A short definition one focus away for Yes, No, strike, bid, ask, settle, redeem, band | Manual pass |
+
+## 8. Security, privacy and observability
+
+### Who can see what
+
+- **Public by design.** Everything on-chain is public: orders, fills, balances, results, and the admin's actions with their reasons (D70). So are the Timeline, the liveness figures and each market's evidence (D85, D77).
+- **Private to the admin.** Problem-report text (D91) and the operator's alerts.
+- **Collected about people.** Nothing beyond wallet addresses, which are public on-chain anyway.
+  - For the rate limits on reports and error reports, we keep only a salted hash of the sender's internet address: a scrambled fingerprint that can't be turned back into the address.
+  - There are no accounts and no tracking. The browser stores one thing, the "Got it" on the first-visit card (D86).
+
+### What each key can do if it leaks
+
+| Key | Lives | Can | If leaked | Recovery |
+|---|---|---|---|---|
+| Upgrade | The laptop (D92) | Replace the program | Anything, including results (D69) | On devnet, a fresh deploy. The docs say so next to "non-custodial" (D3) |
+| Admin | The laptop, and its own Phantom account (D92) | Pause, hold, propose overrides, update config, rotate keys | Pause trading, or propose bad results. A proposal only becomes final after its public 1-hour or 24-hour wait (D104) | Rotate in two steps (D109) |
+| Operator | The server's `.env` (D17) | Create markets, sweep after the close, settle in the first 24 hours | Junk markets, limited to enabled tickers and strike steps. It can't choose a price, because settle reads only the recorded close (D105) | The admin sets a new operator (D27) |
+| Bot trading | The server's `.env` | Its own orders and USDC | Loses the bot's play USDC | A new wallet, refilled at the faucet |
+| Tiingo, Alchemy, Healthchecks and Telegram tokens | The server's `.env` | Outside services | Quota abuse, fake check-ins or fake alerts | Rotate at the provider |
+
+**Never logged:** private keys or seed phrases, API tokens, report text (it lives only in REPORTS), and full internet addresses. Logs do carry wallet addresses and transaction signatures, which are public anyway (D70).
+
+### Threats and their controls
+
+| Threat | Control |
+|---|---|
+| A spoofed admin | Stored key plus signature (D34) |
+| Swapped or duplicated accounts | Address seeds and duplicate checks (D30, §5) |
+| A forged or cherry-picked price | D28, D103, D105 |
+| Settling before the close, or trading after it | The chain's clock against the stored close (D57, D102) |
+| Report spam or script injection | 500 characters, a rate limit, text escaped in alerts and never shown publicly (D91) |
+| API abuse | Read-only except two rate-limited write paths. The site falls back to reading the chain directly (D16) |
+| Supply chain | Exact pinned versions and lockfiles (D22), a verified build (D69), and a dependency audit in CI (§10) |
+| Secrets in the repo | `.env` is ignored and `.env.example` has placeholders (D17). The `verify` script scans for committed keys (§10) |
+
+### Observability
+
+**Logs (D70).** There are three layers:
+
+- on-chain events;
+- the backend's structured logs: one JSON line per job step, giving the time, step, market, outcome, duration and transaction signature;
+- the browser's error reports.
+
+Error reports go to our own endpoint, `POST /api/client-errors`, never to a third party (D120). Each holds the page, the error message, the browser, and the stage of the transaction tracker. Wallet addresses are stripped. The endpoint is rate-limited per address, and reports are kept for 14 days.
+
+**Measured, from the event store and the logs:**
+
+- each market's settlement delay after its close;
+- holds, and band widths at the close (D26's evals);
+- markets created by 9:00;
+- how long each job step takes;
+- sends refused for rate limits;
+- RPC errors per provider;
+- stream lag;
+- the bot's balances.
+
+**Alerts** go to a private Telegram chat through our own bot (D117). The levels below come from `budgets.mjs` and USERS F18:
+
+| Alert | Fires when |
+|---|---|
+| Bot SOL low | Below 3.61 SOL: one day of book deposits (2.38) plus two days of permanent spend (0.616 each) |
+| Bot USDC low | Below 458 USDC: D32's worst case for quoting all 46 markets, which takes 23 faucet claims |
+| A job didn't check in | Healthchecks.io's checks, each 15 minutes after its time in America/New_York on weekdays: the 8:00 read, markets created by 9:00, settlement by close + 10 minutes, the next morning's audit (D118). On a market holiday the backend still checks in with "closed today", so a silent backend raises the alert on any weekday |
+| Price source quiet | No new Pyth price for 65 minutes (D87) |
+| No closing price | Nothing recorded by close + 15 minutes (D83) |
+| Market unsettled | At close + 20 minutes (D8) |
+| Devnet down | Neither provider's slot has moved for 60 seconds. Devnet counts as back once both move again (D75) |
+| Devnet reset | The genesis hash changed (D19) |
+| Problem report; reconciliation or audit mismatch | At once (D91, D109, D26) |
+
+**The halt detector and the heartbeat log (D75).** The halt detector reads the slot from the public devnet server and from Alchemy every 15 seconds (D119). Once a minute, the heartbeat log records the block height, the genesis hash and the last restart slot.
+
+Alchemy's free tier covers this. The monthly use is 3.46M units for the halt detector, 2.16M for the heartbeat log and 1.63M to cross-check our program's transactions: 7.25M of 30M (`budgets.mjs`, AR.13).
+
+### The liveness counting rule (D60, D75)
+
+This rule goes in the README before the first graded day. It covers the trading days in the calendar (D12) and reports these figures:
+
+- **On time through the oracle.** Markets settled by the oracle within 10 minutes of their close, as a share of all markets.
+- **By any path.** Markets with a final result within 10 minutes of their close, as a share of all markets.
+- **The spec's daily figure.** A day passes when every market existed by 9:00 and every market settled within 10 minutes of its close.
+- **Each late market is listed with its cause:** the band contained the strike, there was no price, the admin held it, the backend failed, or devnet was down.
+
+Every figure is given twice, raw and adjusted, over a rolling four weeks. The adjusted figure leaves out days with evidence of a devnet outage: neither provider saw a new slot for 60 seconds or more between 8:00 and close + 10 minutes, or the genesis hash changed.
+
+Holds are expected about 1 day in 10 (AR.04), so the raw daily figure should sit near 90% at best. The README states this up front.
+
+## 9. Stack and hosting
+
+The technology is chosen only now, after the design, so each choice serves something earlier sections need. Every pin is a version released at least two weeks before it was chosen, unless a security fix needs a newer one (D123). Here that means before 2026-09-26. Release dates are in AR.14 and AR.15.
+
+### The program
+
+| Part | Pin | Why |
+|---|---|---|
+| Anchor | 1.2.0 (2026-09-04) | The spec prefers Anchor (D4). 1.2.0 returns an error instead of crashing when a zero-copy account is undersized, and our book is zero-copy (D107). The CVE that D22 guards against affects only 1.0.0 to 1.0.1. 1.2.1 is too new and only adds an option for Solana v4 crates (AR.14) |
+| Solana CLI (Agave) | 4.3.0 (2026-09-18), the stable line | solana-verify ships a build image for it (D69). Anchor's docs recommend 4.1.2 |
+| Rust | 1.98.0 (2026-08-20) | Above anchor-lang's minimum of 1.89, and builds the pinned LiteSVM and Mollusk |
+| `spl-token-2022-interface` | 3.1.2 | Permissioned Burn's instruction builders. Anchor has none (D94) |
+| `pyth-solana-receiver-sdk` | 2.0.0 | Built against Anchor 1.x |
+| Codama | `codama` 1.11.0, `@codama/nodes-from-anchor` 1.5.6, `@codama/renderers-js` 2.5.0 | Generates the TypeScript client from the program's IDL for Kit 8.3 (D22). Anchor 1.x IDL support is checked at M0 |
+
+The Pyth SDK compiles in one receiver address, and its account type checks the owner against that address alone (AR.14). Config accepts two receivers (D80). So the record step reads Pyth's account layout from an unchecked account, checks the owner against Config's list, and then applies D28's checks, with a wrong-owner test for each receiver.
+
+**Settled at M0.**
+- Devnet ran Agave 4.4.0-beta.0 on 2026-10-10 (AR.01). Agave 4.4 requires the sBPFv3 program format for new deployments (AR.14).
+- M0 therefore deploys a first program to devnet with this toolchain. If sBPFv3 is required, Anchor 1.2.0's `--arch` flag and solana-verify 0.5.2's sBPFv3 toolchains are the way through.
+
+### The website
+
+| Part | Pin | Why |
+|---|---|---|
+| Build | Vite 8.3.1 with React 19.3.0 (D122) | The site is plain files with no server (D23). Vite never runs page code at build time, so wallet code needs no browser-only guards. Next.js's static export turns off its server features and prerenders every page under Node, where `window` doesn't exist (AR.15). Solana publishes a React-and-Vite template |
+| Routes | React Router 8.4.0 | About ten pages, with addresses such as `/trade?market=…` (D72, §7) |
+| Solana | `@solana/kit` 8.3.0, `@solana/kit-plugin-wallet` 0.20.0, `@solana/react` 8.3.0, `@solana-program/token-2022` 0.19.0 (it has Permissioned Burn), `@solana-program/token` 0.17.0, `@solana-program/address-lookup-table` 0.15.0 | Kit with its wallet plugin is what Solana's docs recommend. Wallet UI's last eligible version needs Kit 6 or 7 (AR.15) |
+| Language | TypeScript 6.0.3 | TypeScript 7 is a new compiler, three months old |
+| Fonts | Atkinson Hyperlegible Next and Mono, from Google Fonts with system fallbacks (D114) | — |
+
+### The backend
+
+| Part | Pin | Why |
+|---|---|---|
+| Runtime | Node 24.21.0, supported until 2028-04-30 | The current long-term-support line. Node 26 joins it on 2026-10-28 |
+| HTTP | Hono 4.13.9 with `@hono/node-server` 2.1.1 | Routing, CORS and an SSE helper with no dependencies of its own. The host's proxy gives browsers HTTP/2, so the server speaks HTTP/1.1 behind it (AR.15) |
+| Store | SQLite through `better-sqlite3` 13.0.3, replicated continuously by Litestream 0.5.17 to Cloudflare R2 | Under 1 GB at about 2,000 rows a day: one file, and no extra service to keep awake. Neon's free Postgres suspends after 5 minutes and caps compute, and a writer every minute would likely run out mid-month. Supabase pauses after a week. `node:sqlite` is still a release candidate (AR.15) |
+| Logs | pino 10.3.1 | One JSON line per job step (D70) |
+| Input checks | zod 4.6.5 | Report and error-report bodies (D91, D120) |
+| Scheduler | None | The repeatable check (D97) is a 30-second loop. New York time comes from the built-in `Intl`, tested on the clock-change days of 1 November 2026 and 8 March 2027 |
+
+### Tests and tools
+
+| Part | Pin | Use |
+|---|---|---|
+| LiteSVM, `litesvm-loader` | 0.16.0 | Lifecycle tests with a fake clock and fake Pyth accounts (D22, D30) |
+| Mollusk | 0.15.1 | Single instructions, and compute per instruction (D21) |
+| proptest | 1.11.0 | Random sequences of instructions with the vault checks (D64) |
+| Vitest | 5.0.2 | TypeScript unit and integration tests |
+| Playwright, `@axe-core/playwright` | 1.63.0, 4.13.0 | End-to-end and accessibility tests (D116) |
+| Surfpool | 1.6.0 | The local chain for `make dev`, and Anchor 1.x's default. Its clock only moves forward, which suits the demo clock (D89). WSL support is checked when `make dev` is timed at M0 (D74) |
+| solana-verify | 0.5.2 | The verified build (D69) |
+
+The local chain and the tests load the Token-2022 v11 program dumped from devnet, because the bundled copies may predate Permissioned Burn (AR.14). The fuzzer is chosen in §10.
+
+**Verified build (D69).** OtterSec's verification service covers mainnet only (AR.14). On devnet we publish three things: the reproducible build command (`solana-verify build`), the build's hash, and the command that reads the deployed program's hash from devnet. Anyone can then compare the two hashes.
+
+### Hosting (D124)
+
+| Part | Where | A month (`hosting.mjs`) |
+|---|---|---|
+| Website | Cloudflare Pages: any path serves the root, and `_headers` sets the security headers | $0 |
+| Backend, with SQLite on a volume | Fly.io shared-cpu-1x, 256 MB, in Secaucus, NJ (ewr), plus a 1 GB volume | $2.37 |
+| Standby (D98) | Northflank's free Sandbox: always on, and a different provider, so a different failure. If its allowances fall short, Fly.io in Ashburn (iad) at about $2.22 | $0 |
+| Backups | Cloudflare R2, free up to 10 GB | $0 |
+| RPC, watchdog, alerts, reference close | Alchemy, Healthchecks.io, Telegram, Tiingo free tiers (D119, D118, D117, D93) | $0 |
+| **Demo total** | | **about $2.37** |
+
+M0 measures the backend's memory and moves to 512 MB if 256 MB is too small.
+
+Rejected:
+
+- Railway ends a request after 15 minutes, so streams would reconnect constantly.
+- Render's free services sleep, and its paid plans start at $7.
+- Oracle's free VMs are reclaimed when mostly idle for 7 days.
+- Hetzner's US prices rose sharply in June 2026.
+- Cloud Run caps a request at 60 minutes and has no disk.
+- Vercel Hobby is for non-commercial personal use only (AR.15).
+
+**A production level, priced but not planned.** About $2,870 a month (`hosting.mjs`):
+
+| Item | A month |
+|---|---|
+| Pyth Pro stock data (F7.22) | $2,500 |
+| Paid RPC, assuming 30M calls a month | about $300 |
+| Two larger backends | about $49 |
+| Managed Postgres | about $21 |
+
+That is before mainnet SOL rent or any legal costs. The data licence, not hosting, dominates.
