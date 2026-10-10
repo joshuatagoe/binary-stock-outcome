@@ -36,6 +36,7 @@ Kalshi and Polymarket quote contracts in cents ("89 cents", F1.17), and keeping 
 | Sell Yes / Sell No | Sold 10 Yes at 80¢ · received 8.00 USDC | trader |
 | Cancel order | Order cancelled · 3.60 USDC returned | trader, maker |
 | (the close, automatic) | Refunded at the close · 6.00 USDC returned | trader, maker |
+| Return to wallet (only while our backend is down; otherwise automatic, D99) | Returned to your wallet · 3.60 USDC | trader, maker |
 | Redeem / Redeem all | Redeemed 10 Yes for 10.00 USDC | anyone holding tokens |
 | Report a problem → Send report | Report sent | anyone |
 | Mint pairs | Minted 10 pairs · 10.00 USDC | maker |
@@ -195,7 +196,7 @@ Out of scope: search, watchlists, a ladder view that flags out-of-order prices (
 
 Path: at 10:16 AM Dave offers 10 Yes at 65¢, so the Yes view shows asks 65¢ ×10 (Dave) and 66¢ ×5 (bot), and a bid of 64¢ ×5 (bot). The panel reads **Buy Yes 65¢ · Sell Yes 64¢ · Buy No 36¢ · Sell No 35¢**.
 
-1. Alice picks **Buy Yes**, enters 10, and keeps **Market** (fill now at the best prices up to her limit) rather than **Limit** (rest on the book at her price; F6). Her limit defaults to just above the best ask, "Pay at most 66¢ each"; the default width is for Architecture (D15).
+1. Alice picks **Buy Yes**, enters 10, and keeps **Market** (fill now at the best prices up to her limit) rather than **Limit** (rest on the book at her price; F6). Her limit defaults to the last book level needed for all 10, plus 1¢: "Pay at most 66¢ each" (D15, D100).
 2. The ticket shows the payoff line (D10): "You pay 6.50 USDC for 10 Yes. If META closes at or above $680 at 4:00 PM ET (Pyth price), you get 10.00, a profit of 3.50. Otherwise you lose 6.50." and under it "You pay at most 6.60." and "Network fee about 0.00001 SOL, plus a one-time deposit of about 0.002 SOL for your META $680 Yes account."
 3. Clicks **Buy Yes**: "Waiting for your wallet…"; the wallet asks for one approval.
 4. "Sending…", then if it takes a while "Sent, may still land" (D13).
@@ -286,7 +287,7 @@ The check counts tokens locked in the trader's own open orders as well as the wa
    | Yes | 66¢ × 5 | 64¢ × 5 |
    | No (1 − Yes, sides swapped) | 36¢ × 5 | 34¢ × 5 |
 
-3. The clock shows two moments from the market's own close time (D36): "Trading ends in 1 h 42 min · 4:00 PM ET" and "Result expected by about 4:05 PM ET" (D81).
+3. The clock shows two moments from the market's own close time (D36): "Orders close in 1 h 42 min · 3:59:55 PM ET" and "Result expected by about 4:05 PM ET" (D81, D102).
 4. The stock price line reads as in F1 step 4, with its age.
 5. Updates arrive live. The connection state shows only when something is wrong (D14, D16):
    - "Reconnecting… data from 25 s ago"
@@ -294,7 +295,7 @@ The check counts tokens locked in the trader's own open orders as well as the wa
 
 Edge cases:
 
-- **Early-close day:** "Trading ends at 1:00 PM ET today (early close)" and "Result expected by about 1:05 PM ET" (D51).
+- **Early-close day:** "Orders close at 12:59:55 PM ET today (early close)" and "Result expected by about 1:05 PM ET" (D51).
 - **A quiet book is not a stale one:** staleness comes from the stream's heartbeat, not from a lack of trades (D14).
 - **Paused:** the clock still runs; the label adds "Paused by the admin".
 
@@ -307,7 +308,7 @@ Out of scope: depth charts and a trade tape on this page (the market's activity 
 3. On her next visit a notice says "1 of your orders was refunded at the 4:00 PM close." and links to History.
 4. A pending Buy No limit order is refunded the same way: "Refunded at the close · 6 pairs closed · 6.00 USDC returned".
 
-Edge case: if Architecture puts refunds in a balance to withdraw rather than the wallet (D37), the notice reads "3.60 USDC is waiting for you. [Withdraw]", and Withdraw joins the verb table.
+Edge case: a refund lands in the market's book first and returns to the wallet automatically, usually within about 30 seconds. Until then the row reads "Refunded at the close · 3.60 USDC on its way to your wallet". While our backend is down, a [Return to wallet] button does it from the wallet (D99).
 
 Out of scope: email or push notifications (no accounts, D34).
 
@@ -397,7 +398,7 @@ Out of scope: keeping devnet up.
 The bot does this every trading day (D41). Dave does it by hand on a thin **Maker** page or with the repo's scripts (D25):
 
 1. 9:10 AM, **Mint pairs**, 10, for META $680: "Minted 10 pairs · 10.00 USDC". Minting opens at 9:00 (D46).
-2. 10:16 AM, **Post quotes**: an offer of 10 Yes at 65¢. Alice's buy takes all of it, so Dave receives 6.50 and holds 10 No.
+2. 10:16 AM, **Post quotes**: an offer of 10 Yes at 65¢. Alice's buy takes all of it, so Dave receives 6.50 and holds 10 No. The 6.50 is credited in the book and reaches his wallet within about 30 seconds ("6.50 USDC on its way to your wallet", D99).
 3. 11:00 AM: a bid for 5 Yes at 65¢. Bob's Buy No fills it, so Dave pays 3.25 and now holds 5 Yes and 10 No.
 4. **Close pairs**, 5: "Closed 5 pairs · 5.00 USDC returned". He holds 5 No (D38).
 5. The **dashboard** per market and in total (D25; field list from F2.94):
@@ -446,7 +447,7 @@ The **Admin** page shows its controls only when the admin's wallet is connected.
 3. **Remove strike**, before 9:00 only: "Remove META $790 or above? Nobody can have traded it yet." Then "Strike removed". After 9:00: "Strikes can be removed only before 9:00 AM ET, before anyone can trade." (D53)
 4. **Pause:** "Pause minting and new orders on every market? Cancelling, closing pairs, redeeming and settling keep working." Then "Paused". **Unpause** then "Unpaused" (S21, D68).
 5. **Hold result** on one market, with a reason, then "Held" (D68).
-6. **Propose result** with the official close and its source, then "Proposed: No wins, final at 5:20 PM ET" (S16, D63). A typo far from Pyth's 4:00 PM price is refused: "$697.97 is $17.95 from Pyth's 4:00 PM price ($680.02 ± $0.04), more than the allowed distance. Check the number." **Withdraw**, then "Withdrawn"; the wait restarts.
+6. **Propose result** with the official close and its source, then "Proposed: No wins, final at 5:20 PM ET" (S16, D63). A price more than 0.5% from Pyth's 4:00 PM price waits 24 hours instead of 1, and the preview says so: "$697.97 is $17.95 from Pyth's 4:00 PM price ($680.02 ± $0.04), more than 0.5%. If you propose it, it becomes final only after 24 hours. [Check the number] [Propose anyway]" (D104). **Withdraw**, then "Withdrawn"; the wait restarts.
 7. **Update config and rotate keys** by script; ladder changes apply from the next day (D27, D49).
 
 Edge case: any other wallet sees no controls, and a direct call fails on-chain with "Not the admin" (D34).

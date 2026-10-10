@@ -86,3 +86,422 @@ One always-on backend, a backup copy of the bot on a second host (D75), backups 
 | From approving in the wallet to "Bought 10 Yes" | 3 s or less at p95 | Our own target: devnet finalizes within about a second of confirming (AR.01). Measured at M0 |
 | A fill appearing in other tabs | 2 s or less at p95 | Our own target; measured in the L1 load test |
 | Markets created; markets settled | by 9:00 AM; within 10 minutes of the close | The spec |
+
+## 2. System overview
+
+The system has three parts (D23):
+
+- **Our program on Solana** holds every money rule.
+- **A website of plain files** has no secrets. It only builds transactions; the trader's wallet signs and sends them.
+- **One always-on backend** runs the daily jobs, the market-maker bot and the live stream, and holds the operator and bot keys. It decides when things happen, never whether money is safe.
+
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart TB
+  PEOPLE["Traders, market makers, the admin<br/>(sign-in is the wallet only, D34)"]
+  SITE["Website<br/>plain files, no secrets (D23)"]
+  WAL["Browser wallet<br/>Phantom, Solflare"]
+  PROG["Meridian program on Solana devnet<br/>every money rule (D23)"]
+  PYTH["Pyth price accounts on devnet<br/>posted by Zach and others (D80, D83)"]
+  BACK["Backend, always on<br/>jobs, bot, stream, event store<br/>holds the operator and bot keys (D17)"]
+  BACKUP["Backup bot<br/>second host (D75)"]
+  TIINGO["Tiingo<br/>reference close (D93)"]
+  WATCH["Alerts and outside watchdog (D70)"]
+  OP["Operator"]
+  PEOPLE --> SITE
+  SITE -- "1 builds a transaction" --> WAL
+  WAL -- "2 signs and sends it" --> PROG
+  PYTH -- "read and checked by" --> PROG
+  PROG -- "3 events" --> BACK
+  BACK -- "4 live data over SSE (D16)" --> SITE
+  SITE -. "fallback: reads books directly (D16)" .-> PROG
+  BACK -- "paced sends (D56)" --> PROG
+  PYTH --> BACK
+  TIINGO --> BACK
+  BACK -- "check-ins, alerts" --> WATCH --> OP
+  BACKUP -. "sends only when the primary is silent" .-> PROG
+```
+
+### Modules
+
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart TB
+  subgraph WEB["Website"]
+    direction TB
+    PAGES["Pages and their states (D10, D36, D85)"]
+    PURE["Pricing and payoff, pure functions<br/>No prices, payoff line, P&L, the both-sides rule"]
+    TXT["Wallet and transaction tracker (D13)"]
+    LIVEC["Live data client<br/>SSE, falls back to direct reads (D16)"]
+    PAGES --> PURE
+    PAGES --> TXT
+    PAGES --> LIVEC
+  end
+  subgraph SHARED["Shared code, used by website, backend and tests"]
+    direction LR
+    CLIENT["Generated program client (D22)"]
+    LIB["Strikes, calendar, units (D52, D12, D84)"]
+    MSG["Event and stream message types (D95)"]
+  end
+  subgraph PROGRAM["Meridian program, one deployable"]
+    direction TB
+    CFG["Config and pause"]
+    MKT["Markets"]
+    VAULT["Vault and tokens"]
+    BOOK["Order book"]
+    SETTLE["Settlement"]
+    EVT["Events"]
+    BOOK -- "Buy No, Sell No" --> VAULT
+    SETTLE -- "outcome" --> VAULT
+    CFG -. "read by all" .-> MKT
+  end
+  subgraph BACKEND["Backend"]
+    direction TB
+    RECON["Daily jobs"]
+    BOT["Market-maker bot (D41)"]
+    PRICE["Price module (Q16)"]
+    SENDQ["Send queue (D56, D75)"]
+    READER["Chain reader (D62)"]
+    STORE[("Event store")]
+    API["Live stream and public API (D16, D91)"]
+    MON["Monitor: heartbeat, balances, check-ins (D70, D75)"]
+    RECON --> SENDQ
+    BOT --> SENDQ
+    PRICE --> RECON
+    PRICE --> BOT
+    READER --> STORE --> API
+    MON --> STORE
+  end
+  TXT --> CLIENT
+  SENDQ --> CLIENT
+  CLIENT --> PROGRAM
+  EVT --> READER
+  API --> LIVEC
+```
+
+Each module owns something and keeps one rule about it: "only this module changes that". The modules are also the lanes for parallel work in the implementation phase: one module, one owner.
+
+| Module | Owns | Rule it keeps |
+|---|---|---|
+| **Program: Config and pause** | The admin and operator keys, tickers and pinned feed IDs, accepted Pyth receivers (D80), thresholds, ladder settings (D49), the USDC mint (D32), the pause flag | Only the admin's signature changes it (D24, D34). Pause stops only minting and new orders (D68). |
+| **Program: Markets** | Each market's ticker, date, strike, open and close times and state, at an address fixed by ticker, date and strike (D56) | A strike never changes (D53). A market can be removed only before 9:00. Every time rule reads the market's stored times (D11, D51). |
+| **Program: Vault and tokens** | Each market's USDC vault, its Yes and No token types (D94) and the owed counter (D64) | The only module that creates or destroys Yes and No or moves vault USDC. After every instruction, the vault holds at least what is owed, and supply never exceeds the counter (D64). |
+| **Program: Order book** | Resting orders and the tokens or USDC they lock | The only module that moves locked funds. It accepts orders only between the market's open and close (D37, D46). A trade happens at the resting order's price, never beyond the incoming order's worst price (D42, D15). A self-trade cancels the resting order (D90). The close refunds every resting order (D37). |
+| **Program: Settlement** | Each stock's recorded close (D83), each market's outcome, holds and override proposals | An outcome is written once (D2). It comes either from a recorded genuine Pyth close that passes D28, D57 and D26, or from the override after its wait (D63). D58 and D68 say who may call when. |
+| **Program: Events** | One event for every action (D62, D70) | Nothing secret in any event. |
+| **Backend: Daily jobs** | Creating markets, adding strikes, the close sweep, recording the close, settling, closing finished books, the audit | Every action is safe to repeat (D23). Times come from the calendar (D12). It never decides an outcome; the program checks everything. |
+| **Backend: Bot** | Its quotes | Its own wallet, with no program powers (D41). |
+| **Backend: Price module** | Every price read: Pyth accounts and Tiingo | The only place prices are read (Q16). It pre-checks D28 before sending, but the program is the authority. |
+| **Backend: Send queue** | Every transaction the backend sends | The only path from the backend to the chain. It keeps D56's pace, re-signs only after the old transaction expires, and fails over between two providers (D75). |
+| **Backend: Chain reader** | Turning our program's transactions into stored events | The only writer of rows that came from the chain. It catches up after a restart (D62). |
+| **Backend: Event store** | Rows from the chain, which can be rebuilt from it, and our off-chain records, which are backed up (D95) | — |
+| **Backend: Live stream and API** | The stream and the read endpoints | Read-only, except problem reports (D91). The stream sends a snapshot and then changes, each message numbered and carrying its topic (D16, D95). |
+| **Backend: Monitor** | The heartbeat from two providers, the halt detector, balances, watchdog check-ins | Alerts reach a person (D19, D32, D70, D75). |
+| **Website: Pricing and payoff** | No prices, the payoff line, P&L, the both-sides check, the large-order confirm | Pure functions: the same code runs on screen and in the tests (D45, D10, D62, D9, D88). |
+| **Website: Transaction tracker** | Building, signing and tracking transactions | It never shows a sent transaction as failed, and never re-sends before expiry (D13). |
+| **Shared code** | The generated client, strikes, calendar, units, message types | One copy of each (D52's shared function, D84's units). |
+
+**Alice's 10:16 Buy Yes, through the modules:**
+
+1. **Website.** The pricing functions show "Buy Yes 65¢" and the payoff line. She enters 10, with a worst price of 66¢.
+2. **Transaction tracker.** It builds Place Order (buy 10 Yes, at most 66¢) with the generated client. Her wallet asks for one approval and sends the order to devnet.
+3. **Program.**
+   - Config confirms the market isn't paused, and Markets confirms it is between open and close.
+   - The order book matches Dave's 65¢ offer: 6.50 USDC moves from Alice to Dave, and 10 Yes from the book's escrow to Alice.
+   - Events records the fill.
+4. **Transaction tracker.** It sees the transaction finalized and shows "Bought 10 Yes at 65¢ · 6.50 USDC".
+5. **Backend.**
+   - The chain reader stores the fill.
+   - The stream sends a "META" book change to every tab watching META, so Bob's book updates within 2 seconds.
+   - Alice's Portfolio reads her balances from the chain; her History comes from the API.
+
+### The daily jobs: one repeatable check
+
+The daily jobs are one loop that runs every 30 seconds (item 16, D29). It compares what should exist now, given the calendar, the config and the clock, with what the chain shows, and sends only what is missing.
+
+Suppose the backend crashes at 8:41, after creating 30 of 46 markets. After the restart, the next pass sees 16 missing and creates them, with no memory of what it did before. Restarts, devnet halts (D19) and the backup's takeover are therefore all the same case.
+
+The cost is about one read of every market account per pass; 46 accounts fit in one `getMultipleAccounts` call. Each milestone still writes a Timeline row and a watchdog check-in (D70).
+
+| From (ET) | What should be true | If not, it sends |
+|---|---|---|
+| 8:00 | Each stock's previous close is known from the recorded close and Tiingo, and the two agree within D55's threshold | Nothing. A stock that disagrees is skipped, or marked "one source" (D55, D82), with an alert |
+| 8:30 to 9:00 | Every planned market exists | Create market, retrying with growing waits; alert at 9:00 (D56) |
+| About 9:35 | A strike sits within 3% of each stock's price | Add strike, once per stock per day (D54) |
+| The stored close | No resting orders in a closed market | The close sweep (D37) |
+| From the close until recorded | Each stock's close is recorded from a valid Pyth price published at or before the close | Record close (D81, D83). At close + 15 minutes, that stock's markets are held instead (D83) |
+| After a recorded close | Every market on that stock is settled or held | Settle (D26); alert at close + 20 minutes (D8) |
+| After settlement | Each settled market's book account is closed | Close book (D50, D27) |
+| Next trading day | Every settlement has been compared with the reference close | The audit, with alerts on any mismatch (D26, D93) |
+
+### The backup: standby, taking over on silence
+
+The backup copy of the backend runs on a second host (D75) in standby:
+
+- Once a minute it checks the primary's health and the chain's progress.
+- It takes over after 3 silent minutes.
+- It hands back once the primary has been healthy for 5 minutes.
+
+Both hosts use the same bot wallet. If both were active, their bots would keep replacing each other's quotes, which doubles fees and the request load. A brief overlap during handover is harmless: every job action is safe to repeat, and a quote batch replaces that wallet's earlier quotes. The live stream and the event store don't fail over (§1, Availability).
+
+### One program
+
+The program is one deployable with the six modules above. Buy No has to mint pairs and sell their Yes in one instruction (D5), and Sell No has to buy Yes and close pairs in one (D38). So the order book and the vault work together inside every trade.
+
+A separate book program would add a cross-program call, extra compute and extra accounts to each of those trades, and would split the vault rules across two codebases. If we fall back to Phoenix (D21), the change stays inside the program, the generated client and the chain reader.
+
+### Seams: what is faked, and where the real part plugs in
+
+| Seam | Local (`make dev`) | Devnet | Later |
+|---|---|---|---|
+| Price source | Fake Pyth accounts in the local chain (D11) | Pyth accounts posted by Zach and others, under both receivers (D80) | Our own Pyth key, as a config change only (Q16) |
+| Clock | A fake clock with the demo-clock panel (D89) | The chain's clock | — |
+| Reference close | A fixture file | Tiingo (D93) | — |
+| RPC | The local chain | Public devnet plus a free-tier provider (D75) | A paid provider with a streaming feed (L2, §1) |
+| USDC | A local test mint | Circle's devnet USDC (D32) | Our own "Test USDC", D32's fallback |
+| Outcome tokens | Token-2022 with Permissioned Burn | The same (D94) | Classic tokens for new markets if the M0 wallet test fails (D94) |
+| Order book | Ours | Ours | Phoenix if the M1 spike fails (D21) |
+| Alerts and watchdog | Printed to the console | The alert channel and watchdog (chosen in §8 and §9) | — |
+| Live stream | One process | One process | Several behind a message bus (L2, §1) |
+
+## 3. The money flow
+
+Three ideas run through this section:
+
+- **The vault** holds exactly $1 for every Yes and No pair in existence, and pays the winners (D2, D64).
+- **The book's locked funds.** A resting order locks what it offers: Carol's bid for 10 Yes at 60¢ locks 6.00 USDC, and Dave's offer of 10 Yes locks his 10 Yes. The order book module holds these, separately from the vault.
+- **Maker and taker.** The maker is the order already resting on the book; the taker is the incoming order that trades against it. When Alice buys Dave's offer, Dave is the maker and Alice the taker.
+
+### The running example's day
+
+`money-flow.mjs` replays the day. Every person starts with 20.00 USDC, and the $1 rules are checked after every step: the vault holds at least what it owes, Yes and No supply both equal the pairs outstanding, and no USDC appears or vanishes.
+
+| Time | What happens | Vault | Owed |
+|---|---|---|---|
+| 9:10 | Dave mints 10 pairs | 10.00 | 10.00 |
+| 9:30 | The bot mints 5 pairs, offers 5 Yes at 66¢ and bids for 5 at 64¢ | 15.00 | 15.00 |
+| 10:00 | Carol bids for 10 Yes at 60¢, locking 6.00 | 15.00 | 15.00 |
+| 10:16 | Dave offers 10 Yes at 65¢; Alice's Buy Yes takes all 10 for 6.50 | 15.00 | 15.00 |
+| 10:59 | The bot and Dave each bid for 5 Yes at 65¢ | 15.00 | 15.00 |
+| 11:00 | Bob's Buy No mints 10 pairs and sells the 10 Yes to the bot and Dave at 65¢: he pays 3.50 net | 25.00 | 25.00 |
+| 11:30 | Dave closes 5 pairs and gets 5.00 back (D38) | 20.00 | 20.00 |
+| 2:00 PM | Carol cancels and gets 6.00 back | 20.00 | 20.00 |
+| 4:00 PM | The close sweep refunds every resting order (D37) | 20.00 | 20.00 |
+| ~4:02 PM | META closed at $684.00: Yes wins | 20.00 | 20.00 |
+| After | Every Yes is redeemed for 1.00; every No is burned (D94) | 0.00 | 0.00 |
+
+Results: Alice +3.50, Bob −3.50, Carol 0.00, Dave −1.75 (as in USERS F15) and the bot +1.75. They sum to 0.00, since there are no fees (A1).
+
+### The four trade paths
+
+Each path is one signed transaction and one instruction:
+
+| Button | The instruction | Example |
+|---|---|---|
+| Buy Yes | Buy Yes from resting offers | Alice: 10 at 65¢, 6.50 |
+| Sell Yes | Sell Yes into resting bids | Alice at 2:30: 10 at 80¢, receives 8.00 |
+| Buy No | Mint pairs, sell their Yes into resting bids, keep the No. It mints only as many pairs as it sells (D5) | Bob: pays 10.00 for 10 pairs, receives 6.50, keeps 10 No for 3.50 |
+| Sell No | Buy Yes from resting offers, then close each Yes with a No for $1. It closes only as many pairs as it bought (D38) | Bob at noon: pays 8.00 for 10 Yes, gets 10.00 back, receives 2.00 |
+
+Bob's Buy No is the hardest path:
+
+```mermaid
+sequenceDiagram
+  autonumber
+  actor Bob
+  participant Site as Website
+  participant Wallet
+  participant Prog as Meridian program
+  participant Back as Backend
+  Bob->>Site: Buy No, 10
+  Site->>Site: book shows bids 65c x 10 (bot 5, Dave 5)<br/>pay at most 36c, 3.60 in all (D15)
+  Site->>Wallet: one transaction: Buy No 10, sell Yes at no less than 64c
+  Wallet->>Prog: signed by Bob
+  Prog->>Prog: market open, not paused (D37, D68)
+  Prog->>Prog: mint 10 pairs, 10.00 USDC from Bob to the vault (D5)
+  Prog->>Prog: sell the 10 Yes into the bids at 65c: bot 5, Dave 5 (D42)
+  Prog->>Prog: credit bot and Dave 5 Yes each inside the book
+  Prog-->>Bob: 6.50 USDC from the bids, 10 No kept: net 3.50
+  Prog-->>Back: events: mint, 2 fills (D62)
+  Back-->>Site: META book change (D16)
+  Site-->>Bob: Bought 10 No at 35c, 3.50 USDC
+  Back->>Prog: next pass: return Dave's 5 Yes to his wallet (anyone may send it)
+  Prog-->>Back: event: returned
+```
+
+### Matching rules
+
+- **Priority.** Best price first, then oldest first.
+- **Trade price.** A trade happens at the resting order's price (D42), and never beyond the taker's worst price (D15).
+- **Self-trade.** A self-trade cancels the resting order and matching continues (D90).
+- **Order types.** A Market order fills what it can now, and the rest is not placed. A Limit order fills what it can, and the rest rests at its price.
+- **Fills per instruction.** There is a maximum, set from the compute measured in the M1 spike (D21, D30). When it is reached, the order stops as a partial fill.
+
+**The default worst price on a Market order (D15)** is the price of the last book level needed to fill the whole quantity, moved 1¢ against the trader. The order then still fills at the prices on screen if the book moves by a cent. A Limit order uses the trader's own price. Computed by `cap.mjs` on USERS.md's books:
+
+| Order | Default worst price |
+|---|---|
+| Alice, Buy Yes 10 at 10:16 | 66¢, 6.60 in all (USERS F4) |
+| Alice, Buy Yes 15 | 67¢, 10.05 in all |
+| Alice, Buy Yes 20 | The book holds only 15, so the ticket offers a limit order instead |
+| Bob, Buy No 10 at 11:00 | Sells Yes at no less than 64¢, so No costs at most 36¢: 3.60 in all (USERS F5) |
+| Alice, Sell Yes 10 at 2:30 | Receives at least 79¢ each, 7.90 in all |
+| Bob, Sell No 10 at noon | Receives at least 19¢ each, 1.90 in all |
+
+### Where makers' proceeds and refunds land: in the book, then returned automatically
+
+On Solana a transaction must list every account it touches before it runs. So a taker's transaction can't easily pay makers it can't predict. Phoenix and Manifest credit makers inside the market account; OpenBook queues fills for a separate crank (AR.09).
+
+Meridian credits a balance inside the book, which needs no listing, and then returns it:
+
+1. **Fills, cancels and the 4:00 sweep credit the owner's balance in that market's book.** The taker's own side moves straight to and from the taker's wallet, since the taker's accounts are in the transaction anyway. This means any number of makers per transaction, up to the fill limit, and a sweep of one transaction per market.
+2. **"Return to owner" moves a balance to the owner's own wallet accounts.** Anyone may send it, and it can pay no one else. The repeatable check (D97) sends it for every balance on its next pass, about 30 seconds later. The bot collects its own balances inside its quote batches.
+3. **The owner can always send "return to owner" themselves**, so a backend outage delays a return but never traps money (D23).
+4. **After the sweep, everything is returned, and then the book account is closed** to recover its deposit (D50).
+
+On screen, USERS.md's wording stays ("Refunded at the close · 3.60 USDC returned"). While a return is pending, the order shows "on its way to your wallet". If an owner has closed the wallet account a return needs, the backend pays about 0.002 SOL to re-create it.
+
+Rejected:
+
+- **Paying makers straight to their wallets.** The taker would have to predict the makers, at most about 40 per transaction. Fills would stop early whenever the book moved, the sweep would need several transactions, and a closed receiving account would block a fill.
+- **Leaving balances for owners to withdraw by hand** (Phoenix). Users would have to collect, and a book couldn't close until every owner had.
+- **OpenBook's crank** (ruled out by D20 and D29).
+
+### Every place a trade can break
+
+| Breaks at | Chain shows | User sees (USERS.md wording) | How it is settled |
+|---|---|---|---|
+| The wallet popup is closed | Nothing | "You closed the wallet window. Nothing was sent." | — |
+| Simulation fails: wrong network, or too little SOL | Nothing | F2's messages | — |
+| Sent, not landed yet | Nothing yet | "Sent, may still land" | The tracker polls until the transaction lands or expires, and never re-sends first (D13) |
+| Expired without landing | Nothing | "Your order expired before it reached the network. Nothing was spent. [Try again]" | A new transaction |
+| Refused: after the close, or paused | Only the network fee | F4's messages | — |
+| The book moved: partial fill or none | The fills that happened | "Bought 5 of 10 Yes at 66¢ …" or "No Yes was bought …" | Done. A Market order's remainder is not placed |
+| A self-trade | The resting order cancelled, the rest filled | "Your offer of 10 Yes at 65¢ was cancelled …" (D90) | Done |
+| The backend is down | The trade | "Bought …" still shows. The book is read from the chain, and History is unavailable (F13) | The chain reader catches up after restart (D62); returns wait for the backend or the owner |
+| Devnet halts mid-flight | Nothing, or the trade after recovery | "Sent, may still land", then the result or expiry (F14) | Everything is re-read on recovery (D19) |
+| A maker's proceeds are pending return | A balance in the book | "5 Yes on their way to your wallet" | The next pass, or the owner |
+
+### Guards against doing the same thing twice
+
+- **One landing per transaction.** A signed transaction can land at most once.
+- **One live attempt per order.** The tracker re-signs only after the old transaction has expired (D13, D56).
+- **Order IDs.** Each order carries an ID chosen by its sender. A second order with the same ID from the same owner in the same market is refused, which covers a double click and the bot re-sending after expiry.
+- **Market creation.** Market addresses are fixed (D56), so a repeated create fails as "already exists".
+- **Settle.** An outcome is written once, so a second settle fails with "already settled".
+- **Redeem.** Redeeming burns the tokens, so a repeat finds nothing.
+- **Return to owner.** A return moves the whole balance, so a repeat finds zero.
+
+### Showing each failure in a demo
+
+No "break the code" switch is needed:
+
+| To show | Do this |
+|---|---|
+| Nothing filled | Set "pay at most" below the best offer |
+| A partial fill | Buy 20 when 15 are offered |
+| A self-trade | Offer Yes, then buy across your own offer |
+| A refused order | In `make dev`, press "Close at 4:00" on the demo clock (D89), then submit |
+| A paused market | Run the local admin script's pause |
+| The direct-read fallback and pending returns | Stop the backend |
+| Wrong network | Switch the wallet to Mainnet |
+| A closed popup | Click Reject in the wallet |
+
+## 4. Market lifecycle
+
+A market moves through states: Upcoming, Open, Closed, then a result. A state that follows from the clock is **worked out** and never stored: nobody has to press "open" at 9:30, and a dead backend can't make a market miss its open. A state that needs a decision is **stored** by a transaction and recorded as an event.
+
+```mermaid
+stateDiagram-v2
+  direction TB
+  [*] --> Upcoming: Create, 8:30 (operator or admin)
+  Upcoming --> [*]: Remove, before 9:00 (admin)
+  Upcoming --> Open: the clock reaches the open, 9:30
+  Open --> Closed: the clock reaches the stored close
+  Closed --> Settled: Settle, recorded close passes every check
+  Closed --> UnderReview: Settle finds the band on the strike, or no price by close + 15 min, or the admin holds
+  UnderReview --> Proposed: the admin proposes a result
+  Proposed --> UnderReview: the admin withdraws
+  Proposed --> Settled: Finalize, after the wait (anyone)
+  UnderReview --> Settled: backstop, after 24 h or 7 days (anyone, D68)
+  Settled --> [*]: redeem forever, the book closes after returns
+  UnderReview: Under review
+  note right of Open
+    Pause covers every market and stops only
+    minting and new orders (D68)
+  end note
+```
+
+**Worked out, never stored:**
+
+- Upcoming, Open and Closed come from the market's stored times and the chain's clock. Minting opens at 9:00 (D46), orders open at 9:30, and orders close 5 seconds before the stored close.
+- Paused comes from the config flag.
+
+**Stored, each with an event:**
+
+- Under review, with its reason: the band contains the strike (D59), there is no price (D83), or the admin has held it (D68), which covers a halted stock (D65).
+- Proposed, with the result, the official close, its source and the time it becomes final.
+- Settled, with the result, price, band and publish time, and whether it came from the oracle, the override or the backstop.
+- Book closed.
+
+### Who may do what, and when
+
+| Move | Who | Allowed when | What people see |
+|---|---|---|---|
+| Create market | Operator or admin (D24) | Before the open, once per ticker, date and strike (D56) | Cards appear at 9:00 (D46) |
+| Remove market | Admin | Before 9:00 only (D53) | "Strike removed" |
+| Mint pairs | Anyone | From 9:00 until orders close, not paused (D43) | "Minted 10 pairs · 10.00 USDC" |
+| Place order | Anyone | From the open until 5 seconds before the stored close (by the chain's clock), not paused (D37, D46, D102) | F4 to F7 |
+| Cancel order | The order's owner | Any time while the order rests; never paused (D68) | "Order cancelled · 3.60 USDC returned" |
+| Close pairs | Any holder of both | Before the market is Settled, Under review included; never paused (D38, D68) | "Closed 5 pairs · 5.00 USDC returned" |
+| Close sweep | Operator | After the close (D37) | "Refunded at the close · …" |
+| Return to owner | Anyone, paying only the owner | While a balance waits in the book (D99) | "on its way to your wallet", then "returned" |
+| Record close | Anyone | A genuine Pyth price published within 5 seconds before the close (below) | Timeline: "META close recorded $684.00 · 4:00:00 PM ET" |
+| Settle | Operator for 24 hours after the close, then anyone (D58) | A close is recorded, or 15 minutes have passed since the close | "Yes wins", or "Under review" with its reason |
+| Hold | Admin | Before the market is Settled (D68) | "Under review: the admin has held this result while a price problem is checked." |
+| Propose, withdraw | Admin | Under review (D63, D104) | "Proposed: No wins, final at 5:20 PM ET" / "Withdrawn" |
+| Finalize | Anyone | After the wait (D104) | "No wins · official close $679.97 · set by the admin" |
+| Backstop settle | Anyone | An admin hold: after 24 hours, if the recorded close passes every check. A band containing the strike: after 7 days, on Pyth's price alone (D68) | The result |
+| Redeem | Any holder | Settled, forever; never paused (D66, D68) | "Redeemed 10 Yes for 10.00 USDC" |
+| Close book | Anyone | Settled and every balance returned; the deposit goes back to whoever paid it (D50, D99) | — |
+| Pause, unpause | Admin | Any time (D68) | "Trading is paused by the admin …" |
+
+### The recorded close (D83)
+
+- **One record per stock per trading day.** Anyone may submit a Pyth price account. The program checks D28's rules (an accepted receiver per D80, full verification, the pinned feed, a price above zero, a sane exponent) and D57's: the price was published at or before the close and no more than 5 seconds earlier, and the chain's clock has passed the close.
+- **Only a later price replaces it.** A new price replaces the record only if it was published later, and still at or before the close. Nobody can swap in an older price they prefer.
+- **The record freezes at the first settle on that stock**, so every META strike settles on the same price.
+- **The bot's timing:**
+  - It records the first valid price it sees.
+  - It settles as soon as the record holds a price published exactly at the close, or at close + 5 minutes with the best price inside the window.
+  - If nothing is recorded by close + 15 minutes, settle marks that stock's markets "Under review: no price".
+- **The next morning's job reads the record** as the previous close (D82).
+
+### The override (D63, D104)
+
+The admin proposes a result together with the exchange's official close and its source. The proposal becomes final no earlier than 1 hour after the close and 1 hour after the proposal.
+
+It waits 24 hours instead in two cases:
+
+- there is no reference price (no close was recorded);
+- the proposed close is more than 0.5% from the recorded Pyth price.
+
+In the running example's straddle, Pyth's 4:00 price is $680.02 ± $0.04. A typo of $697.97 is $17.95 away, so it needs the 24-hour wait and is visible to everyone, with time to withdraw it. The official close of $679.97 is 5¢ away, so it becomes final at 5:20 PM. Withdrawing and proposing again restarts the wait.
+
+### Settlement numbers
+
+| Setting | Value | Evidence (`settle-numbers.mjs`; AR.04, AR.10) |
+|---|---|---|
+| Orders close before the stored close (D37) | 5 s, by the chain's clock | Devnet's clock ran 1.5 to 2.4 s behind this machine, which ran about 0.9 s ahead of a Date header |
+| Publish-time window (D57) | 5 s, ending at the close | 23 of 25 closes seen were published at exactly 4:00:00. A price published 30 s early can be off by about ±$0.49 on META (at 2% daily moves), more than twice its median band of ±$0.20 |
+| Widest band accepted (D26) | 25 bps of the price (META ±$1.71) | The widest band seen at the close was 10.50 bps; the regular-session p99 was 24.41 bps; this rejects the 490.72 bps outlier |
+| Override bound (D63) | 0.5% of the recorded Pyth price | Catches the $697.97 typo; lets in the $679.97 official close |
+| Override wait outside the bound or with no reference (D63) | 24 h | D63's example |
+| Two-source previous close (D55) | 2% | A split moves the close by a third or more. A false skip costs a stock all of its markets for the day, while a 2% error moves strikes by at most one $10 step |
+| Add-strike price age (D54) | at most 65 min | The same line as "may be out of date" (D87), suited to hourly posts |

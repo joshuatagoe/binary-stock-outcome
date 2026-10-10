@@ -85,3 +85,16 @@ Inference, not directly confirmed: Core equity feeds publish only in the 09:30 t
 - Lens: technical
 - Source: [Pyth best practices](https://docs.pyth.network/price-feeds/core/best-practices): "Querying the current price will fail if too much time has elapsed since the last update."
 - Verification (2026-10-09): not rechecked (UNCONFIRMED)
+
+## 2026-10-10 architecture check for section 4: the chain's clock and closing publish times (main session, read-only)
+
+### AR.10 [D37] [D57] [S13] [S15] CONFIRMED (measurements; 1-second resolution)
+
+**The chain's clock.** On 2026-10-10 between 14:30 and 15:00 UTC, `getBlockTime` was read for a just-confirmed slot 10 times, 3 seconds apart, and compared with the local clock:
+
+- devnet's block time was 1.5 to 2.4 s behind (median 2.0 s);
+- mainnet's was 1.7 to 2.8 s behind (median 2.1 s).
+
+The local clock was 0.9 s ahead of the `Date` header from google.com, and that header has 1-second resolution. So devnet's clock ran roughly 1 to 2 seconds behind real time. Part of the gap is the time between a block being produced and its slot being reported as confirmed.
+
+**Closing publish times.** Of the 25 closing prices in AR.04, 23 were published at exactly 16:00:00, 1 at 27 seconds before, and 1 at 300 seconds before.

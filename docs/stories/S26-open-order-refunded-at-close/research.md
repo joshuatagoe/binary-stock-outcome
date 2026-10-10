@@ -158,3 +158,27 @@ A trader needs to be told which of several different situations they are in (mar
 - Source: [Kalshi Market Lifecycle](https://docs.kalshi.com/getting_started/market_lifecycle.md): "cancellation updates are published on the usual user channels"
 - Source: [Visibility of System Status (NN/g)](https://www.nngroup.com/articles/visibility-system-status/): "keep users informed about what is going on"
 - Verification (2026-10-09): not rechecked (UNCONFIRMED)
+
+## 2026-10-10 architecture research for section 3: how Solana order books pay makers (one read-only agent)
+
+### AR.09 [D37] [D21] [D20] [S26] [S30] CONFIRMED where marked
+
+The agent read the source on GitHub master branches through a summarising fetch tool, so quoted fragments may not be byte-exact.
+
+**Phoenix v1** ([fifo.rs](https://raw.githubusercontent.com/Ellipsis-Labs/phoenix-v1/master/src/state/markets/fifo.rs), [governance.rs](https://raw.githubusercontent.com/Ellipsis-Labs/phoenix-v1/master/src/program/processor/governance.rs)):
+- Matching credits the maker's trader state inside the market account (`trader_state.process_limit_sell(` / `process_limit_buy(`), so the taker lists no maker accounts. CONFIRMED.
+- Makers take their funds out with a trader-signed `WithdrawFunds`. There is no crank.
+- A market can be closed (Tombstoned) only with empty books, no uncollected fees and no registered traders.
+- A match limit is decremented per match, and "Self trades will count towards the match limit".
+
+**OpenBook v2** ([book.rs](https://raw.githubusercontent.com/openbook-dex/openbook-v2/master/programs/openbook-v2/src/state/orderbook/book.rs), [close_market.rs](https://raw.githubusercontent.com/openbook-dex/openbook-v2/master/programs/openbook-v2/src/instructions/close_market.rs)):
+- Makers are credited in a separate per-user `OpenOrdersAccount`. If the taker lists that account, the credit happens at once, up to 15 fills; otherwise the fill goes onto an event heap that a `ConsumeEvents` crank processes, 8 events per call. CONFIRMED.
+- Makers withdraw with an owner-signed `SettleFunds`.
+- `CloseMarket` needs the market to be expired, an empty book, an empty heap and no deposits (`base_deposit_total == 0 && quote_deposit_total == 0 ...`).
+- The taker sets a `limit: u8` on matches. At 0 the code logs "Order matching limit reached".
+
+**Manifest** ([README](https://raw.githubusercontent.com/CKS-Systems/manifest/main/README.md), [swap.rs](https://raw.githubusercontent.com/CKS-Systems/manifest/main/programs/manifest/src/program/processor/swap.rs)):
+- Fills credit the maker's claimed seat inside the market account ("Crankless"), and makers `Withdraw`. CONFIRMED.
+- No close-market instruction was found, and no match limit was found; expired-order cleanup is "intentionally unbounded today".
+
+**Not found:** Phoenix's default match limit; where OpenBook's pruned funds go (by design, the open-orders free balance); Manifest's self-trade behaviour.
