@@ -1,0 +1,95 @@
+// npm run verify: the one check command, the same on the laptop and in CI (ARCHITECTURE.md §10, D129).
+// It checks the files the next commit would hold: tracked files plus new ones git doesn't ignore.
+import { readFileSync, existsSync, statSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { dirname, join, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
+import { checkCitations } from './citations.mjs';
+import { checkSecrets } from './secrets.mjs';
+import { checkSkillMirror } from './skills.mjs';
+import { checkReadmeCounts } from './readme-counts.mjs';
+import { checkDiagrams } from '../arch/check-diagrams.mjs';
+
+const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
+const MAX_BYTES = 5 * 1024 * 1024;
+
+// Test suites whose counts the README may state, by name.
+const SUITES = {
+  hooks: '.claude/hooks/*.test.mjs',
+  verify: 'scripts/verify/*.test.mjs',
+};
+
+function repoTexts() {
+  const out = execFileSync('git', ['ls-files', '--cached', '--others', '--exclude-standard', '-z'], { cwd: ROOT });
+  const texts = new Map();
+  for (const path of out.toString('utf8').split('\0').filter(Boolean)) {
+    const full = join(ROOT, path);
+    if (!existsSync(full) || statSync(full).size > MAX_BYTES) continue;
+    const bytes = readFileSync(full);
+    if (bytes.includes(0)) continue; // binary
+    texts.set(path, bytes.toString('utf8'));
+  }
+  return texts;
+}
+
+function runSuite(glob) {
+  const r = spawnSync(process.execPath, ['--test', '--test-reporter=tap', glob], { cwd: ROOT, encoding: 'utf8' });
+  const count = Number(r.stdout.match(/^# tests (\d+)$/m)?.[1] ?? NaN);
+  const failed = [...r.stdout.matchAll(/^\s*not ok \d+ - (.*)$/gm)].map((m) => m[1]);
+  const problems = r.status === 0 ? [] : failed.length ? failed.map((t) => `failed: ${t}`) : [(r.stderr || r.stdout).slice(-800)];
+  return { count, problems };
+}
+
+const results = [];
+function step(name, fn) {
+  const start = Date.now();
+  let problems, note = '';
+  try { ({ problems, note = '' } = fn()); } catch (e) { problems = [String(e.stack || e)]; }
+  const secs = ((Date.now() - start) / 1000).toFixed(1);
+  console.log(`${problems.length ? 'FAIL' : 'ok  '}  ${name}${note ? ` (${note})` : ''}  ${secs}s`);
+  for (const p of problems) console.log(`        ${p.replaceAll('\n', '\n        ')}`);
+  results.push({ name, problems });
+}
+
+step('Node version matches .nvmrc', () => {
+  const pinned = readFileSync(join(ROOT, '.nvmrc'), 'utf8').trim();
+  const running = process.version.slice(1);
+  return { problems: running === pinned ? [] : [`running Node ${running}; .nvmrc pins ${pinned}`], note: running };
+});
+
+const counts = {};
+for (const [suite, glob] of Object.entries(SUITES)) {
+  step(`tests: ${suite}`, () => {
+    const { count, problems } = runSuite(glob);
+    counts[suite] = count;
+    return { problems, note: `${count} tests` };
+  });
+}
+
+const texts = repoTexts();
+const markdown = new Map([...texts].filter(([path]) => path.endsWith('.md')));
+
+step('citations: every D, P and finding ID cited exists', () => {
+  const allow = JSON.parse(readFileSync(join(ROOT, 'scripts/verify/citations-allow.json'), 'utf8'));
+  return { problems: checkCitations(markdown, allow), note: `${markdown.size} Markdown files` };
+});
+
+step('skills: .cursor and .claude copies match', () => ({ problems: checkSkillMirror(ROOT) }));
+
+step('secrets: no key files or tokens', () => ({ problems: checkSecrets(texts), note: `${texts.size} files` }));
+
+step('README: stated test counts match this run', () => ({
+  problems: checkReadmeCounts(texts.get('README.md') ?? null, counts),
+}));
+
+for (const [path, text] of markdown) {
+  if (!text.includes('```mermaid')) continue;
+  step(`diagrams: ${path}`, () => {
+    const { count, failed, lines } = checkDiagrams(text);
+    return { problems: failed ? lines.filter((l) => l.includes('FAILED')) : [], note: `${count} diagrams` };
+  });
+}
+
+const failed = results.filter((r) => r.problems.length);
+console.log(failed.length ? `\nverify FAILED: ${failed.map((r) => r.name).join('; ')}` : `\nverify passed: ${results.length} checks`);
+process.exit(failed.length ? 1 : 0);
