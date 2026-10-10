@@ -256,6 +256,7 @@ Search coverage of Solana outages found mainnet-beta halts only (June 2022 about
 - Source: [Bloomberg: Solana blockchain restarts after bug causes 4 1/2-hour outage](https://www.bloomberg.com/news/articles/2022-06-02/solana-blockchain-restarts-after-bug-causes-4-1-2-hour-outage): "Solana Blockchain Restarts After Bug Causes 4 1/2-Hour Outage"
 - Source: [SolanaFloor: Solana hit 86% of its halt threshold after a Teraswitch routing failure](https://solanafloor.com/news/solana-hit-86-of-its-halt-threshold): "Solana Hit 86% of Its Halt Threshold After a Teraswitch Routing Failure"
 - Verification (2026-10-09): not rechecked (SECONDARY)
+- Correction (2026-10-09, question round): devnet-specific halts in 2026 do exist. CONFIRMED: [QuickNode status, "Solana Devnet Halt"](https://status.quicknode.com/incidents/rlqcq3vp7bn8): "The Foundation has intentionally halted Solana Devnet starting at approximately 16:00 UTC" on 19 June 2026, restart completed 18:49 UTC (19 June is an NYSE holiday). SECONDARY (an aggregator's copy of Helius's status page): ["Planned Solana DEVNET cluster restart"](https://pingoru.io/providers/helius/incidents/135725), halted 14 April 2026 04:19 UTC "to rollback some feature gates", resolved 15 April 04:51 UTC. UNCONFIRMED (search summary only): Helius reported devnet services degraded for about three hours on 16 January 2026.
 
 ### F6.29 [D18] [A2] [Q23] [S24] CONFIRMED
 

@@ -19,3 +19,5 @@
 ---
 
 Frozen 2026-10-09 when the Story map was approved. Changes only through a logged decision, added as a dated note below.
+
+- **2026-10-09, D35:** the Landing page also links to the risks and limitations note that the spec requires.

@@ -20,3 +20,5 @@
 ---
 
 Frozen 2026-10-09 when the Story map was approved. Changes only through a logged decision, added as a dated note below.
+
+- **2026-10-09, D55:** if the previous close from the two price sources disagrees by more than a set threshold (a split or a bad price), the morning job skips that stock for the day and alerts the admin, so that stock has no markets that day.

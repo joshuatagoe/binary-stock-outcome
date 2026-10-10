@@ -12,3 +12,5 @@
 ---
 
 Frozen 2026-10-09 when the Story map was approved. Changes only through a logged decision, added as a dated note below.
+
+- **2026-10-09, D68:** pause stops only minting and placing orders; cancel, close pair and redeem always work, and settlement is not stopped. A separate settlement hold, placed by the admin, covers a wrong oracle price.

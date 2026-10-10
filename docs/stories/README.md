@@ -35,6 +35,10 @@ Linked items are numbers only. A research agent gets each number as a neutral qu
 | S27 | [S27-buy-no-limit-pending](S27-buy-no-limit-pending/story.md) | Trader | 2 Trading and liquidity | Q5, Q6, Q40 |  |
 | S28 | [S28-under-review-when-band-straddles](S28-under-review-when-band-straddles/story.md) | Trader | 4 Settlement and payout | D26, Q36, Q40 | Q47 |
 | S29 | [S29-devnet-outage](S29-devnet-outage/story.md) | Everyone | 5 Platform | D19, Q40 |  |
+| S30 | [S30-cancel-own-order-partial-fills](S30-cancel-own-order-partial-fills/story.md) | Trader | none (added by D35) | D21, D36, Q4, Q40 |  |
+| S31 | [S31-devnet-operator-checks-jobs](S31-devnet-operator-checks-jobs/story.md) | Operator | none (added by D35) | D29, D32, Q40, Q53 |  |
+
+S30 and S31 were added on 2026-10-09 by D35, after the stage 1 review; they have no `research.md`.
 
 **Cross-cutting, no single story:** D22, D23, Q12, Q25, Q26 (group 5). Their findings go to `docs/research/cross-cutting.md`.
 
