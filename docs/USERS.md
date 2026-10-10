@@ -163,12 +163,13 @@ Out of scope: accounts or sign-up, price charts, news.
 3. With no SOL: "You need a little devnet SOL for network fees, about 0.01 SOL. It's free at faucet.solana.com: choose Devnet and paste your address." with [Copy address] [Open faucet] (D32).
 4. With no USDC: "Get test USDC at faucet.circle.com: choose Solana Devnet and paste your address. It gives 20 USDC every 2 hours. This USDC has no value." with [Copy address] [Open faucet] (D32, D33, F1.05).
 5. Balances update by themselves when funds arrive: "Received 20.00 USDC".
+6. On first connect, a short step: "Set your wallet to Solana Devnet. In Solflare: Settings, then Network, then Devnet. In Phantom: turn on Testnet Mode in its developer settings." [Done] (D115)
 
 Edge cases:
 
 - **No wallet installed:** "No Solana wallet found. Install one (for example Phantom), then reload this page."
 - **Wallet popup closed:** "You closed the wallet window. Nothing was sent." (D13)
-- **Wallet on the wrong network** (a transaction fails to simulate against devnet): "Your wallet seems to be on Mainnet. Switch it to Solana Devnet, then try again." (D36). How it is detected is for Architecture.
+- **Wallet on the wrong network:** no wallet tells a website its network (AR.12), so the site sends every transaction itself through devnet after the wallet signs, and a wallet left on Mainnet can't misroute an order. When a wallet refuses a transaction that passed the site's devnet simulation: "Your wallet seems to be on Mainnet. Switch it to Solana Devnet, then try again." (D36, D115)
 - **Faucet limit reached:** "Circle's faucet gives 20 USDC every 2 hours per address. Until then, the recorded run in the README shows the full cycle."
 - **Low SOL during use:** "You have 0.0003 SOL. Orders need about 0.003 SOL for fees and deposits." with the faucet link.
 
@@ -252,6 +253,7 @@ A Buy No limit order is pending, not a position (D39, S27). Bob places **Buy No 
 Edge cases:
 
 - **Cancel while paused:** allowed (D68).
+- **The book is full** (64 resting orders on one side, or 64 traders with open orders): "This market's order book is full." Market orders still trade (D107).
 - **Cancel after 4:00:** not needed; the close refunds it (F10).
 - **Wants to sell Yes that sits in an open order:** "4 of your Yes are in an open order. Cancel it to sell them."
 - **The new order would trade with your own resting order:** the resting order is cancelled and what it locked is returned, and the new order keeps matching other people's orders: "Your offer of 10 Yes at 65¢ was cancelled: your own order would have traded with it." (D90)

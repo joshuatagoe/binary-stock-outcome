@@ -29,7 +29,7 @@ The chain doesn't bind even at L2: the busiest market needs 5.6 transactions a s
 1. **Devnet's per-address request limit** (100 per 10 seconds, 40 for any one method; AR.08). In L1's busiest hour, with the send queue at its D56 cap, our backend uses 5.0 of its 10 a second (`rpc-budget.mjs`). L2 needs a paid provider.
 2. **The live stream's fan-out.** At L1 the stream sends 6 messages a second in all. At L2 it would send 157,000 a second if every tab got every change, or 22,000 if each tab got only its own stock (assuming 5,000 tabs and 10 order changes per trade; `rpc-budget.mjs`).
 3. **Job bursts at D56's pace of 4 sends a second.** Creating the markets takes at least 23 s, inside the 1,800 s from 8:30 to 9:00. The close sweep takes at least 11.5 s, and recording the close plus settling takes 3.5 s (`scale-demo.mjs`).
-4. **Devnet SOL.** About 0.445 SOL a day stays locked for good: D50's 0.008 per market plus D94's 0.0017. That is about 9.3 SOL over 21 trading days, a regular top-up for the operator (`scale-demo.mjs`).
+4. **Devnet SOL.** About 0.445 SOL a day stays locked for good: D50's 0.008 per market plus D94's 0.0017. (§5 refines this to about 0.61 SOL a day with the recorded closes and token names.) That is about 9.3 SOL over 21 trading days, a regular top-up for the operator (`scale-demo.mjs`).
 
 ### Built for L1, with the path to L2 written down
 
@@ -505,3 +505,366 @@ In the running example's straddle, Pyth's 4:00 price is $680.02 ± $0.04. A typo
 | Override wait outside the bound or with no reference (D63) | 24 h | D63's example |
 | Two-source previous close (D55) | 2% | A split moves the close by a third or more. A false skip costs a stock all of its markets for the day, while a 2% error moves strikes by at most one $10 step |
 | Add-strike price age (D54) | at most 65 min | The same line as "may be out of date" (D87), suited to hourly posts |
+
+## 5. On-chain accounts and the data model
+
+On Solana, an account is a box with an address, a fixed size and a refundable deposit (rent) proportional to its size. Our program finds every account at a **program-derived address**, computed from words such as "market" + "META" + "2026-10-08" + "680". Only our program can sign for that address, and a swapped account fails because its address is wrong. The order book is **zero-copy**: it is read in place rather than copied, which matters for a large account that every trade touches.
+
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart LR
+  CFG["Config<br/>seeds: config<br/>keys, pause, USDC mint, feeds, thresholds"]
+  REC["Recorded close<br/>seeds: close, ticker, day<br/>one per stock per day (D105)"]
+  subgraph M["One market: META $680, 2026-10-08"]
+    MKT["Market<br/>seeds: market, ticker, day, strike<br/>times, owed counter, state, result"]
+    YES["Yes mint, Token-2022<br/>seeds: yes, market"]
+    NO["No mint, Token-2022<br/>seeds: no, market"]
+    VAULT["Vault, USDC<br/>seeds: vault, market<br/>1.00 per pair"]
+    BOOK["Book, zero-copy<br/>seeds: book, market<br/>orders and balances"]
+    BU["Book USDC<br/>locked bids and balances"]
+    BY["Book Yes<br/>locked offers and balances"]
+  end
+  USER["Trader wallet<br/>USDC, Yes and No accounts"]
+  CFG -. "read by" .-> MKT
+  REC -- "settles" --> MKT
+  MKT --> YES & NO & VAULT & BOOK
+  BOOK --> BU & BY
+  USER <-- "mint, redeem" --> VAULT
+  USER <-- "trade, return" --> BU & BY
+```
+
+### Accounts, sizes and deposits
+
+All of these are estimates from `accounts.mjs`; D50 measures the real sizes at M0.
+
+| Account | Address from | Holds | Size | Deposit | Kept or returned |
+|---|---|---|---|---|---|
+| Config | "config" | The admin key, a pending admin key (rotation in two steps), the operator key, the USDC mint, the accepted Pyth receivers (D80), up to 8 tickers with pinned feed IDs, the pause flag, and the thresholds the program enforces (D102 to D106) | 682 B | 0.0056 SOL | Once |
+| Recorded close | "close", ticker, day | Price, band, exponent, publish time, the price account it came from, who recorded it, frozen or not (D105) | 154 B | 0.0020 SOL per stock per day | Kept: the next morning's job and the market's evidence read it |
+| Market | "market", ticker, day, strike | Identity, mint-open, open and close times, the linked accounts, the owed counter (D64), state and hold reason, the result with its price, band and publish time, any proposal | 353 B | 0.0034 SOL | Kept for good: redeem stays open (D66) |
+| Yes mint, No mint | "yes" / "no", market | Token-2022 with Permissioned Burn (D94) and a name wallets show, such as "META 680+ Yes 10/08" (D108). Decimals 0. The mint and burn authority is the market's address; no freeze authority | 422 B each | 0.0038 SOL each | Kept for good (standard mints can't be closed, F3.13) |
+| Vault | "vault", market | USDC, exactly 1.00 per pair outstanding | 165 B | 0.0020 SOL | Kept for good |
+| Book | "book", market | 64 orders a side and 64 traders (D107) | 6,728 B | 0.0477 SOL | Returned after settlement and the returns (D50, D99) |
+| Book USDC, Book Yes | "book_usdc" / "book_yes", market | USDC locked by bids, Yes locked by offers, and owners' free balances | 165 B, 170 B | 0.0041 SOL together | Returned with the book |
+| A trader's Yes and No accounts | The wallet's associated accounts | Their tokens | 170 B each | 0.0041 SOL per market | Returned when closed, which Redeem does (D94) |
+
+Per market, 0.0130 SOL is kept for good (about 0.0100 plus 0.0031 for token names; `accounts.mjs`), and 0.0518 SOL goes out and comes back. At 46 markets a day, with the 7 recorded closes, that is about **0.61 SOL a day kept for good** and **2.38 SOL a day out and back**.
+
+The vault and the book's USDC are separate accounts, so anyone can check "vault = pairs outstanding × 1.00" by reading one balance. At 6,728 bytes the book is under the 10,240 bytes a program can create in one call (AR.11), so Create Market creates it. D22's client-created book is needed only for books above that size.
+
+### The order book's layout
+
+**Orders.** One order takes 24 bytes: a sequence number for time priority, the sender's order ID (D101), the quantity, the trader's index and the price in cents. Bids are kept sorted highest first and asks lowest first, so the best price is always at the front, and adding an order shifts at most 64 entries.
+
+**Traders.** One trader entry takes 56 bytes: the owner, their free USDC, their free Yes and their open-order count. An entry is reused once its balances are zero and it has no open orders.
+
+**Full book.** A full side or a full trader table refuses new resting orders with "This market's order book is full"; Market orders still trade.
+
+At 10:16 the META $680 book holds:
+
+- asks: 65¢ × 10 (Dave), then 66¢ × 5 (bot)
+- bids: 64¢ × 5 (bot), then 60¢ × 10 (Carol)
+- traders: the bot, Carol and Dave
+
+After Alice's buy, Dave's offer is gone and his entry holds 6.50 USDC free until it is returned (D99). Alice was the taker, so she never enters the table.
+
+### Rules the program enforces even if other code has a bug
+
+| Rule | How | What it stops |
+|---|---|---|
+| Admin and operator actions need the stored key and its signature | `has_one` plus `Signer` (D34) | Passing in the admin's address without the key |
+| Every account sits at its expected address | Seeds checked for the market, vault, book, its token accounts and the mints | Swapped accounts (D30) |
+| Token accounts match their mint and token program | USDC is the configured mint on the classic token program; Yes and No are this market's mints on Token-2022 | Fake tokens. The devnet build refuses mainnet USDC (D32) |
+| No account is passed twice where it is written | An explicit duplicate check | The duplicate-account attack (D30) |
+| Prices are 1 to 99¢, quantities are above 0, fills stay within the limit | Argument checks | Nonsense orders |
+| Minting and orders happen only inside their windows | Stored times compared with the chain's clock | Trading after the close (D37, D102) |
+| Strike and times are written only at creation | No instruction changes them | Changing the bet (D53) |
+| The recorded close passes D28 and D103, is replaced only by a later price, and freezes at the first settle | The record step (D105) | Forged or cherry-picked prices |
+| After every money instruction: the vault holds at least what is owed, supply never exceeds the counter, and the book's token accounts equal locked plus free balances | Asserts at the end of each instruction | Any bug that would leave money short (D64) |
+| A result is written once | A state check | Changing a result (D2) |
+| Burning needs the program's co-signature | Permissioned Burn (D94) | Holders burning their own tokens |
+| Pause is checked only in Mint Pair and Place Order | Where the check sits | Freezing people's exits (D68) |
+| A sender's order ID is unique per owner per market | A scan of that owner's orders | Double orders (D101) |
+| A full book refuses new resting orders | A capacity check (D107) | Unbounded growth |
+
+### The backend's event store
+
+The storage technology is chosen in §9; the column types here are descriptive.
+
+```mermaid
+erDiagram
+  EVENTS {
+    text signature
+    int16 ix_index
+    int16 event_index
+    int64 slot
+    utc_time block_time
+    text kind
+    text market_key
+    date trading_day
+    text wallet
+    int16 price_cents
+    int32 qty
+    int64 usdc_units
+    json data
+    int32 network_epoch
+  }
+  MARKETS {
+    text market_key
+    text stock
+    date trading_day
+    int64 strike_cents
+    utc_time close_at
+    text state
+    text outcome
+  }
+  JOB_STEPS {
+    date trading_day
+    text step
+    utc_time started_at
+    utc_time finished_at
+    text outcome
+  }
+  HEARTBEATS {
+    utc_time at
+    text provider
+    int64 slot
+    text genesis_hash
+    int64 last_restart_slot
+  }
+  REFERENCE_CLOSES {
+    date trading_day
+    text stock
+    decimal close_raw
+    decimal split_factor
+  }
+  REPORTS {
+    int64 id
+    text market_key
+    utc_time created_at
+    text body
+    text wallet_unverified
+  }
+  ALERTS {
+    int64 id
+    utc_time at
+    text kind
+    text message
+  }
+  MARKETS ||--o{ EVENTS : "has"
+  MARKETS ||--o{ REPORTS : "has"
+```
+
+- **Where each table comes from.** EVENTS (one row per program event) and MARKETS (each market's current state) come from the chain and can be rebuilt from it (D62). JOB_STEPS, HEARTBEATS, REFERENCE_CLOSES, REPORTS and ALERTS are our own records, backed up at least daily after settlement (D95).
+- **Units.** USDC is stored in base units (6 decimals), and contract prices in whole cents. Stock prices keep Pyth's integer and exponent, and the strike is in cents. Times are stored in UTC and shown in ET (D84). The trading day is the ET date. A market's key reads like `META-680-2026-10-08` (D72).
+- **The network epoch** goes up by one at each devnet reset, which the heartbeat's genesis hash detects. History from before a reset stays visible and labelled (D19).
+- **Rules the store refuses bad data with:**
+  - each event is stored once, keyed by signature, instruction index and event index;
+  - prices are 1 to 99¢, quantities are above 0, and USDC amounts are at least 0;
+  - report text is at most 500 characters (D91);
+  - each trading day and step has one job-step row per attempt.
+- **Indexes:** events by market and time, by wallet and time, and by trading day and kind; reports by market and time; heartbeats by time.
+
+### Reconciliation, for what no rule can express
+
+- **After settlement each day,** the repeatable check (D97) replays each market's events and compares the result with the chain: the Yes and No supplies, the vault and the book's token accounts. A mismatch alerts the operator and adds a Timeline row.
+- **The chain reader** confirms it has stored every one of our program's transactions for the day, with no gaps (D62).
+- **The next-day audit** compares each result with the reference close (D26, D93).
+
+## 6. Instructions and contracts
+
+A contract is the exact shape of a request: what it sends, who must sign it, when it is allowed, what it changes and what it reports. The program's instructions and the backend's API below are the interfaces that parallel work builds against. A change to either is a logged decision.
+
+### The program's instructions
+
+| # | Instruction | Who signs | Allowed when | What it does | Event |
+|---|---|---|---|---|---|
+| 1 | Initialize config | The program's upgrade key (AR.03) | Once | Creates Config | ConfigInitialized |
+| 2 | Update config | Admin | Any time. Ladder and ticker changes apply from the next trading day (D49) | Changes thresholds, tickers and accepted receivers | ConfigUpdated |
+| 3 | Propose admin; Accept admin | Admin; the proposed admin | Any time | Rotates the admin key in two steps (D109) | AdminProposed, AdminAccepted |
+| 4 | Set operator | Admin | Any time | Rotates the operator key (D27) | OperatorChanged |
+| 5 | Pause; Unpause | Admin | Any time | Sets or clears the pause flag (D68) | Paused, Unpaused |
+| 6 | Create market (ticker, day, strike, mint-open, open and close times) | Operator or admin (D24) | Before the open. The ticker is enabled, the strike is a multiple of the stock's step (D49), and the times are in order | Creates the market, its named mints (D108), the vault, the book and the book's token accounts (D107). A second create of the same market fails (D56) | MarketCreated |
+| 7 | Remove market | Admin | Before minting opens at 9:00 (D53) | Closes those accounts | MarketRemoved |
+| 8 | Mint pairs (quantity) | Anyone | From 9:00 until orders close, not paused (D43, D102) | Moves the quantity in USDC into the vault, and mints that many Yes and No | PairsMinted |
+| 9 | Redeem (mode: pairs, winning or losing; quantity) | The holder | Pairs: before Settled. Winning or losing: once Settled. Never paused (D38, D68) | Pairs and winning tokens pay 1.00 each from the vault. The tokens are burned with the program's co-signature, and emptied token accounts are closed (D94) | Redeemed |
+| 10 | Place order (buy or sell Yes; market or limit; price; quantity; the sender's order ID) | Anyone | From the open until orders close, not paused (D46, D102) | Matches (§3); a limit order rests what is left | OrderPlaced, Fill, OrderCancelled (self-trade) |
+| 11 | Buy No (market or limit; worst No price; quantity; order ID) | Anyone | The same | Mints pairs and sells their Yes (D5). A limit order's unsold Yes rests as an offer; cancelling it closes those pairs (D39) | PairsMinted, Fill |
+| 12 | Sell No (worst Yes price; quantity) | Anyone | The same | Buys Yes and closes pairs; it never rests (D38) | Fill, Redeemed (pairs) |
+| 13 | Cancel order (order ID) | The order's owner | Any time while it rests; never paused (D68) | Moves what it locked into the owner's book balance (D99). A Buy No offer closes its pairs instead | OrderCancelled (owner) |
+| 14 | Replace quotes (a list of books, each with new orders) | Any maker; the bot uses it (D111) | Order window, not paused | Cancels the signer's orders on each listed book, places the new ones, and collects the signer's free balances | OrderCancelled, OrderPlaced |
+| 15 | Sweep (market) | Operator | After orders close (D37) | Cancels every resting order into book balances | OrderCancelled (sweep) |
+| 16 | Return to owner (market, owner) | Anyone | While the owner's book balance is above zero | Pays it to the owner's own token accounts (D99) | BalanceReturned |
+| 17 | Close book (market) | Anyone | Settled, with no orders and no balances | Closes the book and its token accounts; deposits go back to whoever paid them (D50) | BookClosed |
+| 18 | Record close (ticker, day, Pyth price account) | Anyone | After the close, passing D28's and D103's checks | Creates or improves that stock's record (D105) | CloseRecorded |
+| 19 | Settle (market) | Operator for 24 hours after the close, then anyone (D58); backstop rules per D68 | After the close | Settled from the record, or Under review (band on the strike, or no price 15 minutes after the close) | MarketSettled, MarketHeld |
+| 20 | Hold (market, reason) | Admin | Before Settled (D68) | Under review (admin) | MarketHeld |
+| 21 | Propose result (market, official close, source) | Admin | Under review | The program works out the result (close at or above the strike pays Yes, D1) and the wait (D104, D112) | ResultProposed |
+| 22 | Withdraw proposal (market) | Admin | Proposed | Back to Under review | ProposalWithdrawn |
+| 23 | Finalize (market) | Anyone | After the proposal's wait | Settled by override | MarketSettled |
+
+### What each action sends and touches
+
+| Action | The website or backend sends | Through | Writes | Returns or shows |
+|---|---|---|---|---|
+| Alice's Buy Yes | Place order: buy, market, at most 66¢, 10, order ID | Pricing, tracker, wallet, program; then the chain reader, store and stream | The book, Alice's and Dave's balances, events | "Bought 10 Yes at 65¢ · 6.50 USDC"; every META tab's book (§2) |
+| Bob's Buy No | Buy No: market, at most 36¢, 10, order ID | The same | The vault (+10.00), the mints, the book, events | "Bought 10 No at 35¢ · 3.50 USDC" (§3) |
+| Carol's cancel | Cancel order: her ID | Tracker, wallet, program; then the repeatable check | Her balance, then her wallet (D99) | "Order cancelled · 3.60 USDC returned" |
+| The 8:30 creates | Create market, 46 times | Daily jobs, send queue, program | 46 markets and their accounts | Timeline: "Created 46 markets …" (F16) |
+| Settlement | Record close, then Settle for each strike | Price module, daily jobs, send queue, program | The record, the markets' results | "Yes wins · META closed at $684.00 …" (F11) |
+| Alice's Redeem all | Redeem (winning), one instruction per market, batched with the day's lookup table (D110) | Tracker, wallet, program | The vault, the burned tokens, closed accounts | "Redeemed …", or "Redeemed 2 of 3 markets …" (F12) |
+| A problem report | `POST /api/reports` | Backend API | REPORTS, an alert | "Report sent. The admin has been alerted." (F11) |
+
+### Errors, in USERS.md's words
+
+| Error | When | On screen |
+|---|---|---|
+| OrdersClosed | From 5 seconds before the stored close (D102) | "Trading ended before your order reached the network. Nothing was bought; only the network fee was charged." |
+| NotOpenYet | Before the open | "Opens 9:30 AM ET" |
+| Paused | While paused | "Trading is paused by the admin. You can still cancel orders, close pairs and redeem." |
+| BookFull | The book's side or trader table is full (D107) | "This market's order book is full." |
+| NotAdmin, NotOperator | The wrong signer | "Not the admin" (F17) |
+| (market already exists) | A duplicate create | "META $790 or above already exists today." |
+| RemoveTooLate | After 9:00 | "Strikes can be removed only before 9:00 AM ET, before anyone can trade." |
+| NotFinal | Redeeming winning or losing tokens before a result | "Redeem opens when the result is final." |
+| WaitNotOver | Finalizing early | "Proposed: No wins, final at 5:20 PM ET" |
+| DuplicateOrderId | A re-sent order | Not shown; the tracker treats the order as already placed |
+| PriceNotGenuine, WrongFeed, OutsideWindow, BandTooWide, BeforeClose | Record close | Timeline only, for example "META close not recorded: published 27 s before the close" |
+| (not enough USDC) | — | Caught before sending: "You need up to 6.60 USDC; you have 4.00." (F4) |
+
+### The backend's API
+
+| Endpoint | Returns | Notes |
+|---|---|---|
+| `GET /stream?topics=META,AAPL` | Server-sent events of type snapshot, book, price, market and heartbeat, each with a sequence number and its topic (D95) | A heartbeat every 10 seconds; the site shows "Reconnecting…" after 25 seconds of silence (D14). On reconnect, `Last-Event-ID` resumes within 5 minutes; later than that, the client gets a fresh snapshot (D16) |
+| `GET /api/timeline?day&stock&market&kind&wallet&cursor` | The day against its targets, then a page of events | F20 |
+| `GET /api/markets/{key}/activity` | That market's events and its settlement evidence | F11, F20 |
+| `GET /api/wallets/{address}/history?day&market&cursor` | That wallet's events | F13 |
+| `GET /api/liveness?weeks=4` | The on-time figures, late markets with their causes, and the heartbeat log | D60, D75 |
+| `GET /api/health` | The time of the primary's last pass, and the chain's progress | D98 and the watchdog |
+| `POST /api/reports` with `{market_key, body, wallet?}` | 202 Accepted; 400 if the body is over 500 characters; 404 if the market is not Under review or Proposed; 429 if rate-limited | D91 |
+
+Errors come back as `{code, message}`. Every endpoint is read-only except problem reports.
+
+### Redeem all (D66, D110)
+
+After settlement, the bot creates one address lookup table for the trading day. It holds each market's four fixed accounts: the market, the vault and the two mints. With it, one transaction redeems up to 9 markets; without it, 4 fit (`redeem-batch.mjs`). The limit of 64 accounts locked per transaction caps it at 9 either way. Solana's newer v1 transactions fit 9 with no table. M0 tests whether Phantom and Solflare sign v1, and if both do, the table is dropped.
+
+## 7. Front end
+
+The website is plain files with no secrets (D23). Every page that shows a market carries the market in its address, because markets are created each morning after the site is built (D72). The choice between Next.js and Vite is made in §9.
+
+### Pages
+
+| Page | Address | Flows |
+|---|---|---|
+| Landing | `/` | F1 |
+| Markets | `/markets` | F3 |
+| Trade, with tabs for Trade and Activity and evidence | `/trade?market=META-680-2026-10-08` | F4 to F11, F20 |
+| Portfolio | `/portfolio` | F6, F12, F13 |
+| History | `/history` | F13 |
+| Timeline | `/timeline?day=2026-10-08` | F20 |
+| Maker, built last | `/maker` | F15 |
+| Admin, built last | `/admin` | F17 |
+| Risks and limitations; How it works | `/risks`, `/how` | F1, S1 |
+
+**The shell around every page** holds:
+- the play-money banner and the first-visit card (D33, D86);
+- the wallet header ("7xKX…9fQ2 · 0.42 SOL · 20.00 USDC");
+- the live-connection state, shown only when something is wrong (F9);
+- the devnet-down banner (F14);
+- in `make dev` only, the demo-clock panel (D89).
+
+### Where each piece of data comes from
+
+- **From Solana directly:** balances, a market's state, and the connected wallet's own orders and book balances. Money screens therefore stay correct while our backend is down (D16, F13).
+- **From the live stream (§6):** books, stock prices and market states (D16).
+- **From the API:** History, the Timeline and a market's Activity (D85).
+- **On the page itself:** No prices, the payoff line, P&L, the both-sides check and the large-order confirm, all computed by pure functions shared with the tests (§2).
+
+### The transaction tracker (D13)
+
+```mermaid
+stateDiagram-v2
+  direction LR
+  [*] --> Checking: Buy Yes pressed
+  Checking --> Refused: devnet simulation fails, the reason is shown
+  Checking --> AwaitingWallet: simulation passes
+  AwaitingWallet --> Closed: the wallet window is closed, nothing was sent
+  AwaitingWallet --> WrongNetwork: the wallet refuses a valid transaction
+  AwaitingWallet --> Sending: signed, the site sends it to devnet
+  Sending --> MayStillLand: no answer within a few seconds
+  Sending --> Done: finalized
+  MayStillLand --> Done: finalized
+  MayStillLand --> Expired: blockhash expired, nothing was spent
+  Done --> [*]
+  Expired --> [*]: Try again builds a new transaction
+  AwaitingWallet: Waiting for your wallet
+  MayStillLand: Sent, may still land
+  WrongNetwork: Wallet seems to be on Mainnet
+  Done: Bought, filled or partly filled
+```
+
+Devnet finalizes within about a second (AR.01), so "Done" waits for "finalized" and there is a single stage (D71). The tracker keeps one live attempt per order and builds a new transaction only after the old one has expired (D13, D101).
+
+### Wallets and the wrong network (item 18, D115)
+
+No wallet documents a way for a website to read which network it is set to (AR.12). The design makes the wallet's setting harmless and explains it:
+
+1. **The site sends every transaction itself.** After the wallet signs (`signTransaction`), the site sends the transaction through its own devnet connection. The wallet's setting therefore can't route an order to Mainnet.
+2. **The site simulates on devnet before opening the wallet.** Too little USDC, a closed market or a full book is caught first and shown with USERS.md's message.
+3. **On first connect, a short step says how to switch the wallet to devnet:** in Solflare, Settings, then Network; in Phantom, its testnet mode under the developer settings.
+4. **A refusal after a successful devnet simulation means the wrong network.** If the wallet refuses a transaction that passed simulation (for Phantom, error -32003), the site shows F2's "Your wallet seems to be on Mainnet. Switch it to Solana Devnet, then try again." A closed wallet window (error 4001) shows "You closed the wallet window. Nothing was sent."
+5. **M0 tests Phantom and Solflare.** With each set to Mainnet, it records exactly what they do with a devnet transaction. It also checks:
+   - whether a batch for Redeem All needs one approval or several (USERS assumption 10, D66);
+   - whether the wallets sign v1 transactions (D110);
+   - whether token names show (D108);
+   - whether the wallets accept Permissioned Burn mints (D94).
+
+   The wording is final after that test.
+
+### Look and type
+
+The palette is **blue and orange** (D114). Bids and profit are blue; asks and loss are orange. States and warnings use their own colours, separate from the accent. Colour is never the only signal: book rows say Bid or Ask, P&L says profit or loss with a sign, and every state has a word (USERS.md, Accessibility).
+
+| Token | Light | Dark | Use |
+|---|---|---|---|
+| bg | `#f5f6f9` | `#0e1117` | Page |
+| surface | `#ffffff` | `#161a22` | Cards, book, ticket |
+| raised | `#eceff4` | `#1f2430` | Neutral pills |
+| fg | `#141922` | `#e7eaf0` | Text |
+| muted | `#4f5867` | `#a0a8b6` | Secondary text |
+| line | `#d5dae1` | `#2c3341` | Borders, rules |
+| accent | `#2346c8` | `#8aa8ff` | The primary action, the Open pill, links |
+| on-accent | `#ffffff` | `#0e1117` | Text on the accent |
+| bid, gain | `#1d5bb5` | `#7faeff` | Bid rows, profit |
+| ask, loss | `#b04a00` | `#f0a262` | Ask rows, loss |
+| warn text, warn background | `#6b4700`, `#fff1cc` | `#f3ce73`, `#2d2410` | The play-money banner, Under review, Proposed, Reconnecting |
+| danger text, danger background | `#9e1b24`, `#fce6e8` | `#ff9aa0`, `#3a161a` | Paused, devnet down |
+| ok text, ok background | `#17633a`, `#e3f4ea` | `#79d6a0`, `#13291d` | Done messages, a final result |
+
+Computed by `palette-check.mjs`:
+
+- The lowest text contrast is 5.49:1 in light and 7.28:1 in dark (WCAG 2.2 needs 4.5:1).
+- Bid and Ask stay at least 0.217 apart in OKLab under every simulated colour deficiency.
+- The teal and magenta alternative falls to 0.021 under deuteranopia.
+- The classic green and red fails contrast (3.50:1 in light) and falls to 0.032.
+
+**Type:** Atkinson Hyperlegible Next, which was designed for readers with low vision, for text, and Atkinson Hyperlegible Mono for prices and quantities, so digits line up. Both come from Google Fonts, with system fallbacks.
+
+### Accessibility plan
+
+USERS.md's needs, with how each is checked:
+
+| Need | Built as | Checked by |
+|---|---|---|
+| Whole values with units for screen readers ("Yes, 65 cents, 65 percent chance") | Accessible names built by the units module (D84) | Unit tests on the names; NVDA pass |
+| Every flow by keyboard | The strike list and the four buttons are arrow-key groups; Enter opens the review; focus returns to the status line after the wallet window | End-to-end tests driven by keyboard only |
+| Announcements | Polite live region for results and refunds, an alert for blocking errors, the countdown at 60, 15, 5 and 1 minute | Screen-reader pass |
+| Contrast and colour blindness | The tokens above | `palette-check.mjs`; an automated accessibility scan in the end-to-end tests |
+| Motion | No flashing on price changes when reduced motion is set; never more than three flashes a second | The scan, and a check with reduced motion on |
+| Zoom and small screens | Usable at 200%; reflows at 320 CSS pixels with no sideways scroll except the book | End-to-end runs at 320 px and 200% zoom |
+| Plain words | A short definition one focus away for Yes, No, strike, bid, ask, settle, redeem, band | Manual pass |

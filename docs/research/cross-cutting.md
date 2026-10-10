@@ -300,3 +300,12 @@ Solana's limits and web targets, as of 2026-10-10.
 - **Free RPC tiers, as read:** Helius 1M credits a month, 10 RPC requests a second and 1 `sendTransaction` a second. Chainstack 25 requests a second and 3M a month. Alchemy 30M CU a month, about 15 requests a second. Devnet access isn't confirmed for any of them.
 - **Web targets** (CONFIRMED): TTFB is good at "0.8 seconds or less" ([web.dev TTFB](https://web.dev/articles/ttfb)), LCP at 2.5 s or less ([LCP](https://web.dev/articles/lcp)) and INP at 200 ms or less ([INP](https://web.dev/articles/inp)). Lighthouse fails a main document that takes more than 600 ms ([server response time](https://developer.chrome.com/docs/lighthouse/performance/server-response-time)).
 - **SSE** (CONFIRMED): over HTTP/1.1 the browser limit per domain is "very low (6)", while over HTTP/2 streams are negotiated and "default to 100" ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)). On reconnect the browser sends `Last-Event-ID` ([HTML spec](https://html.spec.whatwg.org/multipage/server-sent-events.html)).
+
+### AR.11 [D22] [D21] [D107] SECONDARY (search summaries of two primary pages)
+
+A program can create an account itself through one cross-program call only up to 10,240 bytes. Two pages give the figure, read through search summaries:
+
+- Anchor's zero-copy docs ([anchor-lang.com zero-copy](https://www.anchor-lang.com/docs/features/zero-copy)) cap their `init` example at 10240 bytes, which they attribute to this per-call limit. The 8-byte discriminator comes out of that total.
+- Solana's constants reference ([constants reference](https://solana.com/docs/core/constants-reference)) lists `MAX_PERMITTED_DATA_INCREASE` as 10,240 bytes, the most a single call can grow an account.
+
+So a 6,728-byte book can be created inside Create Market, but a 13,384-byte book has to be created first by the client, which is D22's original plan.

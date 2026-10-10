@@ -134,3 +134,33 @@ The spec itself says 'Never use mainnet or real funds for the core submission' a
 - Lens: legal
 - Source: [Meridian spec (local file)](C:\Users\joshu\OneDrive\Documents\Gauntlet\binary-stock-outcome\docs\spec\meridian_project.txt): "Include a short risks/limitations note (no regulatory or compliance claims)"
 - Verification (2026-10-09): held: Opened the local spec file via grep. Line 87 'Never use mainnet or real funds for the core submission', line 91 'Include a short risks/limitations note (no regulatory or compliance claims)', line 516 'This is not required to pass but demonstrates production readiness' for the mainnet bonus.
+
+## 2026-10-10 architecture research for section 7: how wallets behave on devnet (one read-only agent)
+
+### AR.12 [D13] [D66] [D108] [D110] [S2] [S25] CONFIRMED where marked; most runtime behaviour is undocumented
+
+**Can a site learn the wallet's network?** No source documents a way.
+
+- In the Wallet Standard, `chain` is an input the site passes: `/** Chain to use. */ readonly chain: IdentifierString;` ([signAndSendTransaction.ts](https://raw.githubusercontent.com/anza-xyz/wallet-standard/master/packages/core/features/src/signAndSendTransaction.ts), CONFIRMED).
+- Phantom's provider docs show no network getter, and its examples use an endpoint the app supplies ([sending a transaction](https://docs.phantom.com/solana/sending-a-transaction), CONFIRMED).
+- Phantom's testnet mode says only that users "will see testnet balances and can sign testnet transactions" ([testnet mode](https://docs.phantom.com/developer-powertools/testnet-mode.md), CONFIRMED).
+- Solflare's network is a user setting: Settings, then Network, to "switch between Solana mainnet, devnet and testnet" ([Solflare help](https://help.solflare.com/en/articles/6328814-differences-between-mainnet-devnet-and-testnet-and-how-to-switch-between-on-solflare), CONFIRMED).
+- What a wallet set to mainnet does when asked to sign a devnet transaction is undocumented (UNCONFIRMED). A 2024 user review quotes Solflare blocking the reverse mismatch (SECONDARY).
+
+**Sending, and signing several at once.**
+
+- Phantom: with signAndSendTransaction, Phantom "will sign … and submit it via a Solana JSON RPC connection". With signTransaction, "an application may submit the transaction itself".
+- Phantom: `signAllTransactions` is supported for "legacy integrations" ([sending a transaction](https://docs.phantom.com/solana/sending-a-transaction), CONFIRMED).
+- Solflare documents `signAllTransactions` (CONFIRMED).
+- Whether either wallet shows one approval or several for a batch is UNCONFIRMED.
+
+**Transaction formats.**
+
+- v1 transactions are live on mainnet, devnet and testnet ([larger transactions](https://solana.com/upgrades/larger-transaction-sizes), CONFIRMED).
+- `@solana/kit` 8.0.0 and `@solana/web3.js` 3.0.2 or later can build and send them; web3.js 1.x can only read them (same page, CONFIRMED).
+- As of 2 October 2026, Backpack signs v1 transactions, and Phantom and Solflare had not announced support (SECONDARY).
+- Phantom supports versioned transactions with address lookup tables ([versioned transactions](https://docs.phantom.com/developer-powertools/solana-versioned-transactions), CONFIRMED).
+
+**Token-2022.** Phantom "will display the `name` and `symbol` that is stored in the mint account" ([Token-2022 in Phantom](https://docs.phantom.com/developer-powertools/solana-token-extensions-token22.md), CONFIRMED). Its page does not mention Permissioned Burn.
+
+**Errors.** Phantom returns 4001 "User Rejected Request" and -32003 "Transaction Rejected: Phantom doesn't recognize the transaction as valid" ([errors](https://docs.phantom.com/solana/errors), CONFIRMED).
