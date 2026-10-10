@@ -387,3 +387,17 @@ Pyth signs `Equity.US` prices outside 09:30 to 16:00. Publish times seen on devn
 ### PS.06 [D19] [D57] [S15] [S29] CONFIRMED
 
 Other posters this week. Two classmates' programs post a price and settle in one transaction: (1) wallets `5LzcEkZEfegXf4ijSwbUaVXN59RrQbZWwfH58VzyS7YM` and `fdKgbMwvAYMyDgbrVHrmhFuwWWX6Vvwc9PpZMFm2Q1T` through the upgraded receiver with program `6HrAgxccF8gQwX9D3V7Kr6LQBmn6wpPYj17UifFuFCMp` (`SettleMarket`), which posted the 10/7 16:00:00 prices at 17:22:03 (`5pX97hZT7aqZ6gVHr5sCr74EL1mBxbAChS17wWTDCtb1HMS5RkXGicVFPSapkswnbj2myJSZs14NoMxfxBAaEGU`, Full verification). That is a past price posted 82 minutes later and accepted, the step D19 called unproven. (2) Wallets `HDBdqW1XzfCNZXdexLKiVw95B5HUDd3sYp8tX9ijnKRa` and `3i2UN14eCEzLG7HvhgyWUFcN19zdbURj8s78QF6RBZPH` through the legacy receiver with program `3XQgqYNXPeZr5o2NUmnuPm9hk5mPrZpiEsFE62pjVkBn` (`SettleMarket`), which on 10/9 settled at 16:04:52 on prices published at 16:04:40 (`4Gaew7SGGYujcLAGhKKSgFf5wtNnnLvz7mc8AS74KPoeBtMPeqtFoF2GZFpvNzezpvyKhde2dWB2N4WPLa6K5Uom`), an after-hours price, the case D57 guards against. Four programs read Zach's push accounts: `Gk9ZUMqPcNuF3PduisUZXBffUP7cCrfnBSCAyTdpjYGP` (`ComputeClearing`), `6T6u2p8oyZUvZJhbZM8rqvSFFwQiV3Yk5f8t6KFtA1EM` (`CapturePythClose`, `SettleMarket`), `3X3ETGZYNcZ5BMMxcEuDhXxfisAmWzgqvdnhivbK91Hj` (`Settle`, `CreateStrikeMarket`) and `6idjMWUocRDiWkkN9v22LVxsmHUThHZyLSL2wKzqd854` (`RecordSample`). About 2,450 older MAG7 price accounts on devnet date from March to September 2026 (earlier cohorts).
+
+## 2026-10-10 architecture check C4: Pyth bands and publish times at the close (main session, read-only)
+
+Method: the cached devnet data from the 2026-10-09 price-source check (PS.01 to PS.06), meaning Zach's push rounds plus all 2,523 Pyth price accounts for the MAG7 feeds found on devnet under both receivers. No new transaction was read or sent.
+
+### AR.04 [D26] [D57] [D59] [D63] [S15] [S28] CONFIRMED (data); the hold rate comes from a model with assumed moves
+
+The data set holds 25 closing prices: the last price published at or before 16:00:00 ET, deduplicated by stock and publish time. They come from 6 days: 2025-04-14, 2026-05-21, 2026-09-14, 2026-10-07, 2026-10-08 and 2026-10-09, and their publish times were 0, 27 or 300 seconds before 16:00:00.
+
+Band (Pyth's confidence) at the close: median 2.53 bps of price, p90 4.58 bps, max 10.50 bps (TSLA, ±0.4387). The median in dollars by stock: AAPL 0.0850, MSFT 0.0765, GOOGL 0.0905, AMZN 0.0788, NVDA 0.0575, META 0.1965, TSLA 0.0825.
+
+For comparison, 234 regular-session prices (09:30 to 16:00 on weekdays, 2025 to 2026) had a median band of 7.27 bps, a p99 of 24.41 bps and one outlier at 490.72 bps. The 39 from the last hour had a median of 3.03 bps and a max of 16.01 bps.
+
+Hold rate (how often a market's band contains its strike), from a model. The model uses D52's ladder at the 10/9 closes, a previous close spread evenly between $10 steps, and normal daily moves of 1%, 2% or 3% (assumed). With the 7th strike, a day has at least one held market about 1 day in 10 at the median band, or about 2.4 markets per 1,000; at the p90 band it is 1 day in 5 to 6. Without the 7th strike it is 1 day in 59, 19 or 14 for the three move sizes. The same model with D26's assumed ±5¢ band gives D26's "1 day in 17", so the difference comes from the measured band, not the model. The sample is small (25 closes over 6 days), and the daily evals (D26) remain the real measure.

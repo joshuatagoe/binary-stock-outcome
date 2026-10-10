@@ -142,3 +142,23 @@ The spec's Sell No path says the user ends up 'holding both Yes + No = $1.00 wor
 - Lens: user
 - Source: [Meridian project spec (local)](docs/spec/meridian_project.txt): "Tokens can only be destroyed via the redeem function"
 - Verification (2026-10-09): held: Read local spec: line 188-190 Sell No holds Yes+No = $1.00; line 314-316 'or the system handles the close automatically'; line 391 'Tokens can only be destroyed via the redeem function'. Contradiction reading is analysis.
+
+## 2026-10-10 architecture check C3: Initialize Config gate (D24)
+
+One read-only research agent. No transaction was sent.
+
+### AR.03 [D24] [S20] CONFIRMED (Anchor 1.1.2 docs; no 1.2.1 page found)
+
+Anchor documents how to restrict an instruction to the program's upgrade authority:
+
+- `#[account(constraint = program.programdata_address()? == Some(program_data.key()))] pub program: Program<'info, MyProgram>`
+- `#[account(constraint = program_data.upgrade_authority_address == Some(authority.key()))] pub program_data: Account<'info, ProgramData>`
+- `pub authority: Signer<'info>`
+
+The example is marked "This example is not tested" ([anchor-lang 1.1.2 Program](https://docs.rs/anchor-lang/1.1.2/anchor_lang/accounts/program/struct.Program.html)). `programdata_address()` returns None unless the upgradeable loader owns the program ([program.rs](https://raw.githubusercontent.com/solana-foundation/anchor/master/lang/src/accounts/program.rs)). The 1.0.0 release notes mention no change to it.
+
+Gotchas:
+
+- Once the upgrade authority is removed, the check can never pass, so the config must be initialized first.
+- A loader-v4 deployment returns None.
+- LiteSVM's plain `add_program` may not create a ProgramData account; the docs point to the `litesvm-loader` crate for "upgrade authority behavior" (SECONDARY, from a search summary; to check at M0).

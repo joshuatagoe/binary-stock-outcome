@@ -283,3 +283,31 @@ My worked examples (not sourced facts). Halfway: a $500 previous close gives -3%
 - Lens: user
 - Source: [Math.round (MDN)](https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Math/round): "If the fractional portion is exactly 0.5, the argument is rounded to the next integer in the direction of +∞."
 - Verification (2026-10-09): not rechecked (UNCONFIRMED)
+
+## 2026-10-10 architecture check C5: an off-chain source for the official close (D55, D82, D26, D59)
+
+One read-only research agent, briefed with neutral questions. Its fetch tool returns a summary of each page, so quotes are near-verbatim. No account was created.
+
+### AR.05 [D55] [D82] [D26] [D59] [D63] [D41] [S12] [S15] [S16] CONFIRMED where marked
+
+The exchange's own figure is the Nasdaq Official Closing Price (NOCP). It is set by the closing cross at 4:00 PM, falling back to the last regular trade before 4:00. This is SECONDARY: search summaries of Nasdaq Trader's closing-cross FAQ, which came back as an unreadable PDF. The NOCP becomes the consolidated last sale about 15 minutes after the close (SECONDARY, an SEC rule filing seen in search). Nasdaq shows a per-stock "Historical NOCP" page (SECONDARY; some snippets read "Data is currently not available", and the AAPL page timed out). No programmatic access or terms were found. That all seven stocks are Nasdaq-listed was not checked on a listing page (UNCONFIRMED).
+
+No free API found says its close is the official one. Alpaca's docs say a "Market Center Official Close" print "doesn't update open/close" in its daily bars ([Alpaca market-data FAQ](https://docs.alpaca.markets/docs/market-data-faq), CONFIRMED).
+
+Free tiers, CONFIRMED on each provider's own pages:
+
+- [Tiingo](https://www.tiingo.com/about/pricing): 1,000 requests a day. `close` and `adjClose` come with `splitFactor`. Its [EOD docs](https://www.tiingo.com/documentation/end-of-day) say "Most US equity prices are available around 5:30 PM EST. Exchanges may send corrections until 8 PM EST". The free tier "may not display or share the data with another person or organization".
+- [Alpha Vantage](https://www.alphavantage.co/premium/): 25 requests a day. The free daily series is limited to the latest 100 points. Calls itself "NASDAQ-licensed".
+- [Massive, formerly Polygon](https://massive.com/pricing): 5 calls a minute, 2 years of end-of-day data, adjusted for splits by default.
+- [Twelve Data](https://twelvedata.com/pricing): 800 requests a day, "Internal non-display usage".
+
+Also found:
+
+- Finnhub: its pages were unreadable.
+- EODHD: 20 requests a day.
+- Marketstack: resells Tiingo.
+- Yahoo: no official API.
+- Stooq: key behind a CAPTCHA (SECONDARY).
+- IEX Cloud: shut down 2024-08-31 (SECONDARY).
+
+Not found: which vendors use the NOCP, and whether Nasdaq's closing cross runs at 1:00 PM on early-close days.

@@ -154,3 +154,23 @@ The spec itself says 'Never use mainnet or real funds for the core submission' a
 - Lens: legal
 - Source: [Meridian spec (local file)](C:\Users\joshu\OneDrive\Documents\Gauntlet\binary-stock-outcome\docs\spec\meridian_project.txt): "Include a short risks/limitations note (no regulatory or compliance claims)"
 - Verification (2026-10-09): held: Opened the local spec file via grep. Line 87 'Never use mainnet or real funds for the core submission', line 91 'Include a short risks/limitations note (no regulatory or compliance claims)', line 516 'This is not required to pass but demonstrates production readiness' for the mainnet bonus.
+
+## 2026-10-10 architecture check C2: Token-2022 burn authority (D67)
+
+One read-only research agent (docs and source) plus on-chain reads by the main session. No transaction was sent.
+
+### AR.02 [D67] [D2] [Q30] [S19] CONFIRMED (wallet handling UNCONFIRMED)
+
+A holder of a classic SPL Token can burn their own tokens and then close the emptied account, with no involvement from the mint authority. `process_burn` checks only the owner or delegate and never reads `mint_authority`, and `process_close_account` requires only a zero balance ([token processor.rs](https://raw.githubusercontent.com/solana-program/token/main/program/src/processor.rs)).
+
+Token-2022's Permissioned Burn extension "requires a configured burn authority to co-sign every burn for the mint". While it is set, the standard Burn and BurnChecked fail with `TokenError::InvalidInstruction`, and burns go through `PermissionedBurnInstruction::Burn` or `::BurnChecked` ([solana.com permissioned burn](https://solana.com/docs/tokens/extensions/permissioned-burn.md); [token-2022 processor.rs](https://raw.githubusercontent.com/solana-program/token-2022/main/program/src/processor.rs): "Standard burns cannot be used when the permissioned burn"). The authority is checked only for signer status and address ("if !approver_ai.is_signer()"), so a program-derived address signing through `invoke_signed` qualifies; this is a source reading, not tested on-chain. Transfers are unaffected. CloseAccount still needs a zero balance, so a holder cannot empty an account without the co-signer.
+
+The config is `PermissionedBurnConfig { authority: MaybeNull<Address> }` ([interface source](https://raw.githubusercontent.com/solana-program/token-2022/main/interface/src/extension/permissioned_burn/mod.rs)). That makes such a mint an estimated 202 bytes, against 82 for a classic mint: rent of 0.0022968 SOL each against 0.0014616 SOL (computed; measured at M0 per D50).
+
+Deployed: the Token-2022 program binary (`TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb`, programdata `DoU57AYuPFu2QU514RktNPG22QhApEjnKxnBcu4BHDTY`) contains `PermissionedBurnInstruction::InitializePermissionedBurn`, `::Burn` and `::BurnChecked`. That holds on devnet (last deployed 2026-09-23 22:03 UTC, slot 503153936) and on mainnet (last deployed 2026-06-17 20:57 UTC, slot 427147035), read with `getAccountInfo` on 2026-10-10. This settles the release notes' conflict: v11.0.0 says "available on all networks", v11.1.0 says "devnet and testnet".
+
+Tooling: anchor-spl 1.2.1 has no `permissioned_burn` module ([docs.rs](https://docs.rs/anchor-spl/1.2.1/anchor_spl/token_2022_extensions/index.html)). It depends on `spl-token-2022-interface` ^2 and ^3 (crates.io). docs.rs has a `permissioned_burn` module for 3.x and none for 2.x, so the instruction builders exist in 3.x.
+
+Option B (DefaultAccountState set to Frozen): a frozen account cannot transfer, receive or burn, but can be closed once empty. A program would thaw, transfer and re-freeze within each instruction ([default-state docs](https://solana.com/docs/tokens/extensions/default-state)).
+
+Wallets: Phantom's Token-2022 page lists the extensions it supports and warns on Permanent Delegate. It says nothing about Permissioned Burn, Default Account State or frozen accounts ([Phantom docs](https://docs.phantom.com/developer-powertools/solana-token-extensions-token22)). No Solflare or Backpack documentation was found (UNCONFIRMED).

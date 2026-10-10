@@ -199,7 +199,7 @@ Path: at 10:16 AM Dave offers 10 Yes at 65¢, so the Yes view shows asks 65¢ ×
 2. The ticket shows the payoff line (D10): "You pay 6.50 USDC for 10 Yes. If META closes at or above $680 at 4:00 PM ET (Pyth price), you get 10.00, a profit of 3.50. Otherwise you lose 6.50." and under it "You pay at most 6.60." and "Network fee about 0.00001 SOL, plus a one-time deposit of about 0.002 SOL for your META $680 Yes account."
 3. Clicks **Buy Yes**: "Waiting for your wallet…"; the wallet asks for one approval.
 4. "Sending…", then if it takes a while "Sent, may still land" (D13).
-5. "Bought 10 Yes at 65¢ · 6.50 USDC" with a link to the transaction. If finality is shown in two stages (D71): "Bought · confirming" then "Final".
+5. "Bought 10 Yes at 65¢ · 6.50 USDC" with a link to the transaction. Devnet finalizes within about a second, so there is one stage; a two-stage "Bought · confirming" then "Final" waits for the mainnet bonus (D71, AR.01).
 6. The panel shows "You hold 10 Yes · paid 6.50 · worth 6.40 if sold now"; Portfolio lists the position (F13).
 
 Edge cases:
@@ -253,6 +253,7 @@ Edge cases:
 - **Cancel while paused:** allowed (D68).
 - **Cancel after 4:00:** not needed; the close refunds it (F10).
 - **Wants to sell Yes that sits in an open order:** "4 of your Yes are in an open order. Cancel it to sell them."
+- **The new order would trade with your own resting order:** the resting order is cancelled and what it locked is returned, and the new order keeps matching other people's orders: "Your offer of 10 Yes at 65¢ was cancelled: your own order would have traded with it." (D90)
 
 Out of scope: cancelling all orders at once and changing an order's price (cut, D35; cancel and place again).
 
@@ -327,7 +328,7 @@ What if Pyth's 4:00 PM price had been $680.02 ± $0.04 (D59)?
 4. **Under review:** "Under review: Pyth's 4:00 PM price was $680.02 ± $0.04, which includes the $680 strike. The result will come from the exchange's official close, entered by the admin after a waiting period." The stock's other strikes settle normally.
 5. **Proposed:** "Proposed: No wins (official close $679.97), final at 5:20 PM ET" (D63).
 6. **Final:** "No wins · official close $679.97 · set by the admin, final 5:20 PM". Bob's 10 No pay 10.00.
-7. While a market is under review or proposed, **Report a problem** is live (D77). It opens a box, "What looks wrong?", with [Send report]; then "Report sent. The admin has been alerted."
+7. While a market is under review or proposed, **Report a problem** is live (D77). It opens a box, "What looks wrong?", with [Send report]; then "Report sent. The admin has been alerted." The Timeline shows that a report was made, not its text (D91).
 
 Edge cases:
 
@@ -351,7 +352,7 @@ Edge cases:
 
 - **Partly done:** "Redeemed 2 of 3 markets · 14.00 USDC. 1 didn't go through. [Redeem the rest]" (D13)
 - **Under review or proposed:** Redeem is disabled: "Redeem opens when the result is final."
-- **Losing tokens:** shown as "pays 0.00". Whether redeeming them also returns their SOL deposits is for Architecture.
+- **Losing tokens:** shown as "pays 0.00". Redeeming them burns them and closes their token account, which returns the deposit the holder paid to open it (about 0.002 SOL, shown on the ticket in F4): "Redeemed 10 No for 0.00 USDC. The 0.002 SOL account deposit you paid when you bought them is back in your wallet." (D94)
 
 Out of scope: redeeming for users automatically; it needs each holder's signature (D24).
 
@@ -432,7 +433,7 @@ Each step leaves a Timeline row (F20) and a check-in for the watchdog (D70):
 | ~9:35 | If no strike is within 3% of a stock's price, the bot adds strikes once (D54) | "Added META $780, $800, $820 (META opened at $800)" |
 | 4:00 | Trading and minting stop; the close sweep refunds open orders (D37) | "Refunded 12 open orders at the close" |
 | 4:00–4:05 | As each stock's 4:00:00 price is posted (4:00 to 4:02 with Zach's feed), record it and settle that stock's markets; hold a stock with no valid price by 4:15 (D81, D83, D26, D57) | "Settled 45 of 46 by 4:02 PM · META $680 held for review" |
-| next day | Compare each result with the official close (D26) | "Audit: all 45 automatic results match the official close" |
+| next day | Compare each result with the reference close from the off-chain source (D26, D93) | "Audit: all 45 automatic results match the reference close" |
 
 On early-close days every time after the open keys off 1:00 PM (D51). A late or failed step shows its cause on the Timeline and alerts the operator (F18).
 
@@ -485,7 +486,7 @@ Out of scope: grader accounts on our host.
 
 The dashboard reviewers asked for (D47), built on the event records (D62, D70). One public log, three views (D85):
 
-- **Timeline page** (`/timeline`), one trading day at a time. At the top, the day against its targets: "Markets created 8:31 AM (target 9:00) ✓ · 45 of 46 settled by 4:06 PM (target 4:10) ✓ · 1 held · audit: pending". Below, every event in order: time ET, what happened, by whom (the bot, the admin, or a shortened wallet), the market, and a transaction link. Filters: stock, market, kind (jobs, trades, results, admin), wallet.
+- **Timeline page** (`/timeline`), one trading day at a time. At the top, the day against its targets: "Markets created 8:31 AM (target 9:00) ✓ · 45 of 46 settled by 4:06 PM (target 4:10) ✓ · 1 held · audit: pending". Below, every event in order: time ET, what happened, by whom (the bot, the admin, or a shortened wallet), the market, and a transaction link. A problem report appears as "A problem was reported on META $680 or above · 4:12 PM ET", without its text (D91). Filters: stock, market, kind (jobs, trades, results, admin), wallet.
 - **A market's Activity tab**: the same log for one market, with the settlement evidence (F11).
 - **History**: the same log for the connected wallet (F13).
 

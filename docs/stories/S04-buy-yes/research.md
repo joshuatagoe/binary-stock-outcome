@@ -405,3 +405,21 @@ The $25,000 per-member Kalshi figure appears in Fortune (2021, as a general maxi
 - Source: [Fortune: Kalshi (search result)](https://fortune.com/2021/09/23/kalshi-bet-investors-lil-nas-x-climate-change): "the maximum amount an investor would be able to put into one of Kalshi's markets ... is $25,000"
 - Source: [Kalshi: How to become a market maker (search result)](https://help.kalshi.com/en/articles/13823819-how-to-become-a-market-maker-on-kalshi): "market makers may receive reduced fees and certain adjusted position limits"
 - Verification (2026-10-09): not rechecked (UNCONFIRMED)
+
+## 2026-10-10 architecture open question 35: self-trade (main session, read-only)
+
+### AR.06 [D30] [D42] [D45] [S4] [S30] CONFIRMED
+
+Solana order books and Kalshi give three ways to handle an incoming order that would trade with a resting order from the same account.
+
+- OpenBook v2's `SelfTradeBehavior` has `DecrementTake` ("Both the maker and taker sides of the matched orders are decremented ... no fees are applied", marked `#[default]`), `CancelProvide` ("Cancels the maker side of the trade, the taker side gets matched with other maker's orders") and `AbortTransaction` ([order_type.rs](https://github.com/openbook-dex/openbook-v2/blob/master/programs/openbook-v2/src/state/orderbook/order_type.rs)).
+- Phoenix's order builders `new_limit_order_default`, `new_ioc_buy_with_slippage` and `new_ioc_sell_with_slippage` use `SelfTradeBehavior::CancelProvide`; its tests also reference `DecrementTake` and `Abort` ([order_packet.rs](https://github.com/Ellipsis-Labs/phoenix-v1/blob/master/src/state/order_schema/order_packet.rs)).
+- Kalshi's `SelfTradePreventionType` is `taker_at_cross`, which cancels the incoming order and keeps earlier fills, or `maker`, which cancels the resting order and continues matching ([Kalshi SDK docs](https://docs.kalshi.com/python-sdk/models/SelfTradePreventionType); the behaviour text is from its margin REST spec).
+
+Computed for the 10:16 AM book (asks: 65¢ × 10 from Dave, 66¢ × 5 from the bot), with Dave sending Buy Yes, Market, 5 at up to 66¢:
+
+- Letting it trade: Dave pays 3.25 USDC to himself, receives no new Yes, and a trade at 65¢ prints.
+- Cancelling the resting order: Dave's 10 Yes return to him and he buys 5 from the bot for 3.30 USDC.
+- Aborting: nothing happens except the network fee.
+
+With no fees (A1), a self-trade costs nothing. So offering 1 Yes at 99¢ and buying it back nets 0.00 USDC, prints a 99¢ last trade, and would show "99% (last trade)" wherever the spread exceeds 10¢ (D45).

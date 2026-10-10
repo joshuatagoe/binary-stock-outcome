@@ -150,7 +150,7 @@ What must never happen, in plain words, with the decision that enforces each:
 These go in the risks and limitations note as facts, with no regulatory or compliance claims (D3).
 
 - **Devnet outages and resets can't be prevented.** In 2026 devnet was halted or restarted about once a quarter, mostly on purpose by Solana's own teams (D75). The system stays correct through a halt and catches up afterwards; a reset wipes every on-chain position (D19).
-- **Some markets settle late by design.** A market whose band contains its strike waits for the official close: illustratively about 1 trading day in 17, mostly on the 7th strike, to be measured (D26, D48, D59).
+- **Some markets settle late by design.** A market whose band contains its strike waits for the official close: illustratively about 1 trading day in 17, mostly on the 7th strike, to be measured (D26, D48, D59). (2026-10-10: about 1 day in 10 with the closing band measured on devnet, AR.04.)
 - **"The close" is Pyth's last regular-session price**, which can differ from the official closing auction by cents; the next-day audit compares them, and a wrong automatic settlement can't be reversed (D57, D77).
 - **The devnet build settles on a single closing price**, which last-second trading could in principle push (D61).
 - **The upgrade key can replace the program**, including the rule that keeps results final (D69).
@@ -164,5 +164,7 @@ These go in the risks and limitations note as facts, with no regulatory or compl
 - The price-source check with Zach: which of the seven stocks, posted through Pyth's own receiver program or not, and the schedule around 8:00 AM and 4:00 PM ET; plus posting the 4:00 PM price an hour later (D19, D28, D57).
   - Done 2026-10-09: PS.01–PS.06 in [S15's research](stories/S15-automatic-settlement/research.md), and D80–D83.
 - The Alpenglow check on devnet before any finality claim (D71).
+  - Done 2026-10-10: devnet runs Alpenglow and mainnet doesn't (AR.01 in [cross-cutting research](research/cross-cutting.md)).
 - The order-book spike: account size and compute per match (D21).
 - Whether our program can hold Token-2022's burn authority (D67).
+  - Done 2026-10-10: it can, through Permissioned Burn, deployed on devnet and mainnet (AR.02 in [S19's research](stories/S19-one-dollar-invariant/research.md)); decided by D94.

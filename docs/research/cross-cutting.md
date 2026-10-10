@@ -260,3 +260,43 @@ In a static export, wallet and browser-only APIs (window, localStorage) must be 
 - Lens: technical
 - Source: [Next.js: Static Exports](https://nextjs.org/docs/app/guides/static-exports): "you need to safely access these APIs only when running in the browser."
 - Verification (2026-10-09): held: Opened Next.js static exports page, Browser APIs section: window/localStorage must be accessed only in the browser, example uses useEffect.
+
+## 2026-10-10 architecture checks (main session, read-only)
+
+Run before ARCHITECTURE.md, with the user's OK. Method: JSON-RPC reads against `api.devnet.solana.com` and `api.mainnet-beta.solana.com` only. No transaction was sent.
+
+### AR.01 [D71] [Q12] CONFIRMED
+
+Devnet runs Alpenglow; mainnet does not. On 2026-10-10 at 14:43 UTC, `getAgGenesisCert` on devnet (solana-core 4.4.0-beta.0, feature set 1855282951) returned a certificate for slot 504148999, whose block time is 2026-09-25 19:54:25 UTC. That matches Anza's "completed on 25 September" (F6.20) and contradicts Solana's "planned" (F5.44). On mainnet (solana-core 4.3.0) it returned null. `getSlot` was sampled at "confirmed" and "finalized" once a second for 180 seconds. On devnet the gap was 0 slots at the median (max 2), and every confirmed slot was finalized by the next 1-second sample (max 1.007 s). On mainnet the gap was 31 to 33 slots, and a confirmed slot took 7.06 s to finalize at the median (p90 8.08 s). Slot length from `getRecentPerformanceSamples`: devnet 238 to 246 ms, mainnet 218 to 229 ms. Not measured: the time from sending our own transaction to "finalized", which needs a funded key (moved to M0).
+
+## 2026-10-10 architecture research for section 1 (scale), two read-only agents
+
+### AR.07 [D95] CONFIRMED where marked
+
+Usage of the closest real markets, fetched 2026-10-09 to 10.
+
+- **Kalshi overall** (DeFi Rate aggregator, [kalshi volume](https://www.defirate.com/prediction-markets/volume/kalshi/), CONFIRMED as what the aggregator shows): from Sep 10 to Oct 9, 2026, "Kalshi traded $68.7B in contracts ($16.3B in dollars paid)". That was 381.0M trades, 12.7M a day, with weekday days at $1.6B to $2.6B of face value. The Finance category was $877M over the same 30 days (1.3%).
+- **Kalshi's S&P 500 above/below event closing 4:00 PM ET on 2026-10-09** (Kalshi API `markets?event_ticker=KXINXU-26OCT09H1600`, CONFIRMED): 1,893,297 contracts across the 52 markets the agent could read (more exist), and open interest 845,273. The busiest strike (T7809.9999) traded 797,376 contracts. Its hourly candlesticks put 363,932 of them in the bar ending 16:00 ET, which is 45.6%.
+- **The same day's S&P range event** (KXINX-26OCT09H1600): 51,978 contracts across 30 markets.
+- **Single-stock daily markets on Kalshi:** none found in the part of the series list the agent read (UNCONFIRMED that none exist).
+- **Polymarket overall** (DeFi Rate, [polymarket volume](https://defirate.com/prediction-markets/volume/polymarket/)): about 1.4M trades a day; Finance was $29M over 30 days (0.6%).
+- **Polymarket's stock events closing 2026-10-09** (Gamma API, `tag_slug=stocks`, CONFIRMED): single-stock events took $121 to $27,591 each (GOOGL "closes above ___" $27,591, META $2,131, TSLA $505), and SPY "Up or Down" took $16,826.
+- **Robinhood** (Q2 2026 8-K exhibit 99.1, [SEC](https://www.sec.gov/Archives/edgar/data/0001783879/000178387926000113/q22026robinhoodexhibit991.htm), CONFIRMED): "Event Contracts Traded increased over 10x year-over-year to a record 13.6 billion".
+- **Not found:** order or cancel counts, or an order-to-trade ratio, for any prediction market; trader counts for financial markets.
+
+### AR.08 [D95] [D16] [D56] [D75] CONFIRMED where marked
+
+Solana's limits and web targets, as of 2026-10-10.
+
+- **Block compute limit:** 100M CU on mainnet since 2026-07-29, raised from 60M ([solana.com 100M CU blocks](https://solana.com/upgrades/100m-cu-blocks), SIMD-0286; CONFIRMED).
+- **Per-writable-account limit per block:** UNCONFIRMED, because sources conflict. solana.com says it "stays at 12M" ([compute budget](https://solana.com/docs/core/fees/compute-budget)). Agave master has `MAX_WRITABLE_ACCOUNT_UNITS: u64 = 24_000_000` ([block_cost_limits.rs](https://raw.githubusercontent.com/anza-xyz/agave/master/cost-model/src/block_cost_limits.rs)), and SIMD-0306 ("status: Review") proposes 40% of the block limit.
+- **Per transaction** ([fees](https://solana.com/docs/core/fees), CONFIRMED): a default of 200,000 CU per instruction and a maximum of 1,400,000 CU.
+- **Slot time:** "slot time is now 200ms, down from 400ms", with mainnet's last step on 2026-10-09 ([reduced slot times](https://solana.com/upgrades/reduced-slot-times), CONFIRMED). AR.01 measured 218 to 229 ms on mainnet.
+- **Alpenglow on mainnet:** listed for "Q3 2026" and not announced live ([alpenglow](https://solana.com/upgrades/alpenglow)), which agrees with AR.01's null certificate on mainnet.
+- **Transaction size:** v1 transactions of up to 4,096 bytes are "now live on mainnet, testnet, and devnet", against 1,232 bytes for legacy and v0 ([larger transactions](https://solana.com/upgrades/larger-transaction-sizes), CONFIRMED). The limit of 64 accounts per transaction is unchanged ([transactions](https://solana.com/docs/core/transactions)).
+- **Token transfer cost:** classic SPL Token `TransferChecked` costs 6,200 CU ([SIMD-0266](https://raw.githubusercontent.com/solana-foundation/solana-improvement-documents/main/proposals/0266-efficient-token-program.md), CONFIRMED). No Token-2022 figure was found.
+- **Order-book compute:** Manifest's benchmark shows PHX_50/95/99 at 6,748/8,819/10,866 CU and MFX_50/95/99 at 1,010/1,284/1,819 CU, workload undefined ([bench data](https://bonasa-tech.github.io/manifest/dev/bench/data.js), 2026-10-08; claimed by Manifest's authors). OpenBook v2's `BookSide` is 90,944 bytes per side, holding 1,024 tree nodes of 88 bytes ([bookside.rs](https://raw.githubusercontent.com/openbook-dex/openbook-v2/master/programs/openbook-v2/src/state/orderbook/bookside.rs), CONFIRMED). In Manifest, one resting order or seat takes an 80-byte block (constants.rs, CONFIRMED).
+- **Public RPC limits** ([clusters](https://solana.com/docs/references/clusters), CONFIRMED, the same for devnet and mainnet): "Maximum number of requests per 10 seconds per IP: 100", 40 per single RPC method, and 40 concurrent connections per IP.
+- **Free RPC tiers, as read:** Helius 1M credits a month, 10 RPC requests a second and 1 `sendTransaction` a second. Chainstack 25 requests a second and 3M a month. Alchemy 30M CU a month, about 15 requests a second. Devnet access isn't confirmed for any of them.
+- **Web targets** (CONFIRMED): TTFB is good at "0.8 seconds or less" ([web.dev TTFB](https://web.dev/articles/ttfb)), LCP at 2.5 s or less ([LCP](https://web.dev/articles/lcp)) and INP at 200 ms or less ([INP](https://web.dev/articles/inp)). Lighthouse fails a main document that takes more than 600 ms ([server response time](https://developer.chrome.com/docs/lighthouse/performance/server-response-time)).
+- **SSE** (CONFIRMED): over HTTP/1.1 the browser limit per domain is "very low (6)", while over HTTP/2 streams are negotiated and "default to 100" ([MDN](https://developer.mozilla.org/en-US/docs/Web/API/Server-sent_events/Using_server-sent_events)). On reconnect the browser sends `Last-Event-ID` ([HTML spec](https://html.spec.whatwg.org/multipage/server-sent-events.html)).
