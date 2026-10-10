@@ -166,5 +166,6 @@ These go in the risks and limitations note as facts, with no regulatory or compl
 - The Alpenglow check on devnet before any finality claim (D71).
   - Done 2026-10-10: devnet runs Alpenglow and mainnet doesn't (AR.01 in [cross-cutting research](research/cross-cutting.md)).
 - The order-book spike: account size and compute per match (D21).
+  - 2026-10-10: the account size is set in ARCHITECTURE.md §5 (D107); the compute per match is measured in M1, whose gate decides D21's fallback (D131).
 - Whether our program can hold Token-2022's burn authority (D67).
   - Done 2026-10-10: it can, through Permissioned Burn, deployed on devnet and mainnet (AR.02 in [S19's research](stories/S19-one-dollar-invariant/research.md)); decided by D94.

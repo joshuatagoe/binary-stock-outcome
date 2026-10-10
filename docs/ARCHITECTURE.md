@@ -4,6 +4,34 @@ This file says how Meridian is built: its size, its parts, the money flow, the o
 
 **Running example, used everywhere:** "META $680 or above" on a Thursday when META closed at $680 the day before. At 10:16 AM the book holds the bot's bid for 5 Yes at 64¢ and offer of 5 at 66¢, plus Dave's offer of 10 at 65¢. Alice buys 10 Yes for 6.50 USDC, and Bob buys 10 No for 3.50. META closes at $684.00, so Yes wins.
 
+## Summary
+
+Meridian has three parts (§2): an Anchor program on Solana devnet that holds every money rule; a Vite and React website of plain files, where the wallet signs and the site sends; and one always-on Node backend that runs the daily jobs as one repeatable check, quotes as a market maker, records events and streams live data. The backend affects timing, never the safety of money.
+
+- **Size.** Built for the devnet demo: 10 to 50 traders a day across 46 markets. The market leader's level is computed and its path written down. Solana's limit per market is far above both (§1, D95).
+- **Money.** Each market has its own vault holding $1 for every pair. The order book is on-chain. Makers' proceeds and close-time refunds are credited inside the book and returned to wallets automatically. All four trade paths are single instructions, and the vault is checked after every instruction (§3, D99 to D101).
+- **Settlement.** Anyone may record a genuine Pyth price published in the 5 seconds before the close. Settle uses that record. A market whose band contains its strike, or that has no price, is held for an override that takes the official close and waits at least an hour. No market waits more than a week (§4, D102 to D106).
+- **Accounts.** Yes and No are named Token-2022 mints with Permissioned Burn, so only Redeem destroys them. A book holds 64 resting orders a side. About 0.61 SOL a day is kept for good (§5, D94, D107 to D109).
+- **Contracts.** The program has 23 instructions, an error table in USERS.md's words, and a backend API of one stream plus read endpoints and two rate-limited write paths (§6, D110 to D113).
+- **Operations.** Alerts go by Telegram, a Healthchecks.io watchdog runs on New York time, Alchemy is the second RPC provider, and the liveness rule is stated in raw and adjusted figures (§8, D117 to D121).
+- **Stack and hosting.** Every pin is at least two weeks old (Anchor 1.2.0). Hosting is Fly.io plus a standby on Northflank, with SQLite and Litestream and the site on Cloudflare Pages, for about $2.37 a month (§9, D122 to D125).
+- **Delivery.** Golden examples are shared by Rust and TypeScript, one `verify` command runs locally and in CI, and `main` is protected. Eight milestones run from M0, deployed on day one, to M7. Every spec deliverable is done by M6 (§10, §12, D126 to D131).
+
+| § | Section |
+|---|---|
+| 1 | Scale and availability |
+| 2 | System overview |
+| 3 | The money flow |
+| 4 | Market lifecycle |
+| 5 | On-chain accounts and the data model |
+| 6 | Instructions and contracts |
+| 7 | Front end |
+| 8 | Security, privacy and observability |
+| 9 | Stack and hosting |
+| 10 | Testing and delivery |
+| 11 | Configuration, repository layout and known limitations |
+| 12 | Build order |
+
 ## 1. Scale and availability
 
 Meridian carries three kinds of traffic: on-chain transactions (every trade, quote and job step), our backend's requests to Solana's RPC servers (to send transactions and read what happened), and live updates pushed to browsers. Alice's 10:16 Buy Yes is one transaction. Our backend reads it back once to record its events (D62), and one book update goes to every open tab watching META (D16).
@@ -1047,3 +1075,314 @@ Rejected:
 | Managed Postgres | about $21 |
 
 That is before mainnet SOL rent or any legal costs. The data licence, not hosting, dominates.
+
+## 10. Testing and delivery
+
+A test counts only once it has been seen failing before it passes, and the money path is tested first (D30). "Done" means a check that ran, not a sentence on a card (both workflow reports).
+
+### Test layers
+
+| Layer | What it covers | Tools |
+|---|---|---|
+| **Frozen worked examples** | JSON "golden" files that both the Rust and the TypeScript tests read. Changing one is a logged decision. They cover:<br>- D52's strike cases: a $500 close, $499.995, META $680, AAPL $230<br>- the running example's day: Alice +3.50, Bob −3.50, Dave −1.75 (`money-flow.mjs`)<br>- the default worst prices: 66¢ for 6.60 in all, 36¢ for 3.60 (`cap.mjs`)<br>- the payoff lines, and the P&L examples of USERS F13<br>- the settle comparison at every cent price<br>- the self-trade case, and refund and return amounts | Golden JSON files |
+| **Program, one instruction at a time** | Every instruction's checks and errors (§6).<br>Compute per instruction, which sets the fill limit (D21).<br>Security cases:<br>- swapped and duplicate accounts (D30)<br>- a forged price account, and a wrong owner under each accepted receiver (D125)<br>- the wrong feed, GOOG and GOOGL 24/7 (D55)<br>- exponent conversion (A4) | Mollusk 0.15.1 |
+| **Program, whole lifecycle** | Create, mint, trade, close pairs, record, settle or hold, override, redeem, all with the fake clock.<br>Also early-close days and the backstops (D68).<br>After every step: the vault holds at least what it owes, and supply stays at or below the counter (D64). | LiteSVM 0.16.0 |
+| **Property tests** | Random sequences of instructions, with the vault and book checks after each one (D64) | proptest 1.11.0 |
+| **Fuzzing** | Coverage-guided search for crashes and broken checks, run nightly (D126) | Crucible v0.2.1 |
+| **Backend, against a real store and the local chain** | The repeatable check with a fake clock:<br>- holidays and early closes<br>- the clock changes of 1 November 2026 and 8 March 2027<br>- a crash at 8:41 (D97)<br><br>The send queue: its pace and the rate-limit replies (D56).<br>Also:<br>- provider failover, the halt detector and the standby's takeover (D75, D98)<br>- the stream's snapshot and resume (D16)<br>- report and error-report limits (D91, D120)<br>- reconciliation (D109) | Vitest 5.0.2, SQLite, Surfpool 1.6.0 |
+| **Website** | The pure functions against the golden files; every screen state (D36); the transaction tracker's states (§7) | Vitest |
+| **End to end, with accessibility** | Flows F1 to F20 on `make dev`: keyboard only, at 320 px wide and at 200% zoom, with an accessibility scan on every page (D116) | Playwright 1.63.0, `@axe-core/playwright` 4.13.0 |
+| **Load, race and outage tests** | §1's L1 and L2 load tests, its seven race tests and its five outage drills | Our own scripts |
+| **The devnet run** | The only test of Pyth's real signature check (D30). Its signatures are recorded for the README (D73) | `make devnet` |
+| **Manual** | A screen-reader pass with NVDA (D116); the M0 wallet test with Phantom and Solflare (D115) | — |
+
+### Check layers
+
+| Layer | What it does |
+|---|---|
+| `npm run verify`, the same command locally and in CI | Type checks and unit tests; the program build and its tests.<br>Docs and repo checks:<br>- every diagram renders and none contains a semicolon (`check-diagrams.mjs`)<br>- every AR and D number cited exists<br>- the `.cursor` and `.claude` copies of each skill match (AGENTS.md)<br>- no keys are committed (D17)<br>- every test count the README states matches a fresh count (the OpenEMR report's lesson) |
+| Push script | Runs `verify`, then pushes to `origin` and `gitlab` with explicit commands, and only with the user's OK (AGENTS.md) |
+| CI on GitHub Actions (D127) | The same `verify`, then the end-to-end and accessibility suite. Fuzzing and the L1 load test run nightly. The runners are GitHub-hosted, not a runner on one PC (the OpenEMR report's lesson) |
+| Branches and a protected `main` (D128) | From M0, each slice is built on a branch and merges into `main` only after CI passes and the grill (AGENTS.md) |
+| Deploys | The website deploys to Cloudflare Pages from `main`, and the backend by `fly deploy` from CI. The program is deployed only from the laptop that holds the upgrade key (D92): `solana-verify build`, then the deploy, then the hashes are published (D125). CI never holds the upgrade key |
+| Health check and smoke test | Fly checks `/api/health`. After every deploy, a smoke test calls the health endpoint, reads the Config account on devnet and loads one page |
+
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart LR
+  DEV["Laptop<br/>npm run verify"] --> PUSH["push script<br/>verify, then push to origin and gitlab"]
+  PUSH --> CI["GitHub Actions<br/>the same verify, then the program tests,<br/>end-to-end and accessibility"]
+  CI --> MERGE["main<br/>protected: CI must pass"]
+  MERGE --> SITE["Cloudflare Pages<br/>website deploy"]
+  MERGE --> BACK["fly deploy<br/>backend"]
+  LAPTOP["Laptop, upgrade key<br/>solana-verify build, then deploy"] --> PROG["Devnet program<br/>hash published"]
+  SITE & BACK & PROG --> SMOKE["Smoke test<br/>health, config account, one page"]
+  NIGHT["Nightly<br/>fuzzing, load test"] -.-> CI
+```
+
+## 11. Configuration, repository layout and known limitations
+
+### Configuration
+
+Every setting has one home. Settings the program enforces live in the on-chain Config account, which only the admin changes (D24). Ladder and ticker changes apply from the next day (D49). The backend's settings live in `config/<network>.json`, which holds no secrets. Secrets live in `.env`, and `.env.example` lists each name with a placeholder (D17). The "Production" column is priced, not planned (§9).
+
+**On-chain Config**
+
+| Setting | Local (`make dev`) | Devnet | Production | From |
+|---|---|---|---|---|
+| Admin key | A local key | A key file on the laptop, also imported into its own Phantom account | Hardware wallet and multisig | D92, D69 |
+| Operator key | A local key | `.env` on the backend host | `.env`, rotated | D17, A5 |
+| USDC mint | A local test mint | Circle's devnet USDC, `4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU`. The devnet build refuses the mainnet address | Circle's mainnet USDC | D32 |
+| Accepted Pyth receivers | The local fakes' owner | Legacy `rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ` and upgraded `rec2HHDDnjLfj4kE7VyEtFA1HPGQLK33259532cRyHp` | Upgraded only | D80 |
+| Tickers and feed IDs | The 7, with fake feeds | AAPL, MSFT, GOOGL (Class A), AMZN, NVDA, META, TSLA, each pinned to its `Equity.US` feed ID from Hermes's listing (PS.01) | The same | D55, D28 |
+| Ladder | ±3/6/9%, $10 step, plus the 7th strike | The same; the step can be set per stock | The same | D6, D48, D49 |
+| Widest band | 25 bps | 25 bps | Re-measured | D106 |
+| Publish-time window | 5 s | 5 s | Re-measured | D103 |
+| Orders close before the close | 5 s | 5 s | Re-measured against mainnet's clock | D102 |
+| Override bound, waits | 0.5%; 1 h; 24 h | The same | A longer wait and a multisig | D104, D63 |
+| Operator-only settling | 24 h | 24 h | 24 h | D58 |
+| Backstops | 24 h for an admin hold, 7 days for a band on the strike | The same | The same | D68 |
+| Hold with no price | close + 15 min | close + 15 min | The same | D83 |
+| Book capacity, fill limit | 64 orders a side and 64 traders; the fill limit from the M1 spike | The same | Measured at L2 | D107, D21 |
+
+**Backend (`config/<network>.json`)**
+
+| Setting | Local | Devnet | Production | From |
+|---|---|---|---|---|
+| RPC | The local chain | Public devnet plus Alchemy (key in `.env`) | A paid provider with a streaming feed | D119, §1 |
+| Send pace | Unlimited | 40 per 10 s, shared by every job | The provider's limit | D56 |
+| Repeatable check | Every 30 s, on the demo clock | Every 30 s | Every 30 s | D97 |
+| Bot | 5 contracts a side | 5 a side; the 3 nearest strikes only while short of USDC; re-quote when fair value moves 2¢ | Sized to the book | D41, D32 |
+| Two sources for the previous close | Fixture file | Recorded close and Tiingo, which may differ by at most 2% | The same | D93, D106 |
+| Price ages | 65 min for "may be out of date" and for the add-strike step | The same | Shorter with a streaming price | D87, D106 |
+| Alert levels | Printed to the console | SOL below 3.61, USDC below 458, check-in grace 15 min, devnet down after 60 s, heartbeat every 15 s and logged every 60 s | Re-sized for mainnet SOL | D121 |
+| Stream | Heartbeat every 10 s; "Reconnecting…" after 25 s; resume within 5 min | The same | The same | D113 |
+| Problem reports | 500 characters; 5 an hour per address | The same | The same | D91 |
+| Error reports | 20 an hour per address; kept 14 days | The same | The same | D120 |
+| Large-order confirm | 100.00 USDC | 100.00 USDC | Re-set | D88 |
+| Calendar | NYSE dates for 2026 to 2028; a test fails when the table runs out | The same | The same | D12 |
+| Network label | "Local demo · fake prices and a fake clock" | "Solana devnet · USDC here is Circle's test token, no real value" | None | D33, D11 |
+
+**Secrets (`.env`, never committed):** the operator key, the bot's trading key, the Alchemy key, the Tiingo key, the Telegram bot token and chat ID, the Healthchecks ping URLs, and the R2 credentials for Litestream. Fly.io and Northflank hold their own copies as platform secrets. The upgrade key never leaves the laptop (D92).
+
+### Repository layout
+
+One repository with npm workspaces for the TypeScript parts and a Cargo workspace for the program:
+
+| Path | Holds |
+|---|---|
+| `programs/meridian/` | The Anchor program. `src/` has one module per §2 module: config, markets, vault, book, settlement, events. `tests/` holds the Mollusk, LiteSVM and proptest tests |
+| `clients/ts/` | The Codama-generated client. Generated, never edited by hand |
+| `packages/shared/` | The strike ladder (D52), calendar, units (D84), and message and event types (D95) |
+| `packages/golden/` | The frozen worked examples, read by both Rust and TypeScript tests (§10) |
+| `apps/web/` | The Vite and React website |
+| `apps/backend/` | The backend: daily jobs, bot, price module, send queue, chain reader, store, API and monitor (§2) |
+| `fuzz/` | The Crucible harness (D126) |
+| `config/` | `local.json`, `devnet.json` (no secrets) and the calendar |
+| `scripts/` | Deploy, create markets, run the lifecycle on devnet, the local demo, push and verify. The existing `arch/` and `save-review.mjs` stay |
+| `docs/` | As now |
+| Root | `Makefile` (with matching npm scripts for Windows, D74), `Anchor.toml`, `Cargo.toml` (pinning the Solana CLI for solana-verify), `rust-toolchain.toml` (1.98.0), `package.json`, `.nvmrc` (24.21.0), `.env.example` |
+
+Where the repository sits for WSL builds is checked at M0, since it currently lives in OneDrive (D22).
+
+### Known limitations
+
+These go into the risks and limitations note as plain facts, with no regulatory claims (D3).
+
+**On-chain and settlement**
+
+- Devnet halts and resets can't be prevented. The system stays correct through a halt, and a reset erases every position (D19, D75).
+- About 1 trading day in 10 has a market held for the override, which settles roughly 1 h 20 min after the close or later. The estimate comes from 25 closes over 6 days (AR.04).
+- "The close" is Pyth's last regular-session price. A wrong automatic result, found by the next day's audit against a vendor's close, can't be reversed (D57, D77, D93).
+- The devnet build settles on one closing price, which last-second trading could in principle move (D61).
+- The upgrade key can replace the program, and the admin key is a file on a laptop on devnet (D69, D92).
+- The price source is borrowed: other people's posts to devnet, through two receiver programs (D28, D80).
+
+**Trading and money**
+
+- A book holds 64 resting orders a side and 64 traders (D107).
+- Two wallets owned by one person can still trade with each other (D90).
+- The bot's quotes can be picked off when it falls behind, losing play money (D41).
+- There are no per-wallet limits, disputes, geoblocking or wallet screening (D76, D77, D79).
+
+**Wallets and the website**
+
+- No wallet tells a website its network, so "your wallet seems to be on Mainnet" is an inference (D115).
+- How wallets handle Permissioned Burn mints, v1 transactions and signing a batch is checked at M0 (AR.12).
+
+**Running it**
+
+- Several free tiers can change or fall short: Northflank's allowances, Healthchecks.io (one person, with "multi-hour outages possible") and Alchemy's card requirement (AR.13, AR.15).
+- Litestream and Surfpool don't support Windows, so they run in WSL or on the host (AR.14, AR.15).
+- OtterSec's verified-build service covers mainnet only, so on devnet the build is checked by comparing published hashes (D125).
+- Local runs use fake prices, which skip Pyth's real signature check. Only the devnet run tests it (D11, D30).
+
+## 12. Build order
+
+Each milestone is a vertical slice: it delivers something that works end to end and ends with a check that proves it. M0 deploys while there is little code, so secrets and hosting surprises are cheap to fix (D131). Once M1 freezes the instruction contracts (§6) and the generated client, the program (M2, M3), the backend (M4) and the website (M5) can run as separate lanes, which phase 4 plans.
+
+```mermaid
+---
+config:
+  layout: elk
+---
+flowchart LR
+  M0["M0<br/>Skeleton deployed,<br/>unknowns measured"] --> M1["M1<br/>Book spike and<br/>money core"]
+  M1 --> M2["M2<br/>All four trade paths,<br/>returns, the close"]
+  M2 --> M3["M3<br/>Settlement and redeem"]
+  M1 -- "contracts frozen" --> M4["M4<br/>The automated day<br/>on devnet"]
+  M1 -- "contracts frozen" --> M5["M5<br/>Trading on the website"]
+  M3 --> M4
+  M3 --> M5
+  M4 --> M6["M6<br/>The grader path<br/>and the Timeline"]
+  M5 --> M6
+  M6 --> M7["M7<br/>Maker and admin pages,<br/>drills, L2 load test"]
+```
+
+### M0: skeleton deployed, unknowns measured
+
+**Builds**
+- The WSL toolchain at the §9 pins, and the repository layout from §11.
+- `npm run verify`, CI on GitHub Actions, and a protected `main` (D127, D128).
+- A minimal program with Initialize Config and the upgrade-key gate (AR.03), deployed to devnet from the laptop with `solana-verify build`, with its hashes published (D125).
+- The generated client.
+- The backend skeleton on Fly.io: health, SQLite with Litestream to R2, one test Telegram alert and one Healthchecks check-in.
+- The standby on Northflank.
+- The website skeleton on Cloudflare Pages, reading Config.
+
+**Done when**
+- The smoke test passes against all three deployed parts.
+- A branch has merged into the protected `main`.
+- Each of the following is measured and recorded as a dated finding, with the decision it settles updated:
+  - whether devnet requires sBPFv3 (D125);
+  - Codama with an Anchor 1.x IDL;
+  - real account sizes, including a named Permissioned Burn mint (D50, D107, D108);
+  - the wallet test: Phantom and Solflare set to Mainnet, batch approval, v1 transactions, token names and the Permissioned Burn mint (D115, D110, D94);
+  - 50 timed sends to "finalized" (D71);
+  - `make dev` timed on a fresh WSL install, and where the repository can live (D22, D74);
+  - the backend's memory (D124).
+
+### M1: the order-book spike and the money core
+
+**Builds**
+- Config and Create market: the named mints, vault, book and the book's token accounts.
+- Mint pairs and Redeem (pairs).
+- Place order: buy and sell Yes, market and limit, with the worst price, self-trade cancellation and the sender's order ID.
+- Cancel order.
+- Events, and the vault and book checks after every instruction.
+- The first golden files.
+
+**Done when**
+- The running example's morning runs in LiteSVM with the vault checks after every step: Dave mints and offers, then Alice buys 10 Yes at 65¢.
+- Mollusk records compute per fill.
+- The spike gate (D21) passes: the book fits and the fill limit is set, or the Phoenix fallback is decided and logged.
+
+### M2: all four trade paths, returns and the close
+
+**Builds**
+- Buy No (market and limit).
+- Sell No.
+- Return to owner and Replace quotes.
+- The sweep, the order window and pause.
+- Property tests and the Crucible harness.
+
+**Done when**
+- The 13 steps of `money-flow.mjs`, up to the sweep, reproduce exactly in LiteSVM: every balance, the vault and the owed counter.
+- The property tests run.
+- Crucible runs nightly, or its fallback is logged (D126).
+
+### M3: settlement and redeem
+
+**Builds**
+- Record close, with the owner check for both receivers (D125), D28 and D103.
+- Settle, with both kinds of hold (D26, D83).
+- Hold, Propose, Withdraw and Finalize (D104, D112), and the backstops (D68).
+- Redeem for winning and losing tokens (D94), and Close book.
+- The program, updated on devnet.
+
+**Done when**
+- The whole lifecycle passes with the fake clock, including a market held and then settled by override.
+- On devnet, the record step accepts a real 4:00:00 price posted by Zach, which tests Pyth's real signatures (D30). It refuses a wrong feed and a price published after the close.
+
+### M4: the automated day on devnet
+
+**Builds**
+- Calendar and price module.
+- The send queue, with failover.
+- The repeatable check (D97) and the bot.
+- The chain reader and store, the stream and the API.
+- The monitor: halt detector, alerts and check-ins.
+- Standby takeover (D98).
+
+**Done when**
+- One real trading day runs unattended on devnet:
+  - markets exist by 9:00, and quotes are up at 9:30;
+  - the sweep runs at the close, and settlement lands within 10 minutes of the posted close;
+  - books are closed, and the audit runs the next morning.
+- The 8:30 burst is measured (D56).
+- A takeover drill passes.
+
+### M5: trading on the website
+
+**Builds**
+- Landing, Markets, Trade, Portfolio and History.
+- Redeem all, with the lookup table (D110).
+- Wallet connection and the devnet guide (D115).
+- The stream, with its fallback.
+- A market's evidence (D77).
+- The palette and type (D114), and the accessibility plan (D116).
+
+**Done when**
+- A fresh Phantom wallet on devnet buys, sells, cancels and redeems through the site.
+- Playwright covers F1 to F12 on `make dev`, with axe scans at 320 px and 200% zoom.
+- The L1 load test passes (§1).
+
+### M6: the grader path and the Timeline
+
+**Builds**
+- `make dev`: Surfpool, fake Pyth and the demo clock (D89). Also `make devnet`, with its calendar check (D73).
+- The deploy, create-markets and lifecycle scripts.
+- The README with one-command setup, the recorded devnet run (D73) and `.env.example`.
+- The risks and limitations note (§11), and the chain write-up (D18).
+- The Timeline (F20), with the liveness figures (D121).
+
+**Done when**
+- `make dev` on a fresh WSL install goes from create to redeem in minutes.
+- `verify` confirms the README's test counts.
+- The recorded run's signatures are in the README.
+- The Timeline shows a real devnet day against its targets, with each late market's cause.
+
+### M7: operator tools and hardening
+
+**Builds**
+- The Maker page (F15) and the Admin page (F17).
+- Problem reports (D91).
+- The outage drills, the race tests and the L2 load test (§1).
+
+**Done when**
+- The drills and race tests pass.
+- The admin can hold, propose and finalize from the page.
+
+### Deliverables and cuts
+
+**Deliverables.** By the end of M6, every deliverable the spec lists exists:
+
+- the program (M3);
+- the website (M5);
+- the automation service (M4);
+- the scripts, the README, the risks note, the rationale and the end-to-end devnet demonstration (M6).
+
+The Timeline sits in M6, not later, because it is the "what happened when" dashboard Peak6's reviewers value (D47).
+
+**Cuts.** If time runs short, cut from the bottom, one at a time, and log each cut:
+
+1. the L2 load test
+2. the Maker and Admin pages (scripts already cover both roles, D25, D36)
+3. problem reports
+4. nightly fuzzing
+5. the standby host
+
+Nothing in M0 to M6 is cut.
