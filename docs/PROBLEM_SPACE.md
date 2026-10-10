@@ -162,6 +162,7 @@ These go in the risks and limitations note as facts, with no regulatory or compl
 ### Open before Architecture
 
 - The price-source check with Zach: which of the seven stocks, posted through Pyth's own receiver program or not, and the schedule around 8:00 AM and 4:00 PM ET; plus posting the 4:00 PM price an hour later (D19, D28, D57).
+  - Done 2026-10-09: PS.01–PS.06 in [S15's research](stories/S15-automatic-settlement/research.md), and D80–D83.
 - The Alpenglow check on devnet before any finality claim (D71).
 - The order-book spike: account size and compute per match (D21).
 - Whether our program can hold Token-2022's burn authority (D67).
