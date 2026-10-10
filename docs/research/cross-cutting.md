@@ -420,3 +420,79 @@ The web, backend and hosting choices as of 2026-10-10. One research agent read t
 - Vercel Hobby is for "non-commercial personal use only" (CONFIRMED).
 - Cloudflare R2's free tier is 10 GB-month with free egress (CONFIRMED).
 - Litestream v0.5.17 is dated 31 August, and "Windows is NOT an officially supported platform" (CONFIRMED).
+
+## 2026-10-10 workflow prep (phase 4): three read-only agents and two main-session checks
+
+The agents read pages through the fetch tool, which summarises them, so quotes are near-verbatim. The main session ran WP.04 and WP.05 itself.
+
+### WP.01 [P11] [P13] [P14] [P15] CONFIRMED where marked
+
+Claude Code 2.1.296's own docs.
+
+- **Subagents and skills.** A subagent definition's `skills` field injects each named skill's full SKILL.md at startup; without it, a subagent can only call skills through the Skill tool, and leaving Skill out of `tools` blocks that ([sub-agents](https://code.claude.com/docs/en/sub-agents), CONFIRMED). Other fields include `disallowedTools`, `permissionMode`, `maxTurns`, `hooks`, `effort` and `isolation` (CONFIRMED).
+- **Worktrees.** `isolation: worktree` branches "by default from your default branch rather than the parent session's HEAD"; the setting `worktree.baseRef` is `"fresh"` (the remote's default branch, the default) or `"head"` (the local HEAD). Worktrees live in `.claude/worktrees/<name>/`. `.worktreeinclude` copies gitignored files that match it. A subagent's worktree is removed if it made no changes ([worktrees](https://code.claude.com/docs/en/worktrees), CONFIRMED). `WorktreeCreate` and `WorktreeRemove` hooks exist, but a `WorktreeCreate` hook replaces Claude's own creation and skips `.worktreeinclude` ([hooks](https://code.claude.com/docs/en/hooks), CONFIRMED). From 2.1.277 a worktree without `.claude/skills` reads the main checkout's skills and agents (CONFIRMED).
+- **Permission rules.** `*` matches any text anywhere in the command. Within a level, deny, then ask, then allow are checked, and a deny at any level beats an allow at any other. Deny and ask rules apply if any part of a compound command matches; an allow rule must match every part. A prefix is not a boundary: `Bash(curl *)` does not catch `sh -c 'curl …'`, and `wsl` is not stripped as a wrapper ([permissions](https://code.claude.com/docs/en/permissions), CONFIRMED). So an allow rule for `wsl *` would very likely run `wsl -e bash -lc "git push …"` without a prompt (SECONDARY, inferred from those rules). A rule can't see inside a script that the rule allows.
+- **Hooks.** A PreToolUse hook that exits with code 2 blocks the tool call, and stderr is shown as the reason. A matcher of `Bash|PowerShell` covers both shells. On Windows, hook commands run in Git Bash when it is installed (CONFIRMED). The docs have no example that blocks commits on `main`.
+- **Orchestration.** `claude --bg` starts a background session that moves into its own worktree before editing; `claude agents` lists them ([agent view](https://code.claude.com/docs/en/agent-view), CONFIRMED). Workflow scripts run up to 16 agents at once by default. The documented `agent()` options don't include worktree isolation (UNCONFIRMED that it exists) ([workflows](https://code.claude.com/docs/en/workflows)). `CLAUDE_CODE_MAX_SUBAGENT_SPAWN_DEPTH=1` turns off subagents spawning subagents (CONFIRMED).
+- **WSL.** Claude Code runs inside WSL with the Linux installer, "WSL setups do not need Git for Windows", and sandboxing works on WSL2 but not on native Windows ([setup](https://code.claude.com/docs/en/setup), [sandboxing](https://code.claude.com/docs/en/sandboxing), CONFIRMED).
+
+### WP.02 [P11] [P16] CONFIRMED where marked
+
+The development machine: WSL, OneDrive, git, Surfpool, the Solana toolchain and Cursor.
+
+- **Where files live.** Microsoft: "We recommend against working across operating systems with your files"; for speed in a Linux command line, keep files in the WSL filesystem, such as `/home/<user>/Project` ([WSL file systems](https://learn.microsoft.com/en-us/windows/wsl/filesystems), CONFIRMED). No published `cargo build` timing on `/mnt/c` was found; WP.04 measures the cost directly.
+- **Two git installs, one repository.** Worktree links are absolute paths by default; `worktree.useRelativePaths` changes that ([git-worktree](https://git-scm.com/docs/git-worktree), CONFIRMED). A worktree made by Windows git (`gitdir: C:/…`) can't be used by Linux git (SECONDARY, [Git Extensions docs](https://git-extensions-documentation.readthedocs.io/worktrees.html) and a Claude Code issue summary). Microsoft advises installing git separately on each side and keeping line endings consistent with `.gitattributes` ([WSL git](https://learn.microsoft.com/en-us/windows/wsl/tutorials/wsl-git), CONFIRMED).
+- **OneDrive.** It can't exclude a folder by pattern (only "Choose folders"), it doesn't support symlinks, and it recommends at most about 300,000 synced items ([restrictions](https://support.microsoft.com/en-us/office/restrictions-and-limitations-in-onedrive-and-sharepoint-64883a5d-228e-48f5-b3d2-eb39e07630fa), CONFIRMED). Reports of OneDrive corrupting `.git` folders are anecdotal (SECONDARY, [Microsoft forum](https://techcommunity.microsoft.com/discussions/onedriveforbusiness/onedrive-is-corrupting-my-git-repositories/3898283)). On this machine the OneDrive client wasn't running on 2026-10-10, but `C:\Users\joshu\OneDrive` is still a cloud-files folder (reparse tag 0x9000701a, checked by the main session).
+- **Editors.** VS Code's WSL extension runs the editor on Windows and the code, git and extensions inside the distro ([WSL with VS Code](https://learn.microsoft.com/en-us/windows/wsl/tutorials/wsl-vscode), CONFIRMED). Cursor's WSL support is UNCONFIRMED.
+- **Surfpool.** `surfpool start` defaults to RPC port 8899, WebSocket 8900 and Studio 18488 on 127.0.0.1, set by `--port`, `--ws-port` and `--studio-port`, with `--no-studio` to turn Studio off ([Surfpool CLI](https://solana.com/docs/tools/surfpool/toolchain/cli), CONFIRMED). Two instances with different ports is UNCONFIRMED until tried. A Windows browser reaches a WSL server through `localhost` in the default NAT mode ([WSL networking](https://learn.microsoft.com/en-us/windows/wsl/networking), CONFIRMED).
+- **Toolchain install.** Solana's one-line installer sets up Rust, Agave, Anchor, Surfpool and Node inside Ubuntu ([installation](https://solana.com/docs/intro/installation), CONFIRMED). The manual route is rustup, then `https://release.anza.xyz/<tag>/install`, then `avm` ([Anchor installation](https://www.anchor-lang.com/docs/installation), CONFIRMED). The Linux packages are `build-essential pkg-config libudev-dev llvm libclang-dev protobuf-compiler libssl-dev` (CONFIRMED). Whether `avm` offers 1.2.0 is UNCONFIRMED.
+- **Cursor skills.** Cursor loads `.agents/skills/` and `.cursor/skills/`, and "for compatibility" also `.claude/skills/` ([Cursor skills](https://cursor.com/docs/context/skills), CONFIRMED). Whether the identical copies in both folders show up twice is UNCONFIRMED.
+
+### WP.03 [P17] CONFIRMED where marked
+
+Deploying at M0.
+
+- **Fly.io.** "All organizations … require a credit card on file". The trial is at most 2 hours of machine time or 7 days ([pricing](https://docs.fly.io/about/pricing), CONFIRMED). GitHub Actions deploys use an app-scoped token (`fly tokens create deploy`), saved as `FLY_API_TOKEN`, and `flyctl deploy --remote-only` ([continuous deployment](https://docs.fly.io/launch/continuous-deployment-with-github-actions), CONFIRMED). Health checks go under `[[http_service.checks]]`; a check expects a 2xx and doesn't follow redirects. `auto_stop_machines = "off"` keeps a machine running ([fly.toml](https://docs.fly.io/reference/configuration), CONFIRMED).
+- **Litestream.** `litestream replicate -exec "<app>"` runs the app under Litestream ([Docker guide](https://litestream.io/guides/docker/), CONFIRMED). Restoring when the volume is empty at boot (`restore -if-db-not-exists -if-replica-exists`) is UNCONFIRMED for 0.5.x.
+- **Cloudflare Pages.** A Direct Upload project can't be switched to Git integration later. Direct Upload from CI needs a token with Pages Edit, saved as `CLOUDFLARE_API_TOKEN` along with `CLOUDFLARE_ACCOUNT_ID`, and runs `wrangler pages deploy` ([Direct Upload](https://developers.cloudflare.com/pages/get-started/direct-upload/), [with CI](https://developers.cloudflare.com/pages/how-to/use-direct-upload-with-continuous-integration/), CONFIRMED). A `_headers` file can set `X-Robots-Tag: noindex` ([headers](https://developers.cloudflare.com/pages/configuration/headers/), CONFIRMED). Preview deployments are public, and already carry `noindex` ([previews](https://developers.cloudflare.com/pages/configuration/preview-deployments/), CONFIRMED).
+- **R2.** It needs "an R2 subscription", started from the dashboard ([get started](https://developers.cloudflare.com/r2/get-started/), CONFIRMED). Whether that requires a card is UNCONFIRMED. Access keys can be limited to one bucket with Object Read & Write ([tokens](https://developers.cloudflare.com/r2/api/tokens/), CONFIRMED).
+- **Northflank.** The free tier has 2 services and is "Always-on-compute – no sleeping" ([pricing](https://northflank.com/pricing), CONFIRMED). Whether it needs a card, whether it builds a Dockerfile from GitHub, and whether it offers a persistent volume are all UNCONFIRMED.
+- **GitHub.** Protected branches in private repositories are listed under GitHub Pro, not Free ([plans](https://docs.github.com/en/get-started/learning-about-github/githubs-plans), CONFIRMED). For public repositories on Free, the sources conflict (UNCONFIRMED). Standard runners are free for public repositories; a private one on Free gets 2,000 minutes a month ([Actions billing](https://docs.github.com/en/billing/managing-billing-for-your-products/managing-billing-for-github-actions/about-billing-for-github-actions), CONFIRMED).
+- **Search engines.** A page blocked by robots.txt is never crawled, so its `noindex` is never seen. Use the header or meta tag without a Disallow ([block indexing](https://developers.google.com/search/docs/crawling-indexing/block-indexing), CONFIRMED).
+- **Healthchecks.io and Telegram.** No first-party page states whether the free plan includes the Telegram integration (UNCONFIRMED, as in AR.13). The [Telegram integration page](https://healthchecks.io/integrations/telegram/) shows no plan restriction.
+
+### WP.04 [P11] CONFIRMED (measured)
+
+A small-file workload, run by the main session on 2026-10-10 in WSL2 (Ubuntu, kernel 6.18.33.2, 16 cores, 7 GB). It extracts 20,000 files of 2 KB in 200 folders from a tar file, reads them all, stats them all, then deletes them. It stands in for `npm install` and for cargo filling `target/` (script in the session scratchpad, `fsbench.sh`).
+
+| Where | Write | Read | Stat | Delete |
+|---|---|---|---|---|
+| WSL's own disk (`/home/joshu`, ext4) | 0.63 s | 0.36 s | 0.57 s | 0.26 s |
+| The Windows drive (`/mnt/c/…/Temp`, 9P) | 55.17 s | 78.28 s | 34.40 s | 20.82 s |
+
+The Windows drive was 60 to 220 times slower. Also on 2026-10-10: WSL had no Rust, Solana CLI, Anchor, Node or Surfpool yet, and had git 2.53.0; Windows had git 2.55.0.
+
+### WP.05 [P13] CONFIRMED (checked)
+
+A harness check, run by the main session on 2026-10-10. The `implementer` agent, as defined in phase 0 (`tools: Read, Edit, Write, Bash, Grep, Glob`, with no `skills` field), was asked what it had in context. It reported:
+- no text of `tdd-plan-implementer` or `grill`;
+- no Skill tool;
+- no AGENTS.md;
+- only the two CLAUDE.md files.
+
+Its worktree was removed afterwards (`git worktree list` showed only the main checkout).
+
+After adding the `skills` field and new instructions:
+- The same question in the **same** session still got the old answer. The agent even quoted the old first line, "Follow tdd-plan-implementer". So a session keeps the agent definitions it loaded at start.
+- A **fresh** headless session (`claude -p`) that spawned the agent got:
+  - `# TDD plan implementer` and `# Grill` quoted from context;
+  - its new first instruction, "Read `AGENTS.md` first, including its Lanes section".
+- The new `web-implementer` agent, checked the same way, quoted the headings of `tdd-plan-implementer`, `grill` and `frontend-engineer`, and reported running on Sonnet.
+- Running the definition as a main session (`claude -p --agent implementer`) did not preload the skills. The `skills` field applies to subagents.
+
+### WP.06 [P11] CONFIRMED (checked)
+
+Two checks of running WSL commands from Claude Code on Windows, by the main session on 2026-10-10. The scripts are `lf.sh` and `crlf.sh` in the session scratchpad.
+- **Git Bash rewrites paths.** From Git Bash, `wsl -e bash /mnt/c/…/lf.sh` failed with `bash: C:/Program Files/Git/mnt/c/…/lf.sh: No such file or directory`. Git Bash had turned the bare `/mnt/c/…` argument into a Windows path. The same script ran when the path sat inside a quoted command: `wsl -e bash -lc "cd /mnt/c/… && bash lf.sh"`.
+- **CRLF breaks scripts quietly.** A script saved with CRLF line endings printed `set: -: invalid option` for its first line, `set -e`, then carried on and exited 0. So it ran without its stop-on-error switch.
+- **This repository.** Git for Windows sets `core.autocrlf=true` system-wide. `git ls-files --eol` showed every file LF in the index, with 10 working-copy files in CRLF and 2 mixed.

@@ -19,9 +19,9 @@ Non-UI slices get a separate git worktree and branch. A slice with UI stays on t
 
 ## Brief
 
-Every brief includes the plan path, the Notion card, owned paths, forbidden paths, the test command, and the instruction to follow `tdd-plan-implementer`, including `grill` before any commit. A worker that commits without that grill is stopped.
+Every brief includes the plan path, the Notion card, owned paths, forbidden paths, the test command, the lane's agent and model from AGENTS.md's Lanes table, and the instruction to follow `tdd-plan-implementer`, including `grill` before any commit. Workers end with their grill report and do not commit. The coordinator commits only after the user answers.
 
-A UI brief also names the main checkout and forbids a private dev server. A non-UI brief names its worktree and branch.
+A UI brief also names the main checkout, the lane branch and the dev server's address, and forbids a private dev server. A non-UI brief names its branch, the commit to start from, its local-chain ports and its Rust build folder. A worktree starts from `origin/main` with no `node_modules`.
 
 A worker that needs a shared file stops and reports. Do not let it edit that file.
 

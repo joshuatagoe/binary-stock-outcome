@@ -11,13 +11,60 @@
       "WebFetch"
     ],
     "ask": [
-      "Bash(git commit *)",
-      "Bash(git push *)",
-      "PowerShell(git commit *)",
-      "PowerShell(git push *)"
+      "Bash(git commit*)",
+      "Bash(git * commit*)",
+      "PowerShell(git commit*)",
+      "PowerShell(git * commit*)",
+      "Bash(*git push*)",
+      "PowerShell(*git push*)",
+      "Bash(*scripts/push*)",
+      "PowerShell(*scripts*push*)",
+      "Bash(*npm run push*)",
+      "PowerShell(*npm run push*)",
+      "Bash(*gh pr merge*)",
+      "PowerShell(*gh pr merge*)",
+      "Bash(*gh repo edit*)",
+      "PowerShell(*gh repo edit*)",
+      "Bash(*gh secret*)",
+      "PowerShell(*gh secret*)",
+      "Bash(*fly deploy*)",
+      "PowerShell(*fly deploy*)",
+      "Bash(*flyctl deploy*)",
+      "PowerShell(*flyctl deploy*)",
+      "Bash(*fly secrets*)",
+      "PowerShell(*fly secrets*)",
+      "Bash(*flyctl secrets*)",
+      "PowerShell(*flyctl secrets*)",
+      "Bash(*wrangler*deploy*)",
+      "PowerShell(*wrangler*deploy*)",
+      "Bash(*anchor deploy*)",
+      "PowerShell(*anchor deploy*)",
+      "Bash(*anchor upgrade*)",
+      "PowerShell(*anchor upgrade*)",
+      "Bash(*anchor keys sync*)",
+      "PowerShell(*anchor keys sync*)",
+      "Bash(*solana program *)",
+      "PowerShell(*solana program *)"
     ],
     "deny": [
-      "Read(./.env)"
+      "Read(./.env)",
+      "Read(**/.env)",
+      "Read(**/.env*.local)",
+      "Read(**/*keypair*.json)",
+      "Read(~/.config/solana/**)"
+    ]
+  },
+  "hooks": {
+    "PreToolUse": [
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node \"$CLAUDE_PROJECT_DIR/.claude/hooks/no-commit-on-main.mjs\""
+          }
+        ]
+      }
     ]
   }
 }

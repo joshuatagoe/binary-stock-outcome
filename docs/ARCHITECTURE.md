@@ -772,7 +772,7 @@ A contract is the exact shape of a request: what it sends, who must sign it, whe
 | `GET /api/markets/{key}/activity` | That market's events and its settlement evidence | F11, F20 |
 | `GET /api/wallets/{address}/history?day&market&cursor` | That wallet's events | F13 |
 | `GET /api/liveness?weeks=4` | The on-time figures, late markets with their causes, and the heartbeat log | D60, D75 |
-| `GET /api/health` | The time of the primary's last pass, and the chain's progress | D98 and the watchdog |
+| `GET /api/health` | The time of the primary's last pass, the chain's progress, the build's commit, whether the database answers, and the migrations applied and whether they are current | D98, D132 and the watchdog. The smoke test checks that the commit is the one just deployed |
 | `POST /api/reports` with `{market_key, body, wallet?}` | 202 Accepted; 400 if the body is over 500 characters; 404 if the market is not Under review or Proposed; 429 if rate-limited | D91 |
 | `POST /api/client-errors` with `{page, message, browser, tracker_state}` | 202 Accepted; 429 if rate-limited | Wallet addresses stripped; kept 14 days (D120, §8) |
 
@@ -1104,8 +1104,8 @@ A test counts only once it has been seen failing before it passes, and the money
 | Push script | Runs `verify`, then pushes to `origin` and `gitlab` with explicit commands, and only with the user's OK (AGENTS.md) |
 | CI on GitHub Actions (D127) | The same `verify`, then the end-to-end and accessibility suite. Fuzzing and the L1 load test run nightly. The runners are GitHub-hosted, not a runner on one PC (the OpenEMR report's lesson) |
 | Branches and a protected `main` (D128) | From M0, each slice is built on a branch and merges into `main` only after CI passes and the grill (AGENTS.md) |
-| Deploys | The website deploys to Cloudflare Pages from `main`, and the backend by `fly deploy` from CI. The program is deployed only from the laptop that holds the upgrade key (D92): `solana-verify build`, then the deploy, then the hashes are published (D125). CI never holds the upgrade key |
-| Health check and smoke test | Fly checks `/api/health`. After every deploy, a smoke test calls the health endpoint, reads the Config account on devnet and loads one page |
+| Deploys | After CI passes on `main`, CI uploads the website to Cloudflare Pages (`wrangler pages deploy`), so a build that fails `verify` never deploys. Every page carries `X-Robots-Tag: noindex`, with no robots.txt block. The backend deploys by `fly deploy` from CI with a token for that one app (P17). The program is deployed only from the laptop that holds the upgrade key (D92): `solana-verify build`, then the deploy, then the hashes are published (D125). CI never holds the upgrade key |
+| Health check and smoke test | Fly checks `/api/health`. After every deploy, a smoke test calls the health endpoint and checks that its commit is the one just deployed (D132), reads the Config account on devnet and loads one page |
 
 ```mermaid
 ---
@@ -1186,7 +1186,7 @@ One repository with npm workspaces for the TypeScript parts and a Cargo workspac
 | `docs/` | As now |
 | Root | `Makefile` (with matching npm scripts for Windows, D74), `Anchor.toml`, `Cargo.toml` (pinning the Solana CLI for solana-verify), `rust-toolchain.toml` (1.98.0), `package.json`, `.nvmrc` (24.21.0), `.env.example` |
 
-Where the repository sits for WSL builds is checked at M0, since it currently lives in OneDrive (D22).
+The working copy is `C:\dev\binary-stock-outcome`, outside OneDrive. The program's tools run in WSL against it, with Rust's build output on WSL's disk. M0 times the builds there and in a copy on WSL's disk, and moves the repository into WSL if the Windows folder is more than 3 times slower or a clean build takes over 5 minutes (P11).
 
 ### Known limitations
 
@@ -1222,7 +1222,7 @@ These go into the risks and limitations note as plain facts, with no regulatory 
 
 ## 12. Build order
 
-Each milestone is a vertical slice: it delivers something that works end to end and ends with a check that proves it. M0 deploys while there is little code, so secrets and hosting surprises are cheap to fix (D131). Once M1 freezes the instruction contracts (§6) and the generated client, the program (M2, M3), the backend (M4) and the website (M5) can run as separate lanes, which phase 4 plans.
+Each milestone is a vertical slice: it delivers something that works end to end and ends with a check that proves it. M0 deploys while there is little code, so secrets and hosting surprises are cheap to fix (D131). Once M1 freezes the instruction contracts (§6) and the generated client, the program (M2, M3), the backend (M4) and the website (M5) can run as separate lanes. AGENTS.md's Lanes section says who owns which files (P12).
 
 ```mermaid
 ---

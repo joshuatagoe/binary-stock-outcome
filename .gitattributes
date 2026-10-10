@@ -1,0 +1,4 @@
+# Text files are LF in the repository and in every checkout, including on Windows.
+# WSL runs scripts straight from the Windows checkout (P11), and a CRLF line breaks
+# them quietly: `set -e` followed by CR fails with "invalid option" and the script carries on.
+* text=auto eol=lf

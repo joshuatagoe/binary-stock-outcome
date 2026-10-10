@@ -62,8 +62,61 @@ Follow the project skills. Each skill's source is `.cursor/skills/<name>/SKILL.m
 
 If a routine technical choice is at least 80% certain, decide and proceed. Stop for scope, a public API, schema or data flow, auth, and spend. Stop again before every commit and run `grill` on the diff. Do not commit in that same message.
 
-Solana, Anchor, and Rust commands run in WSL (Ubuntu), never in PowerShell.
+**Where things run (P11).**
+- The working copy is `C:\dev\binary-stock-outcome`. The old copy under OneDrive is stale; don't open it.
+- On Windows: Claude Code, git, npm and Node, which covers the website, the backend and their tests.
+- In WSL (Ubuntu), never in PowerShell: Solana, Anchor, Rust, Surfpool and Litestream. Run them as `wsl -e bash -lc "cd /mnt/c/dev/binary-stock-outcome && <command>"`. Rust's build output goes on WSL's disk (`CARGO_TARGET_DIR=/home/joshu/.cache/meridian-target/<checkout>`).
+- Keep WSL paths inside that quoted command. Git Bash rewrites a bare `/mnt/c/…` argument into a Windows path.
+- Text files are LF everywhere (`.gitattributes`). A CRLF script run in WSL quietly loses `set -e`.
+- Never run git inside WSL: Windows git makes the worktrees, and Linux git can't open them.
+- M0 times the builds and may move everything into WSL under P11's rule.
+
+Every commit is on a branch. A hook refuses `git commit` on `main` (D128, P15).
 
 Pushes go to both remotes this project uses, `origin` (GitHub) and `gitlab` (Gauntlet GitLab), with explicit commands, and only after the user approves.
 
 Parallel agents share no files. The same file means one owner, in sequence. A slice with UI stays on the main checkout and uses the one dev server. A new session starts from the design docs and the board card, not from chat memory.
+
+## Lanes
+
+Until the end of M1, one session builds M0 and M1 in order. After that, three lanes run at once (P12).
+
+**Frozen at the end of M1.** A change to any of these is a logged decision, and every lane stops and rebases:
+- all 23 instructions, declared with their accounts, arguments, events and errors (bodies not yet built return `NotImplemented`);
+- the IDL and the generated client in `clients/ts/`;
+- `packages/shared/`: strikes, calendar, units, event and stream message types, and API bodies;
+- `packages/golden/`;
+- USERS.md's status words.
+
+| Lane | Builds | Where | Agent and model | Owns |
+|---|---|---|---|---|
+| Coordinator | M0, M1, then merges and cards | This main session, main checkout | The main session | Root files and lockfiles, `.github/`, `.claude/`, `.cursor/`, `scripts/`, `docs/`, `AGENTS.md`, `packages/shared/`, `packages/golden/`, `clients/ts/` |
+| Program | M2, M3 | A worktree on `lane/program-<slice>` | `implementer`, run on Opus | `programs/meridian/`, `fuzz/` |
+| Backend | M4 | A worktree on `lane/backend-<slice>` | `implementer` (Sonnet) | `apps/backend/`, `config/` |
+| Website | M5 | The main checkout on `lane/web-<slice>`, with the one dev server | `web-implementer` (Sonnet) | `apps/web/` |
+
+M6 and M7 are split when M5 merges, under the same rule: one owner per file.
+
+**A slice, start to finish.**
+1. The coordinator runs `grill` with the user and seeds the card: owned files, branch, test command.
+2. It starts the lane's agent with a `parallel-delivery` brief, including the model in the table.
+3. The agent ends with its grill report. The coordinator shows it to the user and waits.
+4. After the answer, the coordinator commits on the lane branch, pushes to both remotes with the user's OK, and opens a pull request. It merges once CI passes (D128).
+5. The card closes with three-part evidence.
+
+**Dependencies.** Every version pinned in ARCHITECTURE.md §9 is installed by the end of M1, so no lane edits a lockfile. A lane that needs a new dependency stops and reports.
+
+**Order inside the lanes.** The backend and website build the parts that don't need the real program first, then pick up M2 and M3 as they merge. Their devnet checks wait for M3 on devnet.
+
+**Parallel safety (P16).**
+- A test that needs a database opens its own SQLite file in a fresh temporary folder.
+- Each checkout's local chain has its own ports. The main checkout uses Surfpool's defaults (8899, 8900); a worktree uses the ports in its brief, with Studio off.
+- Backend tests listen on port 0, a free port the system picks.
+- Only the main checkout runs the website's dev server.
+- Vitest, TypeScript, Playwright and Cargo ignore `.claude/worktrees/`, as git does.
+- Each worktree runs `npm ci` and has its own Rust build folder on WSL's disk.
+- No lane runs `anchor keys sync`, a deploy or a push (P14).
+
+**Evidence (P19).**
+- A card whose "Done when" names devnet records the local pass and the devnet pass on separate lines. It is Done only with the devnet pass.
+- Before submission, `git branch -r --no-merged origin/main` and `git worktree list` show only `main`. That output goes on the submission card.
