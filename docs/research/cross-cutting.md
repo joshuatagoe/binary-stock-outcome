@@ -496,3 +496,48 @@ Two checks of running WSL commands from Claude Code on Windows, by the main sess
 - **Git Bash rewrites paths.** From Git Bash, `wsl -e bash /mnt/c/…/lf.sh` failed with `bash: C:/Program Files/Git/mnt/c/…/lf.sh: No such file or directory`. Git Bash had turned the bare `/mnt/c/…` argument into a Windows path. The same script ran when the path sat inside a quoted command: `wsl -e bash -lc "cd /mnt/c/… && bash lf.sh"`.
 - **CRLF breaks scripts quietly.** A script saved with CRLF line endings printed `set: -: invalid option` for its first line, `set -e`, then carried on and exited 0. So it ran without its stop-on-error switch.
 - **This repository.** Git for Windows sets `core.autocrlf=true` system-wide. `git ls-files --eol` showed every file LF in the index, with 10 working-copy files in CRLF and 2 mixed.
+
+## 2026-10-10 M0 measurements (main session)
+
+### M0.01 [P11] [D123] [D125] CONFIRMED (measured)
+
+The build tools were installed in WSL on 2026-10-10 by `scripts/toolchain/install.sh` (Ubuntu 26.04.1 LTS, kernel 6.18.33.2, 16 cores, 7 GB). Sudo was needed only once, for Solana's apt prerequisites (build-essential, pkg-config, libudev-dev, llvm, libclang-dev, protobuf-compiler, libssl-dev, from [Solana's install guide](https://solana.com/docs/intro/installation/dependencies)), which the user ran.
+
+`node scripts/toolchain/check.mjs` then reported:
+
+| Tool | Version |
+|---|---|
+| rustc | 1.98.0 (88d9e12ae 2026-08-18) |
+| solana-cli | 4.3.0 (src:825efd18; feat:c9ad34d2, client:Agave) |
+| anchor-cli | 1.2.0 |
+| surfpool | 1.6.0 |
+| solana-verify | 0.5.2 |
+| litestream | 0.5.17 |
+| node | v24.21.0 |
+
+- **Hashes.** Every release file's SHA-256 matched the hash recorded in `scripts/toolchain/pins.sh` before it was unpacked. Litestream's `checksums.txt` and solana-verify's `.sha256` file equal GitHub's digest for the same assets. With Litestream's hash set to zeros, the script stopped with "SHA-256 mismatch … got cfb37117…" and installed nothing.
+- **Time.** A first install took about 60 s. A rerun skips every pin already installed.
+- **Platform tools.** The first `anchor build` downloaded Solana's platform tools v1.57 to `~/.cache/solana`.
+- **Node on Windows.** Windows Node 24.21.0 came from nodejs.org's installer, with its SHA-256 and OpenJS Foundation signature checked, because winget's newest was 24.20.0.
+
+### M0.02 [P11] CONFIRMED (measured)
+
+P11's three setups, timed on 2026-10-10 by `scripts/toolchain/time-builds.sh`, on the same machine as M0.01. The program is a clean `anchor build` of Anchor 1.2.0's starter (`anchor init starter --no-install --no-git`), with the crates and platform tools already downloaded. Run 1 started at about 23:10 UTC (from its files' timestamps) and run 2 at 23:33 UTC. Run 1's script was edited while it ran (AI_USAGE 16); each of its times below was checked before use.
+
+| Setup | Run 1 | Run 2 |
+|---|---|---|
+| 1. Everything in the Windows folder (`/mnt/c/dev/…`) | 773.9 s | — |
+| 2. The Windows folder, with `CARGO_TARGET_DIR` on WSL's disk | 140.0 s | 164.0 s |
+| 3. A copy on WSL's disk | 172.4 s | 163.2 s |
+| A clean build on WSL's disk (run 2's warm-up, with the caches full) | — | 170.8 s |
+
+`npm ci` of this repository's lockfile (190 packages), with a warm cache:
+
+| Where | Time |
+|---|---|
+| The Windows folder, Windows npm 11.19.0 | 28.4 s |
+| A copy on WSL's disk, WSL npm 11.19.0 | 29.8 s |
+
+- **P11's rule.** The better Windows setup (2) averaged 152.0 s against 167.8 s for the copy on WSL's disk: 0.91 times, and 2.5 minutes for a clean build. The rule moves the repository only at more than 3 times or over 5 minutes, so the repository stays at `C:\dev\binary-stock-outcome`.
+- **Where the build output goes.** Anchor 1.2.0 honours `CARGO_TARGET_DIR`. Setup 2's `starter.so` appeared only under it, and the Windows folder's copy kept setup 1's timestamp.
+- **What to avoid.** Building with the output in the Windows folder (setup 1) took 12.9 minutes, 4.6 times the copy on WSL's disk.

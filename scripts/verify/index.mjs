@@ -9,6 +9,7 @@ import { checkSecrets } from './secrets.mjs';
 import { checkSkillMirror } from './skills.mjs';
 import { checkReadmeCounts } from './readme-counts.mjs';
 import { checkDiagrams } from '../arch/check-diagrams.mjs';
+import { readPins, checkPinsAgree } from '../toolchain/check.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -17,6 +18,7 @@ const MAX_BYTES = 5 * 1024 * 1024;
 const SUITES = {
   hooks: '.claude/hooks/*.test.mjs',
   verify: 'scripts/verify/*.test.mjs',
+  toolchain: 'scripts/toolchain/*.test.mjs',
 };
 
 function repoTexts() {
@@ -55,6 +57,11 @@ step('Node version matches .nvmrc', () => {
   const pinned = readFileSync(join(ROOT, '.nvmrc'), 'utf8').trim();
   const running = process.version.slice(1);
   return { problems: running === pinned ? [] : [`running Node ${running}; .nvmrc pins ${pinned}`], note: running };
+});
+
+step('pins: rust-toolchain.toml and .nvmrc agree with scripts/toolchain/pins.sh', () => {
+  const read = (path) => readFileSync(join(ROOT, path), 'utf8');
+  return { problems: checkPinsAgree(readPins(read('scripts/toolchain/pins.sh')), { rustToolchain: read('rust-toolchain.toml'), nvmrc: read('.nvmrc') }) };
 });
 
 const counts = {};

@@ -61,6 +61,11 @@ test('a finding with no heading fails', () => {
   assert.equal(problems.length, 2);
 });
 
+test('milestone measurement IDs (M0.01) are findings too', () => {
+  assert.equal(checkCitations(docs({ 'docs/a.md': 'Measured in M0.02.' })).length, 1);
+  assert.deepEqual(checkCitations(docs({ 'docs/r2.md': '### M0.02 [P1] CONFIRMED\n', 'docs/a.md': 'Measured in M0.02.' })), []);
+});
+
 test('an allowed ID passes', () => {
   assert.deepEqual(
     checkCitations(docs({ 'docs/a.md': 'The report has no F5.07.' }), { 'F5.07': 'The G5 report skipped it.' }),

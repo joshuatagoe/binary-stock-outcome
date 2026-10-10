@@ -1,11 +1,11 @@
 // Every D and P number cited must be a row in DECISIONS.md's decision tables,
-// and every finding ID (F1.05, AR.01, WP.03, PS.01) must have its own heading somewhere in the docs.
+// and every finding ID (F1.05, AR.01, WP.03, PS.01, M0.01) must have its own heading somewhere in the docs.
 
 const DECISIONS = 'docs/DECISIONS.md';
 const DEFINING_SECTIONS = ['Decision log', 'Process decisions'];
 const DECISION_ID = /(?<![\w.\/-])([DP]\d{1,3})(?!\w|\.\d)/g;
-const FINDING_ID = /(?<![\w.])((?:F[1-7]|AR|WP|PS)\.\d{2})(?!\d)/g;
-const FINDING_HEADING = /^#+ +((?:F[1-7]|AR|WP|PS)\.\d{2})\b/gm;
+const FINDING_ID = /(?<![\w.])((?:F[1-7]|AR|WP|PS|M[0-7])\.\d{2})(?!\d)/g;
+const FINDING_HEADING = /^#+ +((?:F[1-7]|AR|WP|PS|M[0-7])\.\d{2})\b/gm;
 
 function section(markdown, name) {
   const start = markdown.indexOf(`\n## ${name}`);

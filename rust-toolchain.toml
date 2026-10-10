@@ -1,0 +1,5 @@
+# Rust for host builds and tests (LiteSVM, Mollusk). The pin is in scripts/toolchain/pins.sh.
+[toolchain]
+channel = "1.98.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
