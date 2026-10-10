@@ -1186,7 +1186,7 @@ One repository with npm workspaces for the TypeScript parts and a Cargo workspac
 | `docs/` | As now |
 | Root | `Makefile` (with matching npm scripts for Windows, D74), `Anchor.toml`, `Cargo.toml` (pinning the Solana CLI for solana-verify), `rust-toolchain.toml` (1.98.0), `package.json`, `.nvmrc` (24.21.0), `.env.example` |
 
-The working copy is `C:\dev\binary-stock-outcome`, outside OneDrive. The program's tools run in WSL against it, with Rust's build output on WSL's disk. M0 times the builds there and in a copy on WSL's disk, and moves the repository into WSL if the Windows folder is more than 3 times slower or a clean build takes over 5 minutes (P11).
+The working copy is `C:\dev\binary-stock-outcome`, outside OneDrive. The program's tools run in WSL against it, with Rust's build output on WSL's disk. M0 timed the builds there and in a copy on WSL's disk (M0.02). With the output on WSL's disk, the Windows folder was as fast (a 2.5-minute clean build), so under P11's rule the repository stays.
 
 ### Known limitations
 

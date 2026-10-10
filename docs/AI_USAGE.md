@@ -60,3 +60,9 @@ How AI was used on this project: tools, what worked, where it misled us, and how
 ### Where AI misled us or we course-corrected
 
 15. **A check passed only because it couldn't fail.** Before the repository went public, the AI checked whether the spec's text had been copied in by matching every spec line of 120 characters or more. It reported no matches, but the spec's text file has no lines that long, so it compared nothing. Redone by sentence, 31 of the spec's 71 long sentences appear in the docs as quoted requirements (540 of its 3,420 words); the spec file itself was never committed. Lesson: a check reports how much it examined, not only what failed. Each line of `npm run verify` now says how many files, tests or diagrams it covered.
+
+## 2026-10-10 — M0 slice b (the WSL toolchain)
+
+### Where AI misled us or we course-corrected
+
+16. **The AI edited a script while bash was running it, and corrupted the run.** During the first build-timing run, the AI tightened a check in `scripts/toolchain/time-builds.sh`. Bash reads a script as it runs, so the edit shifted the text under it: line 48 became a syntax error, the `npm ci` part never ran, and the run still exited 0. The same review found that setup 2's success check would also have passed on setup 1's leftover output. That run's output was confirmed on WSL's disk by its timestamps, so its time stands. Corrections: the script's body is now one function called on the last line, so bash reads the whole file before running anything; setup 1's output is deleted before setup 2; and the missing steps were rerun. Lessons: never edit a script while it runs, and an exit code of 0 doesn't prove every step ran.

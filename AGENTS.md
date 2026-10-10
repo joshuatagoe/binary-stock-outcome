@@ -69,7 +69,8 @@ If a routine technical choice is at least 80% certain, decide and proceed. Stop 
 - Keep WSL paths inside that quoted command. Git Bash rewrites a bare `/mnt/c/…` argument into a Windows path.
 - Text files are LF everywhere (`.gitattributes`). A CRLF script run in WSL quietly loses `set -e`.
 - Never run git inside WSL: Windows git makes the worktrees, and Linux git can't open them.
-- M0 times the builds and may move everything into WSL under P11's rule.
+- M0 timed the builds (M0.02): with Rust's output on WSL's disk, this folder builds as fast as a copy on WSL's disk, so the repository stays here. Never build with the output in this folder; that took 12.9 minutes instead of 2.5.
+- `bash scripts/toolchain/install.sh` (in WSL) installs every tool at its pin in `scripts/toolchain/pins.sh`, and `node scripts/toolchain/check.mjs` checks them (P22).
 
 Every commit is on a branch. A hook refuses `git commit` on `main` (D128, P15).
 
