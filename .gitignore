@@ -11,3 +11,6 @@ docs/spec/
 # Local environment (.env.example is the committed template)
 .env
 .env*.local
+
+# Installed packages
+node_modules/

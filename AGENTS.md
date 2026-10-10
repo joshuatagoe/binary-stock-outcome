@@ -51,7 +51,7 @@ When work makes a decision with a trade-off, cuts something, or corrects the AI,
 
 ## Skills
 
-Follow the project skills. Each skill's source is `.cursor/skills/<name>/SKILL.md`, and `.claude/skills/<name>/SKILL.md` is an identical copy, because Claude Code loads skills only from `.claude/skills/`. Edit the `.cursor/` source first, then copy it. Once a `verify` script exists, it fails if the copies differ. A new skill goes in both places.
+Follow the project skills. Each skill's source is `.cursor/skills/<name>/SKILL.md`, and `.claude/skills/<name>/SKILL.md` is an identical copy, because Claude Code loads skills only from `.claude/skills/`. Edit the `.cursor/` source first, then copy it. `npm run verify` fails if the copies differ. A new skill goes in both places.
 
 - `grill` before a card is seeded, and again before every commit. A skipped grill means no commit.
 - `tdd-plan-implementer` when implementing a slice of the plan
