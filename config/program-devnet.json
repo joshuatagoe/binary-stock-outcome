@@ -1,0 +1,76 @@
+{
+  "_about": "Initialize Config's values on devnet: ARCHITECTURE.md §11's devnet column (D133). scripts/devnet/init-config.ts reads this file; the admin and operator keys come from their key files (D92).",
+  "_sources": {
+    "usdcMint": "D32; Circle's address page, checked on chain on 2026-10-10",
+    "pythReceivers": "D80",
+    "tickers": "Feed IDs copied by script from F4.06 (Pyth's Hermes listing); $10 strike step (D49)",
+    "ladderBps": "D6, D49",
+    "thresholds": "ARCHITECTURE.md §11: D102, D103, D106, D104, D63, D58, D68, D83"
+  },
+  "usdcMint": "4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU",
+  "pythReceivers": [
+    "rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ",
+    "rec2HHDDnjLfj4kE7VyEtFA1HPGQLK33259532cRyHp"
+  ],
+  "tickers": [
+    {
+      "symbol": "AAPL",
+      "feedId": "49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688",
+      "strikeStepCents": 1000,
+      "enabled": true
+    },
+    {
+      "symbol": "MSFT",
+      "feedId": "d0ca23c1cc005e004ccf1db5bf76aeb6a49218f43dac3d4b275e92de12ded4d1",
+      "strikeStepCents": 1000,
+      "enabled": true
+    },
+    {
+      "symbol": "GOOGL",
+      "feedId": "5a48c03e9b9cb337801073ed9d166817473697efff0d138874e0f6a33d6d5aa6",
+      "strikeStepCents": 1000,
+      "enabled": true
+    },
+    {
+      "symbol": "AMZN",
+      "feedId": "b5d0e0fa58a1f8b81498ae670ce93c872d14434b72c364885d4fa1b257cbb07a",
+      "strikeStepCents": 1000,
+      "enabled": true
+    },
+    {
+      "symbol": "NVDA",
+      "feedId": "b1073854ed24cbc755dc527418f52b7d271f6cc967bbf8d8129112b18860a593",
+      "strikeStepCents": 1000,
+      "enabled": true
+    },
+    {
+      "symbol": "META",
+      "feedId": "78a3e3b8e676a8f73c439f5d749737034b139bbbe899ba5775216fba596607fe",
+      "strikeStepCents": 1000,
+      "enabled": true
+    },
+    {
+      "symbol": "TSLA",
+      "feedId": "16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc0632f1",
+      "strikeStepCents": 1000,
+      "enabled": true
+    }
+  ],
+  "ladderBps": [
+    300,
+    600,
+    900
+  ],
+  "thresholds": {
+    "ordersCloseBeforeSecs": 5,
+    "publishWindowSecs": 5,
+    "maxBandBps": 25,
+    "overrideBoundBps": 50,
+    "overrideWaitSecs": 3600,
+    "overrideWaitLongSecs": 86400,
+    "operatorOnlySettleSecs": 86400,
+    "adminHoldBackstopSecs": 86400,
+    "bandHoldBackstopSecs": 604800,
+    "noPriceHoldAfterSecs": 900
+  }
+}

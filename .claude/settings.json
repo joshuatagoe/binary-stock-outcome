@@ -44,7 +44,9 @@
       "Bash(*anchor keys sync*)",
       "PowerShell(*anchor keys sync*)",
       "Bash(*solana program *)",
-      "PowerShell(*solana program *)"
+      "PowerShell(*solana program *)",
+      "Bash(*deploy-program*)",
+      "PowerShell(*deploy-program*)"
     ],
     "deny": [
       "Read(./.env)",

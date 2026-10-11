@@ -1,0 +1,449 @@
+{
+  "address": "kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQX3Ly",
+  "metadata": {
+    "name": "meridian",
+    "version": "0.1.0",
+    "spec": "0.1.0",
+    "description": "Meridian: binary stock-outcome contracts on Solana"
+  },
+  "instructions": [
+    {
+      "name": "initialize_config",
+      "docs": [
+        "Instruction 1 (ARCHITECTURE.md §6): creates Config, once, signed by the program's upgrade key (AR.03)."
+      ],
+      "discriminator": [
+        208,
+        127,
+        21,
+        1,
+        194,
+        190,
+        196,
+        70
+      ],
+      "accounts": [
+        {
+          "name": "authority",
+          "docs": [
+            "Signs and pays the deposit."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "config",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "program",
+          "docs": [
+            "The upgrade-key gate (AR.03): this program's own ProgramData, whose upgrade key signed."
+          ],
+          "address": "kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQX3Ly"
+        },
+        {
+          "name": "program_data"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "InitializeConfigArgs"
+            }
+          }
+        }
+      ]
+    }
+  ],
+  "accounts": [
+    {
+      "name": "Config",
+      "discriminator": [
+        155,
+        12,
+        170,
+        224,
+        30,
+        250,
+        204,
+        130
+      ]
+    }
+  ],
+  "events": [
+    {
+      "name": "ConfigInitialized",
+      "discriminator": [
+        181,
+        49,
+        200,
+        156,
+        19,
+        167,
+        178,
+        91
+      ]
+    }
+  ],
+  "errors": [
+    {
+      "code": 6000,
+      "name": "NotUpgradeAuthority",
+      "msg": "Only the program's upgrade key may initialize the config"
+    },
+    {
+      "code": 6001,
+      "name": "MainnetUsdcOnDevnet",
+      "msg": "The devnet build refuses mainnet USDC"
+    },
+    {
+      "code": 6002,
+      "name": "MissingKey",
+      "msg": "A key in the config is missing"
+    },
+    {
+      "code": 6003,
+      "name": "InvalidReceivers",
+      "msg": "Accepted price programs: one or two, distinct, none missing"
+    },
+    {
+      "code": 6004,
+      "name": "InvalidTickers",
+      "msg": "Tickers: one to eight, distinct, 1 to 8 capital letters, a feed ID and a strike step each"
+    },
+    {
+      "code": 6005,
+      "name": "InvalidLadder",
+      "msg": "The strike ladder must be 1 to 50 percent, in rising order"
+    },
+    {
+      "code": 6006,
+      "name": "InvalidThresholds",
+      "msg": "A threshold is out of range"
+    }
+  ],
+  "types": [
+    {
+      "name": "Config",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "docs": [
+              "Runs the admin instructions (D24). A key file on the laptop on devnet (D92)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "pending_admin",
+            "docs": [
+              "The proposed next admin, until they accept (two-step rotation, D109)."
+            ],
+            "type": {
+              "option": "pubkey"
+            }
+          },
+          {
+            "name": "operator",
+            "docs": [
+              "The backend's key: creates markets and settles, but can't pause or override (A5)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "docs": [
+              "The dollar token. Circle's devnet USDC on devnet (D32)."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "pyth_receivers",
+            "docs": [
+              "Programs whose price accounts are accepted: Pyth's legacy and upgraded receivers (D80)."
+            ],
+            "type": {
+              "vec": "pubkey"
+            }
+          },
+          {
+            "name": "tickers",
+            "docs": [
+              "The stocks, each pinned to its regular-session feed (D55, D28)."
+            ],
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "Ticker"
+                }
+              }
+            }
+          },
+          {
+            "name": "ladder_bps",
+            "docs": [
+              "Strike offsets from the previous close, in basis points: ±3, 6 and 9% (D6, D49)."
+            ],
+            "type": {
+              "array": [
+                "u16",
+                3
+              ]
+            }
+          },
+          {
+            "name": "paused",
+            "docs": [
+              "Stops Mint pairs and Place order only (D68)."
+            ],
+            "type": "bool"
+          },
+          {
+            "name": "thresholds",
+            "type": {
+              "defined": {
+                "name": "Thresholds"
+              }
+            }
+          },
+          {
+            "name": "fill_limit",
+            "docs": [
+              "The most fills one order may take. Set from M1's order-book spike; 0 until then (D21)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "ConfigInitialized",
+      "docs": [
+        "Instruction 1's event (ARCHITECTURE.md §6)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "operator",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "tickers",
+            "type": "u8"
+          }
+        ]
+      }
+    },
+    {
+      "name": "InitializeConfigArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "admin",
+            "type": "pubkey"
+          },
+          {
+            "name": "operator",
+            "type": "pubkey"
+          },
+          {
+            "name": "usdc_mint",
+            "type": "pubkey"
+          },
+          {
+            "name": "pyth_receivers",
+            "type": {
+              "vec": "pubkey"
+            }
+          },
+          {
+            "name": "tickers",
+            "type": {
+              "vec": {
+                "defined": {
+                  "name": "Ticker"
+                }
+              }
+            }
+          },
+          {
+            "name": "ladder_bps",
+            "type": {
+              "array": [
+                "u16",
+                3
+              ]
+            }
+          },
+          {
+            "name": "thresholds",
+            "type": {
+              "defined": {
+                "name": "Thresholds"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Thresholds",
+      "docs": [
+        "The times and limits the program enforces, with ARCHITECTURE.md §11's devnet values."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "orders_close_before_secs",
+            "docs": [
+              "Orders close this long before the stored close: 5 s (D102)."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "publish_window_secs",
+            "docs": [
+              "A recorded price must be published within this of the close: 5 s (D103)."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "max_band_bps",
+            "docs": [
+              "The widest price band accepted: 25 basis points (D106)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "override_bound_bps",
+            "docs": [
+              "An override within this of the reference waits the short wait: 0.5% (D104)."
+            ],
+            "type": "u16"
+          },
+          {
+            "name": "override_wait_secs",
+            "docs": [
+              "The short wait before an override is final: 1 hour (D63, D104)."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "override_wait_long_secs",
+            "docs": [
+              "The wait outside the bound, or with no reference: 24 hours (D104)."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "operator_only_settle_secs",
+            "docs": [
+              "Only the operator may settle for this long after the close: 24 hours (D58)."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "admin_hold_backstop_secs",
+            "docs": [
+              "An admin hold lapses after this: 24 hours (D68)."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "band_hold_backstop_secs",
+            "docs": [
+              "A band-on-the-strike hold lapses after this: 7 days (D68)."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "no_price_hold_after_secs",
+            "docs": [
+              "With no recorded price this long after the close, the market is held: 15 minutes (D83)."
+            ],
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Ticker",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "symbol",
+            "docs": [
+              "\"META\": 1 to 8 capital letters."
+            ],
+            "type": "string"
+          },
+          {
+            "name": "feed_id",
+            "docs": [
+              "Pyth's 32-byte feed ID for the stock's regular-session price (Equity.US.<ticker>/USD)."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          },
+          {
+            "name": "strike_step_cents",
+            "docs": [
+              "Strikes are multiples of this, in cents: $10 is 1000 (D49)."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "enabled",
+            "docs": [
+              "New markets only for enabled stocks."
+            ],
+            "type": "bool"
+          }
+        ]
+      }
+    }
+  ]
+}

@@ -541,3 +541,36 @@ P11's three setups, timed on 2026-10-10 by `scripts/toolchain/time-builds.sh`, o
 - **P11's rule.** The better Windows setup (2) averaged 152.0 s against 167.8 s for the copy on WSL's disk: 0.91 times, and 2.5 minutes for a clean build. The rule moves the repository only at more than 3 times or over 5 minutes, so the repository stays at `C:\dev\binary-stock-outcome`.
 - **Where the build output goes.** Anchor 1.2.0 honours `CARGO_TARGET_DIR`. Setup 2's `starter.so` appeared only under it, and the Windows folder's copy kept setup 1's timestamp.
 - **What to avoid.** Building with the output in the Windows folder (setup 1) took 12.9 minutes, 4.6 times the copy on WSL's disk.
+
+### M0.03 [D50] [D107] [D125] CONFIRMED (measured)
+
+The first program (Initialize Config only), built on 2026-10-10 with `anchor build` from Anchor 1.2.0 and Agave 4.3.0's platform tools v1.57, in WSL.
+
+- **Program format.** `anchor build --help` gives `--arch` "[default: v3]", and the built `meridian.so` has ELF `e_flags` 3, so it is sBPFv3. Devnet answered `getVersion` with `solana-core 4.4.0-beta.0` the same day. Whether devnet accepts the program is checked at its deploy.
+- **Config.** The full Config of ARCHITECTURE.md §5 (D133) takes 647 bytes in LiteSVM, including Anchor's 8-byte discriminator, against `accounts.mjs`'s estimate of 682. `solana rent 647` gives a deposit of 0.003937 SOL.
+- **The program.** `meridian.so` is 192,376 bytes. Its ProgramData account (a 45-byte header plus the program) needs a deposit of 0.97814892 SOL (`solana rent 192421`).
+- **Addresses.** Config's address is `Ax7mkLD7sgiud7phyXdpPa1HzFf2ek2ZKHv9FE6DcN2e`, from both `solana find-program-derived-address kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQX3Ly string:config` and the generated client's `findConfigPda()`.
+- **Upgrade key in tests.** LiteSVM 0.16.0's `add_program` leaves ProgramData's upgrade key empty (`upgrade_authority_address: None`, in its source), as AR.03 suspected. The tests write the key into ProgramData's header instead (the `litesvm-tests` skill).
+
+### M0.04 [D22] [D125] CONFIRMED (measured)
+
+Codama with Anchor 1.2.0's IDL, on 2026-10-10. `codama` 1.11.0 with `@codama/nodes-from-anchor` 1.5.6 read `clients/idl/meridian.json` (IDL spec 0.1.0). `@codama/renderers-js` 2.5.0 then generated the account with its decoder, the PDA helper, the instruction, the 7 errors, the event and both types for `@solana/kit` 8.3.0.
+
+The result typechecks under TypeScript 6.0.3 (`tsc -p clients/ts`, exit 0) and, with `erasableSyntax` and `.ts` import extensions, runs directly on Node 24.21.0. `clients/ts/examples/config-address.ts` printed Config's address and a 231-byte Initialize Config.
+
+Two things needed handling:
+- The instruction's one struct argument is flattened into top-level fields.
+- The generated errors read `process.env`, so the typecheck needs `@types/node`.
+
+## 2026-10-11 M0 devnet deploy (main session)
+
+### M0.05 [D69] [D125] [P24] CONFIRMED (measured)
+
+The first program on devnet, on 2026-10-11. Devnet answered `solana cluster-version` with 4.4.0-beta.0, in epoch 1180.
+
+- **sBPFv3 isn't required yet.** `solana feature status -u devnet --display-all` lists "SIMD-0178, SIMD-0189 and SIMD-0377: Enable deployment and execution of SBPFv3 programs" as active since epoch 1069, and "SIMD-0500: Disable deployment of SBPF v0, v1 and v2 programs" as inactive. Agave 4.4's requirement (AR.14) takes effect only when a cluster switches SIMD-0500 on, so on this date devnet would still take the older formats.
+- **The verified build.** `solana-verify build` 0.5.2 defaults to `--arch v0`; with `--arch v3`, in `solanafoundation/solana-verifiable-build:4.3.0` pinned by digest (`sha256:12fd4c0a…`), it built commit `423fa8c370d112e1fbc7197197825853b12e6edc` as a 192,376-byte program with ELF `e_flags` 3. Three builds gave the same hash, `23a0d75100810ba9ceba22fede5653d7152336bda87c7cb7707a5bb89fcf1b46`: one from a `git archive` of the commit (93 s) and two of GitHub's download of it (78 s and 73 s). The image is 5 GB (`docker image ls`) and took 65 s to download.
+- **The deploy.** `solana program deploy` with the upgrade key as payer and authority finished in transaction `67AMBYX5SnjzJfH8LJYQyssZdCdxsjXEhTZspYtDorwLDUSt92oiiFh82ZzcQ8p3w8kx5iPpmDS6szPwaDGewNoG` (finalized). `solana-verify get-program-hash` read the same hash back from devnet. `solana program show` gives ProgramData `DDGT42eGBiu4pqCLqzNwTDk5LR3uQqmy5y3u1nSu93qB`, authority `HCyLrwGeGMHAG7h8GGrUQjJf7hNjjWakqch6sTTWUVPt`, a 0.97814892 SOL deposit, as M0.03 computed. The balance went from 5 to 4.02004296 SOL, and the buffer account was closed.
+- **Initialize Config.** `scripts/devnet/init-config.ts` finished in transaction `3AFeheSrpGXa3WKAi9tKhrbEhjwot9kyNnyEk7FeFkZH7uY3Au3xE9VRBmLZJx1AdW34PD4b5JGF5hESExgrEZWy` (finalized). Config `Ax7mkLD7sgiud7phyXdpPa1HzFf2ek2ZKHv9FE6DcN2e` holds 0.003937 SOL, is owned by the program, and reads back the admin, operator, devnet USDC, both receivers and the 7 tickers from `config/program-devnet.json`.
+- **Tool behaviour.** Given `.` as its folder, solana-verify 0.5.2 dropped every dot from the manifest's path ("`/build//programs/meridian/Cargotoml` does not exist"); a full path works. Without `[workspace.metadata.cli] solana` in `Cargo.toml` it printed "Program Solana version: v0.0.0". Its container compiles with its own Rust, 1.97.1. Without `--buffer`, `solana program deploy` prints the recovery phrase of the buffer account's key (AI_USAGE 17).
+- Correction (2026-10-11): the missing `[workspace.metadata.cli]` entry did not cause "Program Solana version: v0.0.0". solana-verify 0.5.2 prints that whenever `--base-image` is given, because it then skips looking up the version (`src/main.rs` at v0.5.2). Commit `e101e44f7d26caa7b169e02c0593d80cd4f3d899`, which has the entry, printed it too and built the same hash, `23a0d751…1b46`. The tool's own table maps Agave 4.3.0 to the digest pinned in `VERIFY_IMAGE`, `sha256:12fd4c0a…` (`src/image_config.rs`), so a plain `solana-verify build` picks the same image (AI_USAGE 19).

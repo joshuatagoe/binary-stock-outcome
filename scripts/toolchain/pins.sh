@@ -1,6 +1,6 @@
 # The toolchain pins, one source (ARCHITECTURE.md §9, D123, D125, P11).
-# install.sh sources this file, check.mjs reads it, and `npm run verify` checks
-# that rust-toolchain.toml and .nvmrc agree with it.
+# install.sh sources this file, check.mjs reads it, and `npm run verify` checks that rust-toolchain.toml,
+# .nvmrc, Cargo.toml, Anchor.toml and VERIFY_IMAGE agree with it.
 
 RUST=1.98.0
 AGAVE=4.3.0
@@ -9,6 +9,10 @@ SURFPOOL=1.6.0
 SOLANA_VERIFY=0.5.2
 LITESTREAM=0.5.17
 NODE=24.21.0
+
+# Solana's build image for the verified build (D69, D125), at AGAVE's version and pinned by its digest,
+# because a tag can be pushed again. Pushed 2026-09-21; digest from Docker Hub's tag list, read 2026-10-11.
+VERIFY_IMAGE=solanafoundation/solana-verifiable-build:4.3.0@sha256:12fd4c0a0790f0fc41ef74b0cdb6bccc167ba6137eb1adb749bac649481c86bd
 
 # SHA-256 of each Linux release file, checked before anything is installed. Sources, read 2026-10-10:
 # the publisher's checksum file where one exists (Node's SHASUMS256.txt, Litestream's checksums.txt,

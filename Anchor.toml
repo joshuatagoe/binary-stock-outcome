@@ -1,0 +1,23 @@
+# Anchor workspace (ARCHITECTURE.md §9, §11). Build and test in WSL (P11):
+#   source scripts/program/env.sh && anchor build && cargo test -p meridian
+[toolchain]
+anchor_version = "1.2.0"
+solana_version = "4.3.0"
+
+[features]
+resolution = true
+skip-lint = false
+
+[programs.localnet]
+meridian = "kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQX3Ly"
+
+[programs.devnet]
+meridian = "kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQX3Ly"
+
+[provider]
+cluster = "localnet"
+# The upgrade key (D92) lives outside the repository, in WSL's home folder.
+wallet = "~/.config/solana/meridian-upgrade.json"
+
+[scripts]
+test = "cargo test -p meridian"

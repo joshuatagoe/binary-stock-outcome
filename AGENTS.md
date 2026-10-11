@@ -57,6 +57,7 @@ Follow the project skills. Each skill's source is `.cursor/skills/<name>/SKILL.m
 - `tdd-plan-implementer` when implementing a slice of the plan
 - `parallel-delivery` when splitting that work across agents
 - `frontend-engineer` when the slice has UI
+- Library reference skills, each written from commands that ran (P3): `anchor-program` for the program, `litesvm-tests` for its tests, and `codama-client` for the TypeScript client
 
 ## Working rules
 
