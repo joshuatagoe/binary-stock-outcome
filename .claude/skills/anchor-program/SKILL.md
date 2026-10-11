@@ -39,7 +39,7 @@ bash scripts/devnet/deploy-program.sh <40-character commit>    # builds, deploys
 
 - `solana-verify build` defaults to `--arch v0`; the script passes `--arch v3` and refuses a `.so` whose ELF `e_flags` isn't 3.
 - Give it a full path. With `.` as the folder, solana-verify 0.5.2 dropped every dot from the manifest's path: "manifest path `/build//programs/meridian/Cargotoml` does not exist".
-- The image is pinned by digest (`VERIFY_IMAGE` in `scripts/toolchain/pins.sh`). Anchor 1.x programs don't depend on `solana-program`, so without `[workspace.metadata.cli] solana` in `Cargo.toml` the tool reports "Program Solana version: v0.0.0".
+- The image is pinned by digest (`VERIFY_IMAGE` in `scripts/toolchain/pins.sh`), the same digest solana-verify 0.5.2's own table gives Agave 4.3.0 (`src/image_config.rs`). Anchor 1.x programs don't depend on `solana-program`, so a plain `solana-verify build` finds the version only in `Cargo.toml`'s `[workspace.metadata.cli] solana`. With `--base-image` the tool skips that lookup and always prints "Program Solana version: v0.0.0"; that line means nothing.
 - The container compiles with its own Rust ("Using container Rust toolchain: 1.97.1"), not `rust-toolchain.toml`'s, so the hash depends on the image.
 - The container writes `target/` as root; the script removes an old build through Docker.
 - If every `docker` call answers "500 Internal Server Error", Docker Desktop's engine has stopped: run `docker desktop restart` on Windows.
