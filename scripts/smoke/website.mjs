@@ -2,7 +2,7 @@
 // of apps/web/public/_headers (P17, P27), shows the stocks it read from devnet in a real browser, and logged no
 // errors, such as a Content-Security-Policy refusal. CI runs it after the Pages deploy, with Playwright's
 // Chromium installed:
-//   node scripts/smoke/website.mjs https://meridian-devnet.pages.dev <commit>
+//   node scripts/smoke/website.mjs https://meridian-devnet-2qv.pages.dev <commit>
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { join } from 'node:path';
@@ -58,7 +58,8 @@ if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) 
         {
           status: res?.status(),
           headers: res?.headers() ?? {},
-          commit: await page.locator('meta[name="meridian-commit"]').getAttribute('content'),
+          // Read at once: a page without the tag, such as someone else's site, reports no commit, not a timeout.
+          commit: await page.evaluate(() => document.querySelector('meta[name="meridian-commit"]')?.getAttribute('content') ?? null),
           stocks: await list.locator('.mono').allTextContents(),
           errors,
         },
