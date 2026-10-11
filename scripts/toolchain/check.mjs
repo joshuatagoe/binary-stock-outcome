@@ -1,6 +1,7 @@
 // Checks that each tool in WSL is at its pin in scripts/toolchain/pins.sh. Run it in WSL:
 //   wsl -e bash -lc "cd /mnt/c/dev/binary-stock-outcome && node scripts/toolchain/check.mjs"
-// `npm run verify` imports checkPinsAgree() to keep rust-toolchain.toml and .nvmrc in step with the pins.
+// `npm run verify` imports checkPinsAgree() to keep rust-toolchain.toml, .nvmrc, Cargo.toml, Anchor.toml
+// and the build image in step with the pins.
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
@@ -40,11 +41,21 @@ export function checkToolchain(pins, run) {
   return problems;
 }
 
-export function checkPinsAgree(pins, { rustToolchain, nvmrc }) {
+export function checkPinsAgree(pins, { rustToolchain, nvmrc, cargoToml, anchorToml }) {
   const problems = [];
   const channel = rustToolchain.match(/^\s*channel\s*=\s*"([^"]+)"/m)?.[1];
   if (channel !== pins.RUST) problems.push(`rust-toolchain.toml says ${channel}; pins.sh says ${pins.RUST}`);
   if (nvmrc.trim() !== pins.NODE) problems.push(`.nvmrc says ${nvmrc.trim()}; pins.sh says ${pins.NODE}`);
+  // solana-verify picks its build image from Cargo.toml's [workspace.metadata.cli]; verified-build.sh uses VERIFY_IMAGE.
+  const cli = cargoToml.match(/^\[workspace\.metadata\.cli\][^[]*?^\s*solana\s*=\s*"([^"]+)"/m)?.[1];
+  if (cli !== pins.AGAVE) problems.push(`Cargo.toml's [workspace.metadata.cli] solana is ${cli}; pins.sh says ${pins.AGAVE}`);
+  const anchorSolana = anchorToml.match(/^\s*solana_version\s*=\s*"([^"]+)"/m)?.[1];
+  if (anchorSolana !== pins.AGAVE) problems.push(`Anchor.toml's solana_version is ${anchorSolana}; pins.sh says ${pins.AGAVE}`);
+  const anchorAnchor = anchorToml.match(/^\s*anchor_version\s*=\s*"([^"]+)"/m)?.[1];
+  if (anchorAnchor !== pins.ANCHOR) problems.push(`Anchor.toml's anchor_version is ${anchorAnchor}; pins.sh says ${pins.ANCHOR}`);
+  const image = pins.VERIFY_IMAGE?.match(/^solanafoundation\/solana-verifiable-build:([^@]+)@sha256:[0-9a-f]{64}$/);
+  if (!image) problems.push(`VERIFY_IMAGE must be solanafoundation/solana-verifiable-build:<version>@sha256:<digest>; it is ${pins.VERIFY_IMAGE}`);
+  else if (image[1] !== pins.AGAVE) problems.push(`VERIFY_IMAGE is the image for ${image[1]}; pins.sh says ${pins.AGAVE}`);
   return problems;
 }
 

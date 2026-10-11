@@ -1003,8 +1003,8 @@ The technology is chosen only now, after the design, so each choice serves somet
 The Pyth SDK compiles in one receiver address, and its account type checks the owner against that address alone (AR.14). Config accepts two receivers (D80). So the record step reads Pyth's account layout from an unchecked account, checks the owner against Config's list, and then applies D28's checks, with a wrong-owner test for each receiver.
 
 **Settled at M0.**
-- Devnet ran Agave 4.4.0-beta.0 on 2026-10-10 (AR.01). Agave 4.4 requires the sBPFv3 program format for new deployments (AR.14).
-- M0 therefore deploys a first program to devnet with this toolchain. If sBPFv3 is required, Anchor 1.2.0's `--arch` flag and solana-verify 0.5.2's sBPFv3 toolchains are the way through.
+- Devnet ran Agave 4.4.0-beta.0 on 2026-10-10 (AR.01). Agave 4.4 brings a requirement that new deployments use the sBPFv3 program format (AR.14), which a cluster enforces only once it switches on that feature, SIMD-0500.
+- On 2026-10-11 devnet still had SIMD-0500 off, and it accepted the first program, built as sBPFv3 by `solana-verify build --arch v3` (M0.05). The program stays sBPFv3, Anchor 1.2.0's default, so its deploys keep working once the switch is on.
 
 ### The website
 
@@ -1037,7 +1037,7 @@ The Pyth SDK compiles in one receiver address, and its account type checks the o
 | Vitest | 5.0.2 | TypeScript unit and integration tests |
 | Playwright, `@axe-core/playwright` | 1.63.0, 4.13.0 | End-to-end and accessibility tests (D116) |
 | Surfpool | 1.6.0 | The local chain for `make dev`, and Anchor 1.x's default. Its clock only moves forward, which suits the demo clock (D89). WSL support is checked when `make dev` is timed at M0 (D74) |
-| solana-verify | 0.5.2 | The verified build (D69) |
+| solana-verify | 0.5.2, with Solana's build image for Agave 4.3.0 (pushed 2026-09-21), pinned by digest | The verified build (D69, P24) |
 
 The local chain and the tests load the Token-2022 v11 program dumped from devnet, because the bundled copies may predate Permissioned Burn (AR.14). The fuzzer is chosen in §10.
 

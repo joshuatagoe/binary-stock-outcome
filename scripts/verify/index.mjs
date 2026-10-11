@@ -22,6 +22,7 @@ const SUITES = {
   hooks: '.claude/hooks/*.test.mjs',
   verify: 'scripts/verify/*.test.mjs',
   toolchain: 'scripts/toolchain/*.test.mjs',
+  keys: 'scripts/keys/*.test.mjs',
 };
 
 function repoTexts() {
@@ -62,9 +63,13 @@ step('Node version matches .nvmrc', () => {
   return { problems: running === pinned ? [] : [`running Node ${running}; .nvmrc pins ${pinned}`], note: running };
 });
 
-step('pins: rust-toolchain.toml and .nvmrc agree with scripts/toolchain/pins.sh', () => {
+step('pins: rust-toolchain.toml, .nvmrc, Cargo.toml, Anchor.toml and the build image agree with scripts/toolchain/pins.sh', () => {
   const read = (path) => readFileSync(join(ROOT, path), 'utf8');
-  return { problems: checkPinsAgree(readPins(read('scripts/toolchain/pins.sh')), { rustToolchain: read('rust-toolchain.toml'), nvmrc: read('.nvmrc') }) };
+  return {
+    problems: checkPinsAgree(readPins(read('scripts/toolchain/pins.sh')), {
+      rustToolchain: read('rust-toolchain.toml'), nvmrc: read('.nvmrc'), cargoToml: read('Cargo.toml'), anchorToml: read('Anchor.toml'),
+    }),
+  };
 });
 
 const counts = {};

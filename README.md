@@ -25,8 +25,8 @@ npm run verify
 
 `npm run verify` is the same command locally and in CI. It runs:
 
-- the commit guard's tests (<!-- count:hooks -->9<!-- /count --> tests), verify's own tests (<!-- count:verify -->38<!-- /count --> tests) and the toolchain check's tests (<!-- count:toolchain -->6<!-- /count --> tests)
-- a check that `rust-toolchain.toml` and `.nvmrc` agree with the pins in `scripts/toolchain/pins.sh`
+- the commit guard's tests (<!-- count:hooks -->9<!-- /count --> tests), verify's own tests (<!-- count:verify -->39<!-- /count --> tests), the toolchain check's tests (<!-- count:toolchain -->8<!-- /count --> tests) and the key export's tests (<!-- count:keys -->2<!-- /count --> tests)
+- a check that `rust-toolchain.toml`, `.nvmrc`, `Cargo.toml`, `Anchor.toml` and the build image agree with the pins in `scripts/toolchain/pins.sh`
 - a check that every decision and finding cited in the docs exists
 - a check that each skill's `.cursor` and `.claude` copies match
 - a scan for committed keys and tokens
@@ -53,6 +53,32 @@ The Solana program is in [`programs/meridian`](programs/meridian), at `kvQXEAnqr
 bash scripts/program/build.sh          # in WSL: builds and refreshes clients/idl/meridian.json
 cargo test -p meridian                 # in WSL, after `source scripts/program/env.sh`: the LiteSVM tests
 npm run client                         # on Windows: regenerates clients/ts from the IDL
+```
+
+### On devnet
+
+| | |
+|---|---|
+| Program | [`kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQX3Ly`](https://explorer.solana.com/address/kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQX3Ly?cluster=devnet) |
+| Built from | commit [`423fa8c`](https://github.com/joshuatagoe/binary-stock-outcome/commit/423fa8c370d112e1fbc7197197825853b12e6edc) |
+| The build's hash | `23a0d75100810ba9ceba22fede5653d7152336bda87c7cb7707a5bb89fcf1b46` |
+| Devnet's hash on 2026-10-11 | `23a0d75100810ba9ceba22fede5653d7152336bda87c7cb7707a5bb89fcf1b46` |
+| Upgrade key | `HCyLrwGeGMHAG7h8GGrUQjJf7hNjjWakqch6sTTWUVPt` |
+| Config | [`Ax7mkLD7sgiud7phyXdpPa1HzFf2ek2ZKHv9FE6DcN2e`](https://explorer.solana.com/address/Ax7mkLD7sgiud7phyXdpPa1HzFf2ek2ZKHv9FE6DcN2e?cluster=devnet) |
+
+To check that devnet runs this repository's code, in WSL or Linux with Docker and the pinned tools (`scripts/toolchain/install.sh`):
+
+```sh
+bash scripts/program/verified-build.sh 423fa8c370d112e1fbc7197197825853b12e6edc   # builds GitHub's copy; prints the build's hash
+solana-verify get-program-hash -u devnet kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQX3Ly   # prints devnet's hash
+```
+
+Matching hashes prove the code is the same, not that it is safe (D69). Whoever holds the upgrade key can replace the program, so a settled result is final only while that key is safe. The repository's owner (joshuatagoe on GitHub) holds it, in a key file on their laptop (D92). The program is deployed only from there, with `scripts/devnet/deploy-program.sh`, never from CI.
+
+The four key files (upgrade, admin, operator and program) live in WSL's `~/.config/solana`, never in the repository. To import the admin key into Phantom, or to back up a key, run this yourself in your own Ubuntu terminal. It prints only to a terminal, never into a pipe or a file:
+
+```sh
+node scripts/keys/export-key.mjs admin    # or upgrade, operator, program
 ```
 
 ## Push

@@ -2,6 +2,10 @@
 members = ["programs/*"]
 resolver = "2"
 
+# solana-verify reads this to pick its build image; scripts/toolchain/pins.sh's AGAVE (P24).
+[workspace.metadata.cli]
+solana = "4.3.0"
+
 [workspace.package]
 edition = "2021"
 rust-version = "1.89.0"

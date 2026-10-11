@@ -20,7 +20,8 @@ main() {
     chmod 600 "$target/deploy/meridian-keypair.json"
   fi
 
-  anchor build
+  # CI has no program key by design, so Anchor would warn that its random key doesn't match the address.
+  if [ "$check" = 1 ]; then anchor build --ignore-keys; else anchor build; fi
   if [ "$check" = 1 ]; then
     diff -u clients/idl/meridian.json "$target/idl/meridian.json" \
       || { echo "The committed IDL is stale: run scripts/program/build.sh, then npm run client" >&2; exit 1; }

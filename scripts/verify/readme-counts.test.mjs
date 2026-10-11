@@ -17,12 +17,18 @@ test('a stale count fails, naming both numbers', () => {
 });
 
 test('a count for a suite verify did not run fails', () => {
-  assert.equal(checkReadmeCounts('<!-- count:program -->40<!-- /count -->', { hooks: 9 }).length, 1);
+  assert.equal(checkReadmeCounts('<!-- count:program -->40<!-- /count -->', {}).length, 1);
 });
 
 test('an unmarked test count fails', () => {
-  assert.equal(checkReadmeCounts('We have 12 tests.', { hooks: 9 }).length, 1);
+  assert.equal(checkReadmeCounts('We have 12 tests.', {}).length, 1);
   assert.equal(checkReadmeCounts('1 test passes.', {}).length, 1);
+});
+
+test('a suite verify runs without a count in the README fails', () => {
+  const problems = checkReadmeCounts(marked(9), { hooks: 9, keys: 2 });
+  assert.equal(problems.length, 1);
+  assert.match(problems[0], /keys/);
 });
 
 test('no README means nothing to check', () => {

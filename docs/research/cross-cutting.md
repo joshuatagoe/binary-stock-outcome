@@ -561,3 +561,15 @@ The result typechecks under TypeScript 6.0.3 (`tsc -p clients/ts`, exit 0) and, 
 Two things needed handling:
 - The instruction's one struct argument is flattened into top-level fields.
 - The generated errors read `process.env`, so the typecheck needs `@types/node`.
+
+## 2026-10-11 M0 devnet deploy (main session)
+
+### M0.05 [D69] [D125] [P24] CONFIRMED (measured)
+
+The first program on devnet, on 2026-10-11. Devnet answered `solana cluster-version` with 4.4.0-beta.0, in epoch 1180.
+
+- **sBPFv3 isn't required yet.** `solana feature status -u devnet --display-all` lists "SIMD-0178, SIMD-0189 and SIMD-0377: Enable deployment and execution of SBPFv3 programs" as active since epoch 1069, and "SIMD-0500: Disable deployment of SBPF v0, v1 and v2 programs" as inactive. Agave 4.4's requirement (AR.14) takes effect only when a cluster switches SIMD-0500 on, so on this date devnet would still take the older formats.
+- **The verified build.** `solana-verify build` 0.5.2 defaults to `--arch v0`; with `--arch v3`, in `solanafoundation/solana-verifiable-build:4.3.0` pinned by digest (`sha256:12fd4c0a…`), it built commit `423fa8c370d112e1fbc7197197825853b12e6edc` as a 192,376-byte program with ELF `e_flags` 3. Three builds gave the same hash, `23a0d75100810ba9ceba22fede5653d7152336bda87c7cb7707a5bb89fcf1b46`: one from a `git archive` of the commit (93 s) and two of GitHub's download of it (78 s and 73 s). The image is 5 GB (`docker image ls`) and took 65 s to download.
+- **The deploy.** `solana program deploy` with the upgrade key as payer and authority finished in transaction `67AMBYX5SnjzJfH8LJYQyssZdCdxsjXEhTZspYtDorwLDUSt92oiiFh82ZzcQ8p3w8kx5iPpmDS6szPwaDGewNoG` (finalized). `solana-verify get-program-hash` read the same hash back from devnet. `solana program show` gives ProgramData `DDGT42eGBiu4pqCLqzNwTDk5LR3uQqmy5y3u1nSu93qB`, authority `HCyLrwGeGMHAG7h8GGrUQjJf7hNjjWakqch6sTTWUVPt`, a 0.97814892 SOL deposit, as M0.03 computed. The balance went from 5 to 4.02004296 SOL, and the buffer account was closed.
+- **Initialize Config.** `scripts/devnet/init-config.ts` finished in transaction `3AFeheSrpGXa3WKAi9tKhrbEhjwot9kyNnyEk7FeFkZH7uY3Au3xE9VRBmLZJx1AdW34PD4b5JGF5hESExgrEZWy` (finalized). Config `Ax7mkLD7sgiud7phyXdpPa1HzFf2ek2ZKHv9FE6DcN2e` holds 0.003937 SOL, is owned by the program, and reads back the admin, operator, devnet USDC, both receivers and the 7 tickers from `config/program-devnet.json`.
+- **Tool behaviour.** Given `.` as its folder, solana-verify 0.5.2 dropped every dot from the manifest's path ("`/build//programs/meridian/Cargotoml` does not exist"); a full path works. Without `[workspace.metadata.cli] solana` in `Cargo.toml` it printed "Program Solana version: v0.0.0". Its container compiles with its own Rust, 1.97.1. Without `--buffer`, `solana program deploy` prints the recovery phrase of the buffer account's key (AI_USAGE 17).
