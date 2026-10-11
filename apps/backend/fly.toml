@@ -12,10 +12,14 @@ primary_region = "ewr"
   DATABASE_PATH = "/data/meridian.db"
   PORT = "8080"
 
+# Fly.io snapshots the volume daily; those snapshots are the store's backup until R2 is set up (D134).
+# 14 days covers a weekend and the time to notice a loss. Restore: fly volumes create --snapshot-id <id>.
 [[mounts]]
   source = "meridian_data"
   destination = "/data"
   initial_size = "1gb"
+  scheduled_snapshots = true
+  snapshot_retention = 14
 
 [http_service]
   internal_port = 8080
