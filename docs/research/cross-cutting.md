@@ -586,3 +586,17 @@ Fifty of our own transactions on devnet, from 15:56 UTC on 2026-10-11, timed by 
 - **From the send to "finalized":** median 839 ms, p90 1,199 ms, min 591 ms, max 3,069 ms. "Confirmed" was the same within 2 ms for every transaction (median 838 ms), so on devnet the wait for "finalized" costs nothing extra.
 - **Before funding,** the first run failed at simulation with "Attempt to debit an account but found no record of a prior credit"; the operator key then received 0.01 SOL from the upgrade key.
 - Not measured: mainnet, where AR.01 found a confirmed slot takes about 7 seconds to finalize, and a paid RPC provider.
+
+## 2026-10-11 M0 backend, local (main session)
+
+### M0.07 [D124] [P17] [P25] CONFIRMED (measured locally; Fly.io, R2 and Northflank not yet)
+
+The backend skeleton, run on the laptop on 2026-10-11 before any host account existed.
+
+- **Against devnet, on Windows.** `node apps/backend/src/main.ts` answered `GET /api/health` with 200, chain slot 509,956,739 and migration `0001_heartbeats_alerts` current (camelCase fields then; snake_case after the review). It stored a heartbeat with genesis hash `EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG` and answered an unknown path with 404 and `{code, message}`.
+- **The image.** `docker build -f apps/backend/Dockerfile` took 26 s in WSL's Docker and made a 672 MB image. `/app/node_modules` is 194 MB, of which `@solana` is 137 MB and `typescript`, a peer of Kit, is 24 MB; Litestream is 38 MB. Litestream's download matched `pins.sh`'s SHA-256 inside the build.
+- **Memory.** About 30 seconds after start, `docker stats` gave 76.75 MiB for the container, with Litestream and the app idle. That is one idle reading on the laptop, not the measurement on Fly.io that D124 asks for.
+- **Litestream, with a file replica standing in for R2.** The first container stored a heartbeat, and Litestream logged "snapshot complete". On `docker stop`, Litestream passed SIGTERM to the app, which logged its `stop` step before Litestream shut down. The data folder was then emptied, and a second container restored the store from the replica. Its migrate step applied nothing, and the first run's heartbeat (slot 509,957,369) was there beside the new one.
+- **After a fresh-context review** (AI_USAGE 21), on the rebuilt image: with the RPC pointed at an address that never answers, `/api/health` answered in 448 ms with `last_pass_at` null, and the pass ended after 10 s with "no answer within 10000 ms". As `standby` it ran without Litestream. The first standby run, with no volume, exited with "Cannot open database because the directory does not exist", so the image now creates `/data`. The primary's backup and restore test passed again.
+- **On Linux,** a clean copy on WSL's disk ran `npm ci` in 21 s with no unreviewed install scripts, and the backend's tests and typecheck passed.
+- **Not yet tested:** R2 itself, Fly.io's build, volume and health check, the Telegram and Healthchecks calls with real accounts, and the standby.

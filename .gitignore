@@ -8,6 +8,12 @@
 # .worktreeinclude copies it into each worktree.
 docs/spec/
 
+# The backend's local SQLite store, with its WAL files and Litestream's local state
+*.db
+*.db-shm
+*.db-wal
+.*.db-litestream/
+
 # Local environment (.env.example is the committed template)
 .env
 .env*.local

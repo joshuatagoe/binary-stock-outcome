@@ -56,6 +56,7 @@ const FILES = {
   nvmrc: '24.21.0\n',
   cargoToml: '[workspace]\nmembers = ["programs/*"]\n\n[workspace.metadata.cli]\nsolana = "4.3.0"\n',
   anchorToml: '[toolchain]\nanchor_version = "1.2.0"\nsolana_version = "4.3.0"\n',
+  dockerfile: '# The image\nFROM node:24.21.0-bookworm-slim@sha256:d6aa754f16b3197301076f047b5def2f02ea1dbbc2ca920407d46d7ec7f87b20\n',
 };
 
 test('rust-toolchain.toml, .nvmrc, Cargo.toml, Anchor.toml and the build image agree with the pins', () => {
@@ -72,6 +73,13 @@ test('a missing or disagreeing Solana or Anchor version in Cargo.toml or Anchor.
   assert.match(checkPinsAgree(PINS, { ...FILES, cargoToml: FILES.cargoToml.replace('4.3.0', '4.2.2') })[0] ?? '', /4\.2\.2.*4\.3\.0/);
   assert.match(checkPinsAgree(PINS, { ...FILES, anchorToml: FILES.anchorToml.replace('"4.3.0"', '"4.2.2"') })[0] ?? '', /Anchor\.toml.*4\.2\.2/);
   assert.match(checkPinsAgree(PINS, { ...FILES, anchorToml: FILES.anchorToml.replace('"1.2.0"', '"1.1.0"') })[0] ?? '', /Anchor\.toml.*1\.1\.0/);
+});
+
+test("the backend image's Node must be the pinned Node, pinned by digest", () => {
+  const older = { ...FILES, dockerfile: FILES.dockerfile.replace('24.21.0', '24.20.0') };
+  assert.match(checkPinsAgree(PINS, older)[0] ?? '', /Dockerfile.*24\.20\.0.*24\.21\.0/);
+  const byTag = { ...FILES, dockerfile: 'FROM node:24.21.0-bookworm-slim\n' };
+  assert.match(checkPinsAgree(PINS, byTag)[0] ?? '', /Dockerfile.*digest/);
 });
 
 test('the build image must be for the pinned Agave, and pinned by digest', () => {

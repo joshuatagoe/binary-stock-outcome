@@ -1,0 +1,11 @@
+# The backend's image needs only what apps/backend/Dockerfile copies.
+*
+!package.json
+!package-lock.json
+!scripts/toolchain/pins.sh
+!clients/ts/package.json
+!config
+!apps/backend
+apps/backend/test
+apps/backend/vitest.config.ts
+**/node_modules
