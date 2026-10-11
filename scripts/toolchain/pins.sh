@@ -11,6 +11,10 @@ LITESTREAM=0.5.17
 NODE=24.21.0
 # Fly.io's CLI, which creates and deploys the backend (P17, D124). Released 2026-09-24.
 FLYCTL=0.4.108
+# Cloudflare's CLI, which only CI runs, to deploy the website to Pages (P17, P27). Released 2026-09-25.
+# It is an npm package; CI installs it in a step without secrets. npm checks it only against the registry's own hash,
+# and its dependencies are not locked (P27).
+WRANGLER=4.141.0
 
 # Solana's build image for the verified build (D69, D125), at AGAVE's version and pinned by its digest,
 # because a tag can be pushed again. Pushed 2026-09-21; digest from Docker Hub's tag list, read 2026-10-11.

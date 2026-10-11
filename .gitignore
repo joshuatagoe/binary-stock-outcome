@@ -21,5 +21,10 @@ docs/spec/
 # Installed packages
 node_modules/
 
+# Build and test output
+dist/
+test-results/
+playwright-report/
+
 # Rust build output (in a Linux checkout; Windows checkouts build on WSL's disk, P11)
 /target/

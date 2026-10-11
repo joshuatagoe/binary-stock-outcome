@@ -1,7 +1,9 @@
 # The same `npm run verify` as on the laptop (D127, D129), on GitHub-hosted runners,
 # plus the program: built at the pins, its IDL checked against the committed one, and its tests run (C3).
 # main's protection requires both jobs to pass before a pull request can merge (D128).
-# On main, once both pass, the backend deploys to Fly.io and its smoke test checks the live commit (P17, D132).
+# On main, once both pass, the backend deploys to Fly.io and the website to Cloudflare Pages, then the smoke test
+# checks all three deployed parts: the program's Config, and the backend and website at the commit just deployed
+# (P17, P26, P27, D132).
 name: CI
 
 on:
@@ -29,6 +31,8 @@ jobs:
           node-version-file: .nvmrc
           cache: npm
       - run: npm ci
+      - name: Chromium for the website's browser tests (D116)
+        run: npx playwright install --with-deps chromium
       - run: npm run verify
 
   program:
@@ -80,5 +84,60 @@ jobs:
         env:
           FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
         run: flyctl deploy . --config apps/backend/fly.toml --dockerfile apps/backend/Dockerfile --remote-only --build-arg GIT_COMMIT=${{ github.sha }}
-      - name: Smoke test, the live commit is this one (D132)
+
+  deploy-website:
+    name: deploy website
+    needs: [verify, program]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - name: Build, with the commit in the page (D132)
+        env:
+          GIT_COMMIT: ${{ github.sha }}
+        run: npm run build -w apps/web
+      # wrangler's dependencies aren't locked, so they install in a step that holds no secrets (P27).
+      - name: wrangler at its pin, installed without the Cloudflare token in reach
+        run: |
+          . scripts/toolchain/pins.sh
+          npm install --prefix "$RUNNER_TEMP/wrangler" --no-save --no-audit --no-fund "wrangler@$WRANGLER"
+      - name: Deploy to Cloudflare Pages by direct upload (P17)
+        env:
+          CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+          CLOUDFLARE_ACCOUNT_ID: ${{ secrets.CLOUDFLARE_ACCOUNT_ID }}
+        run: |
+          wrangler() { "$RUNNER_TEMP/wrangler/node_modules/.bin/wrangler" "$@"; }
+          # The first run creates the project; later runs accept only its "already exists" error.
+          if ! out=$(wrangler pages project create meridian-devnet --production-branch main 2>&1); then
+            echo "$out" | grep -qi 'already exists' || { echo "$out"; exit 1; }
+          fi
+          wrangler pages deploy apps/web/dist --project-name meridian-devnet --branch main --commit-hash ${{ github.sha }}
+
+  smoke:
+    name: smoke
+    needs: [deploy-backend, deploy-website]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # Each part is checked even if an earlier one failed; the job fails if any did.
+      - name: The program's Config on devnet
+        run: node scripts/smoke/program.mjs
+      - name: The backend, at this commit (D132)
+        if: ${{ !cancelled() }}
         run: node scripts/smoke/backend.mjs https://meridian-devnet-backend.fly.dev ${{ github.sha }}
+      - name: The website, at this commit, in a real browser
+        if: ${{ !cancelled() }}
+        run: node scripts/smoke/website.mjs https://meridian-devnet.pages.dev ${{ github.sha }}

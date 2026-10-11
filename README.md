@@ -25,12 +25,12 @@ npm run verify
 
 `npm run verify` is the same command locally and in CI. It runs:
 
-- the commit guard's tests (<!-- count:hooks -->9<!-- /count --> tests), verify's own tests (<!-- count:verify -->43<!-- /count --> tests), the toolchain check's tests (<!-- count:toolchain -->10<!-- /count --> tests), the key export's tests (<!-- count:keys -->2<!-- /count --> tests), the smoke test's tests (<!-- count:smoke -->4<!-- /count --> tests) and the backend's tests (<!-- count:backend -->29<!-- /count --> tests, Vitest)
+- the commit guard's tests (<!-- count:hooks -->9<!-- /count --> tests), verify's own tests (<!-- count:verify -->46<!-- /count --> tests), the toolchain check's tests (<!-- count:toolchain -->10<!-- /count --> tests), the key export's tests (<!-- count:keys -->2<!-- /count --> tests), the smoke test's tests (<!-- count:smoke -->9<!-- /count --> tests), the backend's tests (<!-- count:backend -->29<!-- /count --> tests, Vitest), the website's unit tests (<!-- count:web -->5<!-- /count --> tests, Vitest) and its browser tests (<!-- count:web-e2e -->8<!-- /count --> tests, Playwright, after `npx playwright install chromium` once)
 - a check that `rust-toolchain.toml`, `.nvmrc`, `Cargo.toml`, `Anchor.toml`, the build image and the backend's Node image agree with the pins in `scripts/toolchain/pins.sh`
 - a check that every decision and finding cited in the docs exists
 - a check that each skill's `.cursor` and `.claude` copies match
 - a scan for committed keys and tokens
-- a typecheck of each TypeScript project: the client, the devnet scripts and the backend
+- a typecheck of each TypeScript project: the client, the devnet scripts, the backend and the website
 - a check that every test count in this README matches the run
 - a render of every diagram
 
@@ -100,6 +100,19 @@ On Fly.io the store's backup is the volume's daily snapshot, kept 14 days (D134)
 ```sh
 docker build -f apps/backend/Dockerfile --build-arg GIT_COMMIT=$(git rev-parse HEAD) -t meridian-backend .
 ```
+
+## Website
+
+The website is in [`apps/web`](apps/web), live at [meridian-devnet.pages.dev](https://meridian-devnet.pages.dev). So far it shows the play-money banner (D33) and the live settings it reads from devnet in the browser: the 7 stocks, whether trading is paused, and the program's addresses (§7). It reads Solana directly, so it keeps working while the backend is down. CI builds it with the commit in a `<meta>` tag and deploys it to Cloudflare Pages once the checks pass on `main` (P17, P27).
+
+```sh
+npm run dev -w apps/web                  # the one dev server, http://localhost:5173
+npm run test -w apps/web                 # unit tests
+npx playwright install chromium          # once, for the browser tests
+npm run e2e -w apps/web                  # browser tests, with devnet replaced by a recorded Config and public/_headers served
+```
+
+After each deploy, CI runs the smoke test against all three deployed parts: `scripts/smoke/program.mjs` (Config on devnet), `scripts/smoke/backend.mjs` (health at the deployed commit) and `scripts/smoke/website.mjs` (the page in a real browser, at the deployed commit, with its headers and no errors).
 
 ## Push
 

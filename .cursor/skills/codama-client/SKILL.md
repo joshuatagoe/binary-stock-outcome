@@ -35,4 +35,5 @@ renderVisitor(packageFolder, {
 
 - An instruction with one struct argument (`args: InitializeConfigArgs`) is flattened: the encoder takes `admin`, `operator` and so on at the top level, with no `args` key.
 - The generated errors read `process.env.NODE_ENV`, so `clients/ts/tsconfig.json` needs `"types": ["node"]` and `@types/node`.
+- In a browser there is no `process`. Vite's build replaced the expression, but its dev server didn't, and the whole page crashed with "process is not defined" (M0.10). `apps/web/vite.config.ts` defines `process.env` as `{ NODE_ENV }` outside tests; the website's dev-server browser test guards it.
 - `syncPackageJson: false` stops Codama from rewriting `clients/ts/package.json`.
