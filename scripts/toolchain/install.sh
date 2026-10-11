@@ -106,5 +106,14 @@ if ! unpacked "$name"; then
 fi
 for f in node npm npx; do ln -sfn "$TOOLS/$name/bin/$f" "$BIN/$f"; done
 
+# flyctl, which creates and deploys the backend on Fly.io (P17). `fly` is the same program.
+name="flyctl-$FLYCTL"
+if ! unpacked "$name"; then
+  fetch "https://github.com/superfly/flyctl/releases/download/v$FLYCTL/flyctl_${FLYCTL}_Linux_x86_64.tar.gz" "$FLYCTL_SHA256" flyctl.tar.gz
+  tar -xzf "$tmp/flyctl.tar.gz" -C "$TOOLS/$name.part"
+  finish "$name"
+fi
+for f in flyctl fly; do ln -sfn "$(find "$TOOLS/$name" -type f -name flyctl | head -1)" "$BIN/$f"; done
+
 echo
 node "$here/check.mjs"

@@ -2,8 +2,8 @@
 # CI deploys it after verify passes on main, building from the repository's root:
 #   flyctl deploy . --config apps/backend/fly.toml --dockerfile apps/backend/Dockerfile --remote-only \
 #     --build-arg GIT_COMMIT=<commit>
-# The app's name is chosen when the Fly.io account exists.
-app = "meridian-backend"
+# https://meridian-devnet-backend.fly.dev, created 2026-10-11 (M0.09).
+app = "meridian-devnet-backend"
 primary_region = "ewr"
 
 [env]

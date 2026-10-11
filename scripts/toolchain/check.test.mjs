@@ -11,6 +11,7 @@ SURFPOOL=1.6.0
 SOLANA_VERIFY=0.5.2
 LITESTREAM=0.5.17
 NODE=24.21.0
+FLYCTL=0.4.108
 VERIFY_IMAGE=solanafoundation/solana-verifiable-build:4.3.0@sha256:12fd4c0a0790f0fc41ef74b0cdb6bccc167ba6137eb1adb749bac649481c86bd
 AGAVE_SHA256=c97289a8abb1d0efb497d8b5cb285baabd9b7f8ea6647f5d145c5dc8ff3611e8
 `);
@@ -24,6 +25,7 @@ const OUTPUT = {
   'solana-verify': 'solana-verify 0.5.2',
   litestream: '0.5.17',
   node: 'v24.21.0',
+  flyctl: 'flyctl v0.4.108 linux/amd64 Commit: 598c8d785986ef71fcb6b964b90f920b8936cd8e BuildDate: 2026-09-24T16:27:10Z', // in WSL on 2026-10-11
 };
 const runner = (output) => (cmd) => {
   if (!(cmd in output)) throw new Error(`${cmd}: command not found`);
@@ -33,7 +35,13 @@ const runner = (output) => (cmd) => {
 test('pins are read from the file, comments skipped', () => {
   assert.equal(PINS.RUST, '1.98.0');
   assert.equal(PINS.AGAVE_SHA256.length, 64);
-  assert.equal(Object.keys(PINS).length, 9);
+  assert.equal(Object.keys(PINS).length, 10);
+});
+
+test('flyctl, which deploys the backend (P17), is checked like the other tools', () => {
+  const { flyctl, ...rest } = OUTPUT;
+  assert.match(checkToolchain(PINS, runner(rest))[0] ?? '', /flyctl is not installed/);
+  assert.match(checkToolchain(PINS, runner({ ...OUTPUT, flyctl: 'flyctl v0.4.115 linux/amd64' }))[0] ?? '', /0\.4\.115.*0\.4\.108/);
 });
 
 test('every tool at its pin passes', () => {

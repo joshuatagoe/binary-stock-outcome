@@ -18,6 +18,7 @@ const TOOLS = [
   { pin: 'SOLANA_VERIFY', cmd: 'solana-verify', args: ['--version'], version: /^solana-verify (\S+)/ },
   { pin: 'LITESTREAM', cmd: 'litestream', args: ['version'], version: /^v?(\d+\.\d+\.\d+)/ },
   { pin: 'NODE', cmd: 'node', args: ['--version'], version: /^v(\S+)/ },
+  { pin: 'FLYCTL', cmd: 'flyctl', args: ['version'], version: /^flyctl v(\d+\.\d+\.\d+)/ },
 ];
 
 export function readPins(text) {

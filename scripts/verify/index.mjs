@@ -24,6 +24,7 @@ const SUITES = {
   verify: 'scripts/verify/*.test.mjs',
   toolchain: 'scripts/toolchain/*.test.mjs',
   keys: 'scripts/keys/*.test.mjs',
+  smoke: 'scripts/smoke/*.test.mjs',
 };
 
 // Vitest suites (ARCHITECTURE.md §9), by name and folder.

@@ -9,6 +9,8 @@ SURFPOOL=1.6.0
 SOLANA_VERIFY=0.5.2
 LITESTREAM=0.5.17
 NODE=24.21.0
+# Fly.io's CLI, which creates and deploys the backend (P17, D124). Released 2026-09-24.
+FLYCTL=0.4.108
 
 # Solana's build image for the verified build (D69, D125), at AGAVE's version and pinned by its digest,
 # because a tag can be pushed again. Pushed 2026-09-21; digest from Docker Hub's tag list, read 2026-10-11.
@@ -23,3 +25,5 @@ SURFPOOL_SHA256=cb471b00aa3b7d603338eb74ebfec1d23959ecba005b5f1be42ba8d174107fc2
 SOLANA_VERIFY_SHA256=b9d5ccce9634dc14269cab3e7a58649bc141b3306e7735a94478c936341f211f
 LITESTREAM_SHA256=cfb371176d164437ae869f8351cfde49bd1804ae71c61923f75c9cba9c9c006d
 NODE_SHA256=fd8e59d5a511510f6a298afb548f18c7d2b1be404d8b4a27d94fbe49f56cb2d6
+# flyctl's checksums.txt and GitHub's digest agree, read 2026-10-11.
+FLYCTL_SHA256=38173df9dadd6a1f413ce435b6745b29ce2893c0ba918af17d7a1eced8089844
