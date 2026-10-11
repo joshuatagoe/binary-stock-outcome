@@ -574,3 +574,15 @@ The first program on devnet, on 2026-10-11. Devnet answered `solana cluster-vers
 - **Initialize Config.** `scripts/devnet/init-config.ts` finished in transaction `3AFeheSrpGXa3WKAi9tKhrbEhjwot9kyNnyEk7FeFkZH7uY3Au3xE9VRBmLZJx1AdW34PD4b5JGF5hESExgrEZWy` (finalized). Config `Ax7mkLD7sgiud7phyXdpPa1HzFf2ek2ZKHv9FE6DcN2e` holds 0.003937 SOL, is owned by the program, and reads back the admin, operator, devnet USDC, both receivers and the 7 tickers from `config/program-devnet.json`.
 - **Tool behaviour.** Given `.` as its folder, solana-verify 0.5.2 dropped every dot from the manifest's path ("`/build//programs/meridian/Cargotoml` does not exist"); a full path works. Without `[workspace.metadata.cli] solana` in `Cargo.toml` it printed "Program Solana version: v0.0.0". Its container compiles with its own Rust, 1.97.1. Without `--buffer`, `solana program deploy` prints the recovery phrase of the buffer account's key (AI_USAGE 17).
 - Correction (2026-10-11): the missing `[workspace.metadata.cli]` entry did not cause "Program Solana version: v0.0.0". solana-verify 0.5.2 prints that whenever `--base-image` is given, because it then skips looking up the version (`src/main.rs` at v0.5.2). Commit `e101e44f7d26caa7b169e02c0593d80cd4f3d899`, which has the entry, printed it too and built the same hash, `23a0d751…1b46`. The tool's own table maps Agave 4.3.0 to the digest pinned in `VERIFY_IMAGE`, `sha256:12fd4c0a…` (`src/image_config.rs`), so a plain `solana-verify build` picks the same image (AI_USAGE 19).
+
+## 2026-10-11 M0 timed sends (main session)
+
+### M0.06 [D71] [AR.01] CONFIRMED (measured)
+
+Fifty of our own transactions on devnet, from 15:56 UTC on 2026-10-11, timed by `scripts/devnet/time-sends.ts 50` from WSL on the user's laptop through the public endpoint `https://api.devnet.solana.com`. Devnet answered `getVersion` with solana-core 4.4.0-beta.0, feature set 1855282951, and `getAgGenesisCert` still returned the certificate for slot 504148999, so it runs Alpenglow (AR.01).
+
+- **The transactions.** Each moved n lamports (n = 1 to 50) from the operator key `AXwqBeBHE8S7YgngNQmudHYijxNpvQMPEkTymR59ZZXY` to the upgrade key, one at a time. Before each send, the script opened signature subscriptions at "confirmed" and "finalized" and was already reading them. All 50 succeeded. With one earlier single-transaction run, they cost 0.000256276 SOL: fees of 5,000 lamports each plus 1,276 lamports moved.
+- **The send call** returned in a median 175 ms (min 164, p90 203, max 319).
+- **From the send to "finalized":** median 839 ms, p90 1,199 ms, min 591 ms, max 3,069 ms. "Confirmed" was the same within 2 ms for every transaction (median 838 ms), so on devnet the wait for "finalized" costs nothing extra.
+- **Before funding,** the first run failed at simulation with "Attempt to debit an account but found no record of a prior credit"; the operator key then received 0.01 SOL from the upgrade key.
+- Not measured: mainnet, where AR.01 found a confirmed slot takes about 7 seconds to finalize, and a paid RPC provider.

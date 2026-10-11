@@ -75,6 +75,8 @@ solana-verify get-program-hash -u devnet kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQ
 
 Matching hashes prove the code is the same, not that it is safe (D69). Whoever holds the upgrade key can replace the program, so a settled result is final only while that key is safe. The repository's owner (joshuatagoe on GitHub) holds it, in a key file on their laptop (D92). The program is deployed only from there, with `scripts/devnet/deploy-program.sh`, never from CI.
 
+To time transactions on devnet from sending to "finalized" (D71), run `node scripts/devnet/time-sends.ts 50` in WSL. The operator key pays about 0.000005 SOL for each. On 2026-10-11 the median was 839 ms (M0.06).
+
 The four key files (upgrade, admin, operator and program) live in WSL's `~/.config/solana`, never in the repository. To import the admin key into Phantom, or to back up a key, run this yourself in your own Ubuntu terminal. It prints only to a terminal, never into a pipe or a file:
 
 ```sh
