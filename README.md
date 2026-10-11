@@ -95,7 +95,7 @@ node --env-file=.env apps/backend/src/cli/test-alert.ts   # one test alert to Te
 node --env-file=.env apps/backend/src/cli/test-check-in.ts  # one test check-in to Healthchecks.io (D118)
 ```
 
-The image, built from the repository's root, runs the backend under Litestream, which is to copy the store to Cloudflare R2 once the bucket exists (D124). The standby runs it without Litestream (D98):
+On Fly.io the store's backup is the volume's daily snapshot, kept 14 days (D134). The image can also run the backend under Litestream, copying the store to Cloudflare R2; that switches on when `R2_BUCKET` is set. The standby never runs Litestream (D98). The image is built from the repository's root:
 
 ```sh
 docker build -f apps/backend/Dockerfile --build-arg GIT_COMMIT=$(git rev-parse HEAD) -t meridian-backend .

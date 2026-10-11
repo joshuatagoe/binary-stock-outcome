@@ -1022,7 +1022,7 @@ The Pyth SDK compiles in one receiver address, and its account type checks the o
 |---|---|---|
 | Runtime | Node 24.21.0, supported until 2028-04-30 | The current long-term-support line. Node 26 joins it on 2026-10-28 |
 | HTTP | Hono 4.13.9 with `@hono/node-server` 2.1.1 | Routing, CORS and an SSE helper with no dependencies of its own. The host's proxy gives browsers HTTP/2, so the server speaks HTTP/1.1 behind it (AR.15) |
-| Store | SQLite through `better-sqlite3` 13.0.3, replicated continuously by Litestream 0.5.17 to Cloudflare R2 | Under 1 GB at about 2,000 rows a day: one file, and no extra service to keep awake. Neon's free Postgres suspends after 5 minutes and caps compute, and a writer every minute would likely run out mid-month. Supabase pauses after a week. `node:sqlite` is still a release candidate (AR.15) |
+| Store | SQLite through `better-sqlite3` 13.0.3, backed up by Fly.io's daily volume snapshots, with Litestream 0.5.17 to Cloudflare R2 ready to switch on (D134) | Under 1 GB at about 2,000 rows a day: one file, and no extra service to keep awake. Neon's free Postgres suspends after 5 minutes and caps compute, and a writer every minute would likely run out mid-month. Supabase pauses after a week. `node:sqlite` is still a release candidate (AR.15) |
 | Logs | pino 10.3.1 | One JSON line per job step (D70) |
 | Input checks | zod 4.6.5 | Report and error-report bodies (D91, D120) |
 | Scheduler | None | The repeatable check (D97) is a 30-second loop. New York time comes from the built-in `Intl`, tested on the clock-change days of 1 November 2026 and 8 March 2027 |
@@ -1050,7 +1050,7 @@ The local chain and the tests load the Token-2022 v11 program dumped from devnet
 | Website | Cloudflare Pages: any path serves the root, and `_headers` sets the security headers | $0 |
 | Backend, with SQLite on a volume | Fly.io shared-cpu-1x, 256 MB, in Secaucus, NJ (ewr), plus a 1 GB volume | $2.37 |
 | Standby (D98) | Northflank's free Sandbox: always on, and a different provider, so a different failure. If its allowances fall short, Fly.io in Ashburn (iad) at about $2.22 | $0 |
-| Backups | Cloudflare R2, free up to 10 GB | $0 |
+| Backups | Fly.io's daily volume snapshots, kept 14 days, free up to 10 GB (D134). Cloudflare R2 with Litestream when switched on, free up to 10 GB | $0 |
 | RPC, watchdog, alerts, reference close | Alchemy, Healthchecks.io, Telegram, Tiingo free tiers (D119, D118, D117, D93) | $0 |
 | **Demo total** | | **about $2.37** |
 
@@ -1217,6 +1217,7 @@ These go into the risks and limitations note as plain facts, with no regulatory 
 
 - Several free tiers can change or fall short: Northflank's allowances, Healthchecks.io (one person, with "multi-hour outages possible") and Alchemy's card requirement (AR.13, AR.15).
 - Litestream and Surfpool don't support Windows, so they run in WSL or on the host (AR.14, AR.15).
+- The off-chain records are backed up once a day, so a failed Fly.io host loses up to a day of them: heartbeats, job steps, alerts, reports and reference closes. Trades, settlements and redemptions are on the chain (D134).
 - OtterSec's verified-build service covers mainnet only, so on devnet the build is checked by comparing published hashes (D125).
 - Local runs use fake prices, which skip Pyth's real signature check. Only the devnet run tests it (D11, D30).
 
