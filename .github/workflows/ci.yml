@@ -1,5 +1,6 @@
-# The same `npm run verify` as on the laptop (D127, D129), on GitHub-hosted runners.
-# main's protection requires the "verify" job to pass before a pull request can merge (D128).
+# The same `npm run verify` as on the laptop (D127, D129), on GitHub-hosted runners,
+# plus the program: built at the pins, its IDL checked against the committed one, and its tests run (C3).
+# main's protection requires both jobs to pass before a pull request can merge (D128).
 name: CI
 
 on:
@@ -27,3 +28,33 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run verify
+
+  program:
+    name: program
+    runs-on: ubuntu-24.04
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Solana's system packages
+        run: sudo apt-get update && sudo apt-get install -y build-essential pkg-config libudev-dev llvm libclang-dev protobuf-compiler libssl-dev
+      - name: Restore the toolchain and build caches
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.local/share/meridian-toolchain
+            ~/.rustup
+            ~/.cargo/bin
+            ~/.cargo/registry
+            ~/.cache/solana
+            target
+          key: program-${{ runner.os }}-${{ hashFiles('scripts/toolchain/pins.sh', 'rust-toolchain.toml', 'Cargo.lock') }}
+          restore-keys: program-${{ runner.os }}-
+      - name: The toolchain at the pins
+        run: |
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+          echo "$HOME/.cargo/bin" >> "$GITHUB_PATH"
+          bash scripts/toolchain/install.sh
+      - name: Build, and check the committed IDL
+        run: bash scripts/program/build.sh --check
+      - name: Program tests (LiteSVM)
+        run: cargo test -p meridian

@@ -25,7 +25,7 @@ npm run verify
 
 `npm run verify` is the same command locally and in CI. It runs:
 
-- the commit guard's tests (<!-- count:hooks -->9<!-- /count --> tests), verify's own tests (<!-- count:verify -->33<!-- /count --> tests) and the toolchain check's tests (<!-- count:toolchain -->6<!-- /count --> tests)
+- the commit guard's tests (<!-- count:hooks -->9<!-- /count --> tests), verify's own tests (<!-- count:verify -->38<!-- /count --> tests) and the toolchain check's tests (<!-- count:toolchain -->6<!-- /count --> tests)
 - a check that `rust-toolchain.toml` and `.nvmrc` agree with the pins in `scripts/toolchain/pins.sh`
 - a check that every decision and finding cited in the docs exists
 - a check that each skill's `.cursor` and `.claude` copies match
@@ -44,6 +44,16 @@ node scripts/toolchain/check.mjs       # every tool at its pin
 ```
 
 On Windows, keep Rust's build output on WSL's disk (`CARGO_TARGET_DIR`): a clean build takes about 2.5 minutes there and 13 minutes in the Windows folder ([M0.02](docs/research/cross-cutting.md)).
+
+## Program
+
+The Solana program is in [`programs/meridian`](programs/meridian), at `kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQX3Ly`. So far it has one instruction, Initialize Config (ARCHITECTURE.md §6). Build and test it in WSL, then regenerate the TypeScript client on Windows:
+
+```sh
+bash scripts/program/build.sh          # in WSL: builds and refreshes clients/idl/meridian.json
+cargo test -p meridian                 # in WSL, after `source scripts/program/env.sh`: the LiteSVM tests
+npm run client                         # on Windows: regenerates clients/ts from the IDL
+```
 
 ## Push
 

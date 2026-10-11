@@ -570,7 +570,7 @@ All of these are estimates from `accounts.mjs`; D50 measures the real sizes at M
 
 | Account | Address from | Holds | Size | Deposit | Kept or returned |
 |---|---|---|---|---|---|
-| Config | "config" | The admin key, a pending admin key (rotation in two steps), the operator key, the USDC mint, the accepted Pyth receivers (D80), up to 8 tickers with pinned feed IDs, the pause flag, and the thresholds the program enforces (D102 to D106) | 682 B | 0.0056 SOL | Once |
+| Config | "config" | The admin key, a pending admin key (rotation in two steps), the operator key, the USDC mint, the accepted Pyth receivers (D80), up to 8 tickers with pinned feed IDs, the pause flag, and the thresholds the program enforces (D102 to D106) | 647 B, measured (M0.03) | 0.0039 SOL | Once |
 | Recorded close | "close", ticker, day | Price, band, exponent, publish time, the price account it came from, who recorded it, frozen or not (D105) | 154 B | 0.0020 SOL per stock per day | Kept: the next morning's job and the market's evidence read it |
 | Market | "market", ticker, day, strike | Identity, mint-open, open and close times, the linked accounts, the owed counter (D64), state and hold reason, the result with its price, band and publish time, any proposal | 353 B | 0.0034 SOL | Kept for good: redeem stays open (D66) |
 | Yes mint, No mint | "yes" / "no", market | Token-2022 with Permissioned Burn (D94) and a name wallets show, such as "META 680+ Yes 10/08" (D108). Decimals 0. The mint and burn authority is the market's address; no freeze authority | 422 B each | 0.0038 SOL each | Kept for good (standard mints can't be closed, F3.13) |

@@ -1,6 +1,7 @@
 // npm run verify: the one check command, the same on the laptop and in CI (ARCHITECTURE.md §10, D129).
 // It checks the files the next commit would hold: tracked files plus new ones git doesn't ignore.
-import { readFileSync, existsSync, statSync } from 'node:fs';
+import { readFileSync, existsSync, statSync, mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { execFileSync, spawnSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -10,6 +11,8 @@ import { checkSkillMirror } from './skills.mjs';
 import { checkReadmeCounts } from './readme-counts.mjs';
 import { checkDiagrams } from '../arch/check-diagrams.mjs';
 import { readPins, checkPinsAgree } from '../toolchain/check.mjs';
+import { compareTrees } from './client.mjs';
+import { generateClient, PACKAGE, GENERATED } from '../client/generate.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
 const MAX_BYTES = 5 * 1024 * 1024;
@@ -84,6 +87,25 @@ step('citations: every D, P and finding ID cited exists', () => {
 step('skills: .cursor and .claude copies match', () => ({ problems: checkSkillMirror(ROOT) }));
 
 step('secrets: no key files or tokens', () => ({ problems: checkSecrets(texts), note: `${texts.size} files` }));
+
+// The generator is asynchronous, so it runs here and its output is compared inside the step.
+const clientDir = mkdtempSync(join(tmpdir(), 'client-'));
+let clientError = null;
+try { await generateClient(clientDir); } catch (e) { clientError = e; }
+step('client: clients/ts matches a fresh generation from clients/idl', () => {
+  if (clientError) throw clientError;
+  return { problems: compareTrees(join(PACKAGE, GENERATED), join(clientDir, GENERATED)) };
+});
+rmSync(clientDir, { recursive: true, force: true });
+
+// Every TypeScript project in the repository, by its tsconfig folder.
+for (const project of ['clients/ts', 'scripts/devnet']) {
+  step(`typecheck: ${project}`, () => {
+    const tsc = join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
+    const r = spawnSync(process.execPath, [tsc, '-p', project], { cwd: ROOT, encoding: 'utf8' });
+    return { problems: r.status === 0 ? [] : [(r.stdout || r.stderr).trim()] };
+  });
+}
 
 step('README: stated test counts match this run', () => ({
   problems: checkReadmeCounts(texts.get('README.md') ?? null, counts),

@@ -541,3 +541,23 @@ P11's three setups, timed on 2026-10-10 by `scripts/toolchain/time-builds.sh`, o
 - **P11's rule.** The better Windows setup (2) averaged 152.0 s against 167.8 s for the copy on WSL's disk: 0.91 times, and 2.5 minutes for a clean build. The rule moves the repository only at more than 3 times or over 5 minutes, so the repository stays at `C:\dev\binary-stock-outcome`.
 - **Where the build output goes.** Anchor 1.2.0 honours `CARGO_TARGET_DIR`. Setup 2's `starter.so` appeared only under it, and the Windows folder's copy kept setup 1's timestamp.
 - **What to avoid.** Building with the output in the Windows folder (setup 1) took 12.9 minutes, 4.6 times the copy on WSL's disk.
+
+### M0.03 [D50] [D107] [D125] CONFIRMED (measured)
+
+The first program (Initialize Config only), built on 2026-10-10 with `anchor build` from Anchor 1.2.0 and Agave 4.3.0's platform tools v1.57, in WSL.
+
+- **Program format.** `anchor build --help` gives `--arch` "[default: v3]", and the built `meridian.so` has ELF `e_flags` 3, so it is sBPFv3. Devnet answered `getVersion` with `solana-core 4.4.0-beta.0` the same day. Whether devnet accepts the program is checked at its deploy.
+- **Config.** The full Config of ARCHITECTURE.md §5 (D133) takes 647 bytes in LiteSVM, including Anchor's 8-byte discriminator, against `accounts.mjs`'s estimate of 682. `solana rent 647` gives a deposit of 0.003937 SOL.
+- **The program.** `meridian.so` is 192,376 bytes. Its ProgramData account (a 45-byte header plus the program) needs a deposit of 0.97814892 SOL (`solana rent 192421`).
+- **Addresses.** Config's address is `Ax7mkLD7sgiud7phyXdpPa1HzFf2ek2ZKHv9FE6DcN2e`, from both `solana find-program-derived-address kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQX3Ly string:config` and the generated client's `findConfigPda()`.
+- **Upgrade key in tests.** LiteSVM 0.16.0's `add_program` leaves ProgramData's upgrade key empty (`upgrade_authority_address: None`, in its source), as AR.03 suspected. The tests write the key into ProgramData's header instead (the `litesvm-tests` skill).
+
+### M0.04 [D22] [D125] CONFIRMED (measured)
+
+Codama with Anchor 1.2.0's IDL, on 2026-10-10. `codama` 1.11.0 with `@codama/nodes-from-anchor` 1.5.6 read `clients/idl/meridian.json` (IDL spec 0.1.0). `@codama/renderers-js` 2.5.0 then generated the account with its decoder, the PDA helper, the instruction, the 7 errors, the event and both types for `@solana/kit` 8.3.0.
+
+The result typechecks under TypeScript 6.0.3 (`tsc -p clients/ts`, exit 0) and, with `erasableSyntax` and `.ts` import extensions, runs directly on Node 24.21.0. `clients/ts/examples/config-address.ts` printed Config's address and a 231-byte Initialize Config.
+
+Two things needed handling:
+- The instruction's one struct argument is flattened into top-level fields.
+- The generated errors read `process.env`, so the typecheck needs `@types/node`.
