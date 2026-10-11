@@ -1049,7 +1049,7 @@ The local chain and the tests load the Token-2022 v11 program dumped from devnet
 |---|---|---|
 | Website | Cloudflare Pages: any path serves the root, and `_headers` sets the security headers | $0 |
 | Backend, with SQLite on a volume | Fly.io shared-cpu-1x, 256 MB, in Secaucus, NJ (ewr), plus a 1 GB volume | $2.37 |
-| Standby (D98) | Northflank's free Sandbox: always on, and a different provider, so a different failure. If its allowances fall short, Fly.io in Ashburn (iad) at about $2.22 | $0 |
+| Standby (D98), from M4 (D135) | Northflank's free Sandbox: always on, and a different provider, so a different failure. If its allowances fall short, Fly.io in Ashburn (iad) at about $2.22 | $0 |
 | Backups | Fly.io's daily volume snapshots, kept 14 days, free up to 10 GB (D134). Cloudflare R2 with Litestream when switched on, free up to 10 GB | $0 |
 | RPC, watchdog, alerts, reference close | Alchemy, Healthchecks.io, Telegram, Tiingo free tiers (D119, D118, D117, D93) | $0 |
 | **Demo total** | | **about $2.37** |
@@ -1217,6 +1217,7 @@ These go into the risks and limitations note as plain facts, with no regulatory 
 
 - Several free tiers can change or fall short: Northflank's allowances, Healthchecks.io (one person, with "multi-hour outages possible") and Alchemy's card requirement (AR.13, AR.15).
 - Litestream and Surfpool don't support Windows, so they run in WSL or on the host (AR.14, AR.15).
+- Until M4 the backend runs on one host. If Fly.io fails, Fly restarts the machine and Healthchecks.io alerts the operator in Telegram, but nothing takes over; jobs run late when it comes back (D135).
 - The off-chain records are backed up once a day, so a failed Fly.io host loses up to a day of them: heartbeats, job steps, alerts, reports and reference closes. Trades, settlements and redemptions are on the chain (D134).
 - OtterSec's verified-build service covers mainnet only, so on devnet the build is checked by comparing published hashes (D125).
 - Local runs use fake prices, which skip Pyth's real signature check. Only the devnet run tests it (D11, D30).
@@ -1251,7 +1252,7 @@ flowchart LR
 - A minimal program with Initialize Config and the upgrade-key gate (AR.03), deployed to devnet from the laptop with `solana-verify build`, with its hashes published (D125).
 - The generated client.
 - The backend skeleton on Fly.io: health, SQLite with Litestream to R2, one test Telegram alert and one Healthchecks check-in.
-- The standby on Northflank.
+- The standby on Northflank, moved to M4 with its takeover (D135).
 - The website skeleton on Cloudflare Pages, reading Config.
 
 **Done when**
@@ -1316,7 +1317,7 @@ flowchart LR
 - The repeatable check (D97) and the bot.
 - The chain reader and store, the stream and the API.
 - The monitor: halt detector, alerts and check-ins.
-- Standby takeover (D98).
+- The standby on a second host and its takeover (D98, D135), or a recorded decision not to build it.
 
 **Done when**
 - One real trading day runs unattended on devnet:
