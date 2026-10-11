@@ -25,7 +25,7 @@ npm run verify
 
 `npm run verify` is the same command locally and in CI. It runs:
 
-- the commit guard's tests (<!-- count:hooks -->9<!-- /count --> tests), verify's own tests (<!-- count:verify -->43<!-- /count --> tests), the toolchain check's tests (<!-- count:toolchain -->9<!-- /count --> tests), the key export's tests (<!-- count:keys -->2<!-- /count --> tests) and the backend's tests (<!-- count:backend -->29<!-- /count --> tests, Vitest)
+- the commit guard's tests (<!-- count:hooks -->9<!-- /count --> tests), verify's own tests (<!-- count:verify -->43<!-- /count --> tests), the toolchain check's tests (<!-- count:toolchain -->10<!-- /count --> tests), the key export's tests (<!-- count:keys -->2<!-- /count --> tests), the smoke test's tests (<!-- count:smoke -->4<!-- /count --> tests) and the backend's tests (<!-- count:backend -->29<!-- /count --> tests, Vitest)
 - a check that `rust-toolchain.toml`, `.nvmrc`, `Cargo.toml`, `Anchor.toml`, the build image and the backend's Node image agree with the pins in `scripts/toolchain/pins.sh`
 - a check that every decision and finding cited in the docs exists
 - a check that each skill's `.cursor` and `.claude` copies match
@@ -40,7 +40,7 @@ The Solana program builds in WSL (Ubuntu) on Windows, or on Linux. The tools com
 
 ```sh
 sudo apt-get update && sudo apt-get install -y build-essential pkg-config libudev-dev llvm libclang-dev protobuf-compiler libssl-dev
-bash scripts/toolchain/install.sh      # Rust, Solana CLI, Anchor, Surfpool, solana-verify, Litestream, Node
+bash scripts/toolchain/install.sh      # Rust, Solana CLI, Anchor, Surfpool, solana-verify, Litestream, Node, flyctl
 node scripts/toolchain/check.mjs       # every tool at its pin
 ```
 
@@ -86,7 +86,7 @@ node scripts/keys/export-key.mjs admin    # or upgrade, operator, program
 
 ## Backend
 
-The backend is in [`apps/backend`](apps/backend). So far it serves `GET /api/health`: its role, the build's commit, the time of its last check, the chain's progress, and whether the database answers with its migrations current (D132). Its SQLite store is the file in `DATABASE_PATH`, or `meridian.db` in the current folder, which git ignores. Settings are in [`config/devnet.json`](config/devnet.json), and every secret's name is in [`.env.example`](.env.example).
+The backend is in [`apps/backend`](apps/backend), live at [meridian-devnet-backend.fly.dev](https://meridian-devnet-backend.fly.dev/api/health). CI deploys it from `main` once the checks pass, then runs `scripts/smoke/backend.mjs` to confirm the live commit (P26). So far it serves `GET /api/health`: its role, the build's commit, the time of its last check, the chain's progress, and whether the database answers with its migrations current (D132). Its SQLite store is the file in `DATABASE_PATH`, or `meridian.db` in the current folder, which git ignores. Settings are in [`config/devnet.json`](config/devnet.json), and every secret's name is in [`.env.example`](.env.example).
 
 ```sh
 cp .env.example .env                                      # then fill in the values you have

@@ -1,6 +1,7 @@
 # The same `npm run verify` as on the laptop (D127, D129), on GitHub-hosted runners,
 # plus the program: built at the pins, its IDL checked against the committed one, and its tests run (C3).
 # main's protection requires both jobs to pass before a pull request can merge (D128).
+# On main, once both pass, the backend deploys to Fly.io and its smoke test checks the live commit (P17, D132).
 name: CI
 
 on:
@@ -11,9 +12,10 @@ on:
 permissions:
   contents: read
 
+# A newer push cancels a branch's older run, but never main's: that could stop a deploy halfway.
 concurrency:
   group: ci-${{ github.ref }}
-  cancel-in-progress: true
+  cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
 
 jobs:
   verify:
@@ -58,3 +60,25 @@ jobs:
         run: bash scripts/program/build.sh --check
       - name: Program tests (LiteSVM)
         run: cargo test -p meridian
+
+  deploy-backend:
+    name: deploy backend
+    needs: [verify, program]
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-24.04
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: flyctl at its pin, refused unless its SHA-256 matches pins.sh (P22)
+        run: |
+          . scripts/toolchain/pins.sh
+          curl -fsSL -o /tmp/flyctl.tar.gz "https://github.com/superfly/flyctl/releases/download/v$FLYCTL/flyctl_${FLYCTL}_Linux_x86_64.tar.gz"
+          echo "$FLYCTL_SHA256  /tmp/flyctl.tar.gz" | sha256sum -c -
+          mkdir -p "$HOME/.local/bin" && tar -xzf /tmp/flyctl.tar.gz -C "$HOME/.local/bin" flyctl
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+      - name: Deploy, with a token that reaches this one app (P17)
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+        run: flyctl deploy . --config apps/backend/fly.toml --dockerfile apps/backend/Dockerfile --remote-only --build-arg GIT_COMMIT=${{ github.sha }}
+      - name: Smoke test, the live commit is this one (D132)
+        run: node scripts/smoke/backend.mjs https://meridian-devnet-backend.fly.dev ${{ github.sha }}
