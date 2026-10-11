@@ -1,7 +1,7 @@
 // Checks that each tool in WSL is at its pin in scripts/toolchain/pins.sh. Run it in WSL:
 //   wsl -e bash -lc "cd /mnt/c/dev/binary-stock-outcome && node scripts/toolchain/check.mjs"
-// `npm run verify` imports checkPinsAgree() to keep rust-toolchain.toml, .nvmrc, Cargo.toml, Anchor.toml
-// and the build image in step with the pins.
+// `npm run verify` imports checkPinsAgree() to keep rust-toolchain.toml, .nvmrc, Cargo.toml, Anchor.toml,
+// the build image and the backend's Node image in step with the pins.
 import { readFileSync } from 'node:fs';
 import { execFileSync } from 'node:child_process';
 import { dirname, join, resolve } from 'node:path';
@@ -41,7 +41,7 @@ export function checkToolchain(pins, run) {
   return problems;
 }
 
-export function checkPinsAgree(pins, { rustToolchain, nvmrc, cargoToml, anchorToml }) {
+export function checkPinsAgree(pins, { rustToolchain, nvmrc, cargoToml, anchorToml, dockerfile }) {
   const problems = [];
   const channel = rustToolchain.match(/^\s*channel\s*=\s*"([^"]+)"/m)?.[1];
   if (channel !== pins.RUST) problems.push(`rust-toolchain.toml says ${channel}; pins.sh says ${pins.RUST}`);
@@ -56,6 +56,11 @@ export function checkPinsAgree(pins, { rustToolchain, nvmrc, cargoToml, anchorTo
   const image = pins.VERIFY_IMAGE?.match(/^solanafoundation\/solana-verifiable-build:([^@]+)@sha256:[0-9a-f]{64}$/);
   if (!image) problems.push(`VERIFY_IMAGE must be solanafoundation/solana-verifiable-build:<version>@sha256:<digest>; it is ${pins.VERIFY_IMAGE}`);
   else if (image[1] !== pins.AGAVE) problems.push(`VERIFY_IMAGE is the image for ${image[1]}; pins.sh says ${pins.AGAVE}`);
+  // The backend's image (apps/backend/Dockerfile) runs the pinned Node, in an image pinned by digest.
+  const node = dockerfile.match(/^FROM node:(\d+\.\d+\.\d+)-[\w.-]+(@sha256:[0-9a-f]{64})?\s*$/m);
+  if (!node) problems.push("apps/backend/Dockerfile has no FROM line for Node's official image");
+  else if (node[1] !== pins.NODE) problems.push(`apps/backend/Dockerfile runs Node ${node[1]}; pins.sh says ${pins.NODE}`);
+  else if (!node[2]) problems.push('apps/backend/Dockerfile must pin its Node image by digest');
   return problems;
 }
 

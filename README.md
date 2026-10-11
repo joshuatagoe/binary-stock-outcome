@@ -25,11 +25,12 @@ npm run verify
 
 `npm run verify` is the same command locally and in CI. It runs:
 
-- the commit guard's tests (<!-- count:hooks -->9<!-- /count --> tests), verify's own tests (<!-- count:verify -->39<!-- /count --> tests), the toolchain check's tests (<!-- count:toolchain -->8<!-- /count --> tests) and the key export's tests (<!-- count:keys -->2<!-- /count --> tests)
-- a check that `rust-toolchain.toml`, `.nvmrc`, `Cargo.toml`, `Anchor.toml` and the build image agree with the pins in `scripts/toolchain/pins.sh`
+- the commit guard's tests (<!-- count:hooks -->9<!-- /count --> tests), verify's own tests (<!-- count:verify -->43<!-- /count --> tests), the toolchain check's tests (<!-- count:toolchain -->9<!-- /count --> tests), the key export's tests (<!-- count:keys -->2<!-- /count --> tests) and the backend's tests (<!-- count:backend -->29<!-- /count --> tests, Vitest)
+- a check that `rust-toolchain.toml`, `.nvmrc`, `Cargo.toml`, `Anchor.toml`, the build image and the backend's Node image agree with the pins in `scripts/toolchain/pins.sh`
 - a check that every decision and finding cited in the docs exists
 - a check that each skill's `.cursor` and `.claude` copies match
 - a scan for committed keys and tokens
+- a typecheck of each TypeScript project: the client, the devnet scripts and the backend
 - a check that every test count in this README matches the run
 - a render of every diagram
 
@@ -81,6 +82,23 @@ The four key files (upgrade, admin, operator and program) live in WSL's `~/.conf
 
 ```sh
 node scripts/keys/export-key.mjs admin    # or upgrade, operator, program
+```
+
+## Backend
+
+The backend is in [`apps/backend`](apps/backend). So far it serves `GET /api/health`: its role, the build's commit, the time of its last check, the chain's progress, and whether the database answers with its migrations current (D132). Its SQLite store is the file in `DATABASE_PATH`, or `meridian.db` in the current folder, which git ignores. Settings are in [`config/devnet.json`](config/devnet.json), and every secret's name is in [`.env.example`](.env.example).
+
+```sh
+cp .env.example .env                                      # then fill in the values you have
+node --env-file=.env apps/backend/src/main.ts             # serves http://localhost:8080/api/health
+node --env-file=.env apps/backend/src/cli/test-alert.ts   # one test alert to Telegram (D117)
+node --env-file=.env apps/backend/src/cli/test-check-in.ts  # one test check-in to Healthchecks.io (D118)
+```
+
+The image, built from the repository's root, runs the backend under Litestream, which is to copy the store to Cloudflare R2 once the bucket exists (D124). The standby runs it without Litestream (D98):
+
+```sh
+docker build -f apps/backend/Dockerfile --build-arg GIT_COMMIT=$(git rev-parse HEAD) -t meridian-backend .
 ```
 
 ## Push

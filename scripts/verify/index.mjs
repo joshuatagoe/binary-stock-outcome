@@ -12,6 +12,7 @@ import { checkReadmeCounts } from './readme-counts.mjs';
 import { checkDiagrams } from '../arch/check-diagrams.mjs';
 import { readPins, checkPinsAgree } from '../toolchain/check.mjs';
 import { compareTrees } from './client.mjs';
+import { readVitestReport } from './vitest.mjs';
 import { generateClient, PACKAGE, GENERATED } from '../client/generate.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -23,6 +24,11 @@ const SUITES = {
   verify: 'scripts/verify/*.test.mjs',
   toolchain: 'scripts/toolchain/*.test.mjs',
   keys: 'scripts/keys/*.test.mjs',
+};
+
+// Vitest suites (ARCHITECTURE.md §9), by name and folder.
+const VITEST_SUITES = {
+  backend: 'apps/backend',
 };
 
 function repoTexts() {
@@ -63,11 +69,12 @@ step('Node version matches .nvmrc', () => {
   return { problems: running === pinned ? [] : [`running Node ${running}; .nvmrc pins ${pinned}`], note: running };
 });
 
-step('pins: rust-toolchain.toml, .nvmrc, Cargo.toml, Anchor.toml and the build image agree with scripts/toolchain/pins.sh', () => {
+step('pins: rust-toolchain.toml, .nvmrc, Cargo.toml, Anchor.toml, the build image and the backend image agree with scripts/toolchain/pins.sh', () => {
   const read = (path) => readFileSync(join(ROOT, path), 'utf8');
   return {
     problems: checkPinsAgree(readPins(read('scripts/toolchain/pins.sh')), {
       rustToolchain: read('rust-toolchain.toml'), nvmrc: read('.nvmrc'), cargoToml: read('Cargo.toml'), anchorToml: read('Anchor.toml'),
+      dockerfile: read('apps/backend/Dockerfile'),
     }),
   };
 });
@@ -76,6 +83,19 @@ const counts = {};
 for (const [suite, glob] of Object.entries(SUITES)) {
   step(`tests: ${suite}`, () => {
     const { count, problems } = runSuite(glob);
+    counts[suite] = count;
+    return { problems, note: `${count} tests` };
+  });
+}
+for (const [suite, dir] of Object.entries(VITEST_SUITES)) {
+  step(`tests: ${suite}`, () => {
+    // Vitest writes its JSON report to a file, so it goes to a temporary folder.
+    const vitest = join(ROOT, 'node_modules', 'vitest', 'vitest.mjs');
+    const out = mkdtempSync(join(tmpdir(), 'vitest-'));
+    const r = spawnSync(process.execPath, [vitest, 'run', '--reporter=json', `--outputFile=${join(out, 'report.json')}`], { cwd: join(ROOT, dir), encoding: 'utf8' });
+    const report = existsSync(join(out, 'report.json')) ? readFileSync(join(out, 'report.json'), 'utf8') : '';
+    rmSync(out, { recursive: true, force: true });
+    const { count, problems } = readVitestReport({ status: r.status, stdout: report, stderr: r.stderr || r.stdout });
     counts[suite] = count;
     return { problems, note: `${count} tests` };
   });
@@ -104,7 +124,7 @@ step('client: clients/ts matches a fresh generation from clients/idl', () => {
 rmSync(clientDir, { recursive: true, force: true });
 
 // Every TypeScript project in the repository, by its tsconfig folder.
-for (const project of ['clients/ts', 'scripts/devnet']) {
+for (const project of ['clients/ts', 'scripts/devnet', 'apps/backend']) {
   step(`typecheck: ${project}`, () => {
     const tsc = join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
     const r = spawnSync(process.execPath, [tsc, '-p', project], { cwd: ROOT, encoding: 'utf8' });

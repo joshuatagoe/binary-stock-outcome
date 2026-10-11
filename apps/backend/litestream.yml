@@ -1,0 +1,11 @@
+# Litestream copies the store continuously to Cloudflare R2 (D124, P17), as its R2 guide sets out.
+# The key reaches this one bucket only; Litestream reads it from LITESTREAM_ACCESS_KEY_ID and
+# LITESTREAM_SECRET_ACCESS_KEY itself. .env.example lists every name.
+dbs:
+  - path: ${DATABASE_PATH}
+    replica:
+      type: s3
+      bucket: ${R2_BUCKET}
+      path: meridian.db
+      endpoint: ${R2_ACCOUNT_ID}.r2.cloudflarestorage.com
+      region: auto

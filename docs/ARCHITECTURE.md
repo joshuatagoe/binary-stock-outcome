@@ -772,7 +772,7 @@ A contract is the exact shape of a request: what it sends, who must sign it, whe
 | `GET /api/markets/{key}/activity` | That market's events and its settlement evidence | F11, F20 |
 | `GET /api/wallets/{address}/history?day&market&cursor` | That wallet's events | F13 |
 | `GET /api/liveness?weeks=4` | The on-time figures, late markets with their causes, and the heartbeat log | D60, D75 |
-| `GET /api/health` | The time of the primary's last pass, the chain's progress, the build's commit, whether the database answers, and the migrations applied and whether they are current | D98, D132 and the watchdog. The smoke test checks that the commit is the one just deployed |
+| `GET /api/health` | `role` (primary or standby), `commit`, `last_pass_at`, `chain` (`slot`, `seen_at`) and `database` (`answers`, `migrations`: `applied`, `current`). 200 when the database answers and none of this build's migrations is pending, 503 otherwise | D98, D132, P25 and the watchdog. The smoke test checks that the commit is the one just deployed |
 | `POST /api/reports` with `{market_key, body, wallet?}` | 202 Accepted; 400 if the body is over 500 characters; 404 if the market is not Under review or Proposed; 429 if rate-limited | D91 |
 | `POST /api/client-errors` with `{page, message, browser, tracker_state}` | 202 Accepted; 429 if rate-limited | Wallet addresses stripped; kept 14 days (D120, §8) |
 

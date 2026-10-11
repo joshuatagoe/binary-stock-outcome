@@ -1,6 +1,6 @@
 # The toolchain pins, one source (ARCHITECTURE.md §9, D123, D125, P11).
 # install.sh sources this file, check.mjs reads it, and `npm run verify` checks that rust-toolchain.toml,
-# .nvmrc, Cargo.toml, Anchor.toml and VERIFY_IMAGE agree with it.
+# .nvmrc, Cargo.toml, Anchor.toml, VERIFY_IMAGE and apps/backend/Dockerfile's Node image agree with it.
 
 RUST=1.98.0
 AGAVE=4.3.0

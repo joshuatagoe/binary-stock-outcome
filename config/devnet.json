@@ -1,0 +1,9 @@
+{
+  "_about": "The backend's devnet settings, from ARCHITECTURE.md §11. No secrets: those live in .env (D17). Alchemy, the second RPC provider (D119), joins with its key.",
+  "network": "devnet",
+  "rpc": {
+    "public": "https://api.devnet.solana.com"
+  },
+  "checkEverySecs": 30,
+  "heartbeatEverySecs": 60
+}

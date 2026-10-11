@@ -1,0 +1,36 @@
+# The backend on Fly.io (P17, D124): one always-on machine in Secaucus, NJ, with the store on a 1 GB volume.
+# CI deploys it after verify passes on main, building from the repository's root:
+#   flyctl deploy . --config apps/backend/fly.toml --dockerfile apps/backend/Dockerfile --remote-only \
+#     --build-arg GIT_COMMIT=<commit>
+# The app's name is chosen when the Fly.io account exists.
+app = "meridian-backend"
+primary_region = "ewr"
+
+[env]
+  MERIDIAN_NETWORK = "devnet"
+  MERIDIAN_ROLE = "primary"
+  DATABASE_PATH = "/data/meridian.db"
+  PORT = "8080"
+
+[[mounts]]
+  source = "meridian_data"
+  destination = "/data"
+  initial_size = "1gb"
+
+[http_service]
+  internal_port = 8080
+  force_https = true
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    method = "GET"
+    path = "/api/health"
+    interval = "15s"
+    timeout = "5s"
+    grace_period = "30s"
+
+[[vm]]
+  size = "shared-cpu-1x"
+  memory = "256mb"
