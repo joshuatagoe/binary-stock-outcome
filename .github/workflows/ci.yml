@@ -140,4 +140,4 @@ jobs:
         run: node scripts/smoke/backend.mjs https://meridian-devnet-backend.fly.dev ${{ github.sha }}
       - name: The website, at this commit, in a real browser
         if: ${{ !cancelled() }}
-        run: node scripts/smoke/website.mjs https://meridian-devnet.pages.dev ${{ github.sha }}
+        run: node scripts/smoke/website.mjs https://meridian-devnet-2qv.pages.dev ${{ github.sha }}

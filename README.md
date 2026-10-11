@@ -103,7 +103,7 @@ docker build -f apps/backend/Dockerfile --build-arg GIT_COMMIT=$(git rev-parse H
 
 ## Website
 
-The website is in [`apps/web`](apps/web), live at [meridian-devnet.pages.dev](https://meridian-devnet.pages.dev). So far it shows the play-money banner (D33) and the live settings it reads from devnet in the browser: the 7 stocks, whether trading is paused, and the program's addresses (§7). It reads Solana directly, so it keeps working while the backend is down. CI builds it with the commit in a `<meta>` tag and deploys it to Cloudflare Pages once the checks pass on `main` (P17, P27).
+The website is in [`apps/web`](apps/web), live at [meridian-devnet-2qv.pages.dev](https://meridian-devnet-2qv.pages.dev). So far it shows the play-money banner (D33) and the live settings it reads from devnet in the browser: the 7 stocks, whether trading is paused, and the program's addresses (§7). It reads Solana directly, so it keeps working while the backend is down. CI builds it with the commit in a `<meta>` tag and deploys it to Cloudflare Pages once the checks pass on `main` (P17, P27).
 
 ```sh
 npm run dev -w apps/web                  # the one dev server, http://localhost:5173
