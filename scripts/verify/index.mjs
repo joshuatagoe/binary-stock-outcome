@@ -13,6 +13,7 @@ import { checkDiagrams } from '../arch/check-diagrams.mjs';
 import { readPins, checkPinsAgree } from '../toolchain/check.mjs';
 import { compareTrees } from './client.mjs';
 import { readVitestReport } from './vitest.mjs';
+import { readPlaywrightReport } from './playwright.mjs';
 import { generateClient, PACKAGE, GENERATED } from '../client/generate.mjs';
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..', '..');
@@ -30,6 +31,12 @@ const SUITES = {
 // Vitest suites (ARCHITECTURE.md §9), by name and folder.
 const VITEST_SUITES = {
   backend: 'apps/backend',
+  web: 'apps/web',
+};
+
+// Playwright suites (D116), by name and folder. Their browser comes from `npx playwright install chromium`.
+const PLAYWRIGHT_SUITES = {
+  'web-e2e': 'apps/web',
 };
 
 function repoTexts() {
@@ -101,6 +108,21 @@ for (const [suite, dir] of Object.entries(VITEST_SUITES)) {
     return { problems, note: `${count} tests` };
   });
 }
+for (const [suite, dir] of Object.entries(PLAYWRIGHT_SUITES)) {
+  step(`tests: ${suite}`, () => {
+    const out = mkdtempSync(join(tmpdir(), 'playwright-'));
+    const file = join(out, 'report.json');
+    const cli = join(ROOT, 'node_modules', '@playwright', 'test', 'cli.js');
+    const r = spawnSync(process.execPath, [cli, 'test', '--reporter=json'], {
+      cwd: join(ROOT, dir), encoding: 'utf8', env: { ...process.env, PLAYWRIGHT_JSON_OUTPUT_FILE: file },
+    });
+    const report = existsSync(file) ? readFileSync(file, 'utf8') : '';
+    rmSync(out, { recursive: true, force: true });
+    const { count, problems } = readPlaywrightReport({ status: r.status, report, stderr: r.stderr || r.stdout });
+    counts[suite] = count;
+    return { problems, note: `${count} tests` };
+  });
+}
 
 const texts = repoTexts();
 const markdown = new Map([...texts].filter(([path]) => path.endsWith('.md')));
@@ -125,7 +147,7 @@ step('client: clients/ts matches a fresh generation from clients/idl', () => {
 rmSync(clientDir, { recursive: true, force: true });
 
 // Every TypeScript project in the repository, by its tsconfig folder.
-for (const project of ['clients/ts', 'scripts/devnet', 'apps/backend']) {
+for (const project of ['clients/ts', 'scripts/devnet', 'apps/backend', 'apps/web']) {
   step(`typecheck: ${project}`, () => {
     const tsc = join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
     const r = spawnSync(process.execPath, [tsc, '-p', project], { cwd: ROOT, encoding: 'utf8' });

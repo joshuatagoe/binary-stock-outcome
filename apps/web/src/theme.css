@@ -1,0 +1,230 @@
+/* The palette and type of ARCHITECTURE.md §7 (D114): blue and orange, Atkinson Hyperlegible Next and Mono. */
+:root {
+  --bg: #f5f6f9;
+  --surface: #ffffff;
+  --raised: #eceff4;
+  --fg: #141922;
+  --muted: #4f5867;
+  --line: #d5dae1;
+  --accent: #2346c8;
+  --on-accent: #ffffff;
+  --warn-text: #6b4700;
+  --warn-bg: #fff1cc;
+  --danger-text: #9e1b24;
+  --danger-bg: #fce6e8;
+  --ok-text: #17633a;
+  --ok-bg: #e3f4ea;
+  --text: 'Atkinson Hyperlegible Next', system-ui, -apple-system, 'Segoe UI', sans-serif;
+  --mono: 'Atkinson Hyperlegible Mono', ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  color-scheme: light dark;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg: #0e1117;
+    --surface: #161a22;
+    --raised: #1f2430;
+    --fg: #e7eaf0;
+    --muted: #a0a8b6;
+    --line: #2c3341;
+    --accent: #8aa8ff;
+    --on-accent: #0e1117;
+    --warn-text: #f3ce73;
+    --warn-bg: #2d2410;
+    --danger-text: #ff9aa0;
+    --danger-bg: #3a161a;
+    --ok-text: #79d6a0;
+    --ok-bg: #13291d;
+  }
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--fg);
+  font: 1rem/1.55 var(--text);
+}
+
+main,
+.header,
+.footer {
+  max-width: 46rem;
+  margin: 0 auto;
+  padding: 0 1rem;
+}
+
+main {
+  padding-bottom: 2rem;
+}
+
+main:focus {
+  outline: none;
+}
+
+a {
+  color: var(--accent);
+}
+
+:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.skip {
+  position: absolute;
+  left: 0.5rem;
+  top: -3rem;
+  padding: 0.5rem 0.75rem;
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.skip:focus {
+  top: 0.5rem;
+}
+
+.banner {
+  margin: 0;
+  padding: 0.5rem 1rem;
+  background: var(--warn-bg);
+  color: var(--warn-text);
+  text-align: center;
+  font-weight: 600;
+}
+
+.header {
+  padding-top: 1rem;
+  padding-bottom: 0.5rem;
+}
+
+.brand {
+  color: var(--fg);
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.footer {
+  padding-top: 1rem;
+  padding-bottom: 2rem;
+  border-top: 1px solid var(--line);
+}
+
+.lede {
+  font-size: 1.125rem;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.mono {
+  font-family: var(--mono);
+  overflow-wrap: anywhere;
+}
+
+.card {
+  margin: 1.5rem 0;
+  padding: 1rem 1.25rem;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: 0.5rem;
+}
+
+.card h2 {
+  margin-top: 0;
+}
+
+.notice {
+  padding: 0.75rem 1rem;
+  border-radius: 0.375rem;
+}
+
+.notice p {
+  margin-top: 0;
+}
+
+.danger {
+  background: var(--danger-bg);
+  color: var(--danger-text);
+}
+
+.ok {
+  background: var(--ok-bg);
+  color: var(--ok-text);
+}
+
+/* §7 gives the accent to the Open pill; ok is for done messages and final results. */
+.open {
+  background: var(--accent);
+  color: var(--on-accent);
+}
+
+.sr-only {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+h2:focus {
+  outline: none;
+}
+
+h2:focus-visible {
+  outline: 3px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.pill {
+  padding: 0.1rem 0.6rem;
+  border-radius: 999px;
+}
+
+button {
+  font: inherit;
+  font-weight: 600;
+  padding: 0.45rem 1rem;
+  border: 0;
+  border-radius: 0.375rem;
+  background: var(--accent);
+  color: var(--on-accent);
+  cursor: pointer;
+}
+
+.stocks {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(9.5rem, 1fr));
+  gap: 0.5rem;
+  padding: 0;
+  list-style: none;
+}
+
+.stocks li {
+  display: flex;
+  flex-direction: column;
+  padding: 0.5rem 0.75rem;
+  background: var(--raised);
+  border-radius: 0.375rem;
+}
+
+.addresses dt {
+  margin-top: 0.75rem;
+  font-weight: 600;
+}
+
+.addresses dd {
+  margin: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  * {
+    transition: none !important;
+    animation: none !important;
+  }
+}
