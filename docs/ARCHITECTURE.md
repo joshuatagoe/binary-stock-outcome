@@ -632,9 +632,11 @@ erDiagram
     int64 slot
     utc_time block_time
     text kind
+    text market
     text market_key
     date trading_day
     text wallet
+    text counterparty
     int16 price_cents
     int32 qty
     int64 usdc_units
@@ -642,13 +644,21 @@ erDiagram
     int32 network_epoch
   }
   MARKETS {
+    text market
     text market_key
+    int32 network_epoch
     text stock
     date trading_day
     int64 strike_cents
+    utc_time mint_open_at
+    utc_time open_at
     utc_time close_at
     text state
     text outcome
+  }
+  READER_STATE {
+    text key
+    text value
   }
   JOB_STEPS {
     date trading_day
@@ -687,15 +697,16 @@ erDiagram
   MARKETS ||--o{ REPORTS : "has"
 ```
 
-- **Where each table comes from.** EVENTS (one row per program event) and MARKETS (each market's current state) come from the chain and can be rebuilt from it (D62). JOB_STEPS, HEARTBEATS, REFERENCE_CLOSES, REPORTS and ALERTS are our own records, backed up at least daily after settlement (D95).
+- **Where each table comes from.** EVENTS (one row per program event) and MARKETS (each market's current state) come from the chain and can be rebuilt from it (D62). READER_STATE holds the reader's place: the newest signature read through and its slot, and the marks of a walk not yet finished (P32). MARKETS gets its state and outcome from the stream slice; M4-a stores the creation facts. JOB_STEPS, HEARTBEATS, REFERENCE_CLOSES, REPORTS and ALERTS are our own records, backed up at least daily after settlement (D95).
 - **Units.** USDC is stored in base units (6 decimals), and contract prices in whole cents. Stock prices keep Pyth's integer and exponent, and the strike is in cents. Times are stored in UTC and shown in ET (D84). The trading day is the ET date. A market's key reads like `META-680-2026-10-08` (D72).
 - **The network epoch** goes up by one at each devnet reset, which the heartbeat's genesis hash detects. History from before a reset stays visible and labelled (D19).
 - **Rules the store refuses bad data with:**
-  - each event is stored once, keyed by signature, instruction index and event index;
+  - each event is stored once, keyed by signature, instruction index and event index, where the event index counts all of our program's event calls and data lines in the transaction;
+  - a row the rules refuse stops the reader rather than being skipped (P32);
   - prices are 1 to 99¢, quantities are above 0, and USDC amounts are at least 0;
   - report text is at most 500 characters (D91);
   - each trading day and step has one job-step row per attempt.
-- **Indexes:** events by market and time, by wallet and time, and by trading day and kind; reports by market and time; heartbeats by time.
+- **Indexes:** events by market and time, by wallet and time, by a fill's maker (`counterparty`) and time, and by trading day and kind; reports by market and time; heartbeats by time.
 
 ### Reconciliation, for what no rule can express
 

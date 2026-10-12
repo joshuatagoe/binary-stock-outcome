@@ -2,7 +2,7 @@
   "name": "@meridian/backend",
   "private": true,
   "type": "module",
-  "description": "The backend (ARCHITECTURE.md §2, §6, §9): at M0, the health endpoint, SQLite with Litestream, one test alert and one check-in.",
+  "description": "The backend (ARCHITECTURE.md §2, §6, §9): the health endpoint, SQLite with Litestream, alerts and check-ins, the trading calendar, strikes, the send queue, and the chain reader with its event store.",
   "scripts": {
     "start": "node src/main.ts",
     "test": "vitest run",
