@@ -75,9 +75,180 @@
           }
         }
       ]
+    },
+    {
+      "name": "place_order",
+      "docs": [
+        "Instruction 10 (§6), in M1-a's form for the order-book spike (D21): matches on the book and moves the taker's",
+        "tokens; the market's window and the full checks arrive in M1-c."
+      ],
+      "discriminator": [
+        51,
+        194,
+        155,
+        175,
+        109,
+        130,
+        96,
+        106
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "market",
+          "docs": [
+            "Create market (M1-b) and the full Place order (M1-c)."
+          ]
+        },
+        {
+          "name": "book",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  111,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "book_usdc",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  111,
+                  107,
+                  95,
+                  117,
+                  115,
+                  100,
+                  99
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "book_yes",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  111,
+                  107,
+                  95,
+                  121,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "taker",
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "taker_usdc",
+          "writable": true
+        },
+        {
+          "name": "taker_yes",
+          "writable": true
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "yes_mint"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "token_2022_program",
+          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "PlaceOrderArgs"
+            }
+          }
+        }
+      ]
     }
   ],
   "accounts": [
+    {
+      "name": "Book",
+      "discriminator": [
+        121,
+        34,
+        121,
+        35,
+        91,
+        62,
+        85,
+        222
+      ]
+    },
     {
       "name": "Config",
       "discriminator": [
@@ -104,6 +275,45 @@
         167,
         178,
         91
+      ]
+    },
+    {
+      "name": "Fill",
+      "discriminator": [
+        78,
+        225,
+        199,
+        154,
+        86,
+        219,
+        224,
+        169
+      ]
+    },
+    {
+      "name": "OrderCancelled",
+      "discriminator": [
+        108,
+        56,
+        128,
+        68,
+        168,
+        113,
+        168,
+        239
+      ]
+    },
+    {
+      "name": "OrderPlaced",
+      "discriminator": [
+        96,
+        130,
+        204,
+        234,
+        169,
+        219,
+        216,
+        227
       ]
     }
   ],
@@ -142,9 +352,163 @@
       "code": 6006,
       "name": "InvalidThresholds",
       "msg": "A threshold is out of range"
+    },
+    {
+      "code": 6007,
+      "name": "InvalidPrice",
+      "msg": "Prices are 1 to 99 cents"
+    },
+    {
+      "code": 6008,
+      "name": "InvalidQuantity",
+      "msg": "Quantities must be above 0"
+    },
+    {
+      "code": 6009,
+      "name": "BookFull",
+      "msg": "This market's order book is full."
+    },
+    {
+      "code": 6010,
+      "name": "DuplicateOrderId",
+      "msg": "An order with this ID is already resting"
+    },
+    {
+      "code": 6011,
+      "name": "FillLimitNotSet",
+      "msg": "The fill limit is not set"
+    },
+    {
+      "code": 6012,
+      "name": "Paused",
+      "msg": "Trading is paused by the admin. You can still cancel orders, close pairs and redeem."
+    },
+    {
+      "code": 6013,
+      "name": "BookShort",
+      "msg": "The book's token accounts hold less than its orders and balances"
+    },
+    {
+      "code": 6014,
+      "name": "DuplicateAccount",
+      "msg": "An account is passed twice"
     }
   ],
   "types": [
+    {
+      "name": "Book",
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "next_seq",
+            "docs": [
+              "The next order's sequence number, for time priority."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "bid_count",
+            "type": "u8"
+          },
+          {
+            "name": "ask_count",
+            "type": "u8"
+          },
+          {
+            "name": "bump",
+            "type": "u8"
+          },
+          {
+            "name": "book_usdc_bump",
+            "type": "u8"
+          },
+          {
+            "name": "book_yes_bump",
+            "type": "u8"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                19
+              ]
+            }
+          },
+          {
+            "name": "bids",
+            "docs": [
+              "Highest price first, then oldest."
+            ],
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "Order"
+                  }
+                },
+                64
+              ]
+            }
+          },
+          {
+            "name": "asks",
+            "docs": [
+              "Lowest price first, then oldest."
+            ],
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "Order"
+                  }
+                },
+                64
+              ]
+            }
+          },
+          {
+            "name": "traders",
+            "type": {
+              "array": [
+                {
+                  "defined": {
+                    "name": "Trader"
+                  }
+                },
+                64
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "CancelReason",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Owner"
+          },
+          {
+            "name": "SelfTrade"
+          },
+          {
+            "name": "Sweep"
+          }
+        ]
+      }
+    },
     {
       "name": "Config",
       "type": {
@@ -271,6 +635,56 @@
       }
     },
     {
+      "name": "Fill",
+      "docs": [
+        "The taker's order traded with one resting order, at that order's price (D42)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "maker",
+            "type": "pubkey"
+          },
+          {
+            "name": "maker_order_id",
+            "type": "u64"
+          },
+          {
+            "name": "taker",
+            "type": "pubkey"
+          },
+          {
+            "name": "taker_order_id",
+            "type": "u64"
+          },
+          {
+            "name": "side",
+            "docs": [
+              "What the taker did with Yes."
+            ],
+            "type": {
+              "defined": {
+                "name": "Side"
+              }
+            }
+          },
+          {
+            "name": "price",
+            "type": "u8"
+          },
+          {
+            "name": "quantity",
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
       "name": "InitializeConfigArgs",
       "type": {
         "kind": "struct",
@@ -319,6 +733,221 @@
                 "name": "Thresholds"
               }
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Order",
+      "docs": [
+        "A resting order (24 bytes): a bid locks price × quantity in USDC, an offer locks quantity in Yes."
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "seq",
+            "type": "u64"
+          },
+          {
+            "name": "order_id",
+            "docs": [
+              "The ID its sender chose (D101)."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "quantity",
+            "type": "u32"
+          },
+          {
+            "name": "trader",
+            "docs": [
+              "The owner's index in the trader table."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "price",
+            "docs": [
+              "In cents, 1 to 99."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "_pad",
+            "type": {
+              "array": [
+                "u8",
+                2
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "OrderCancelled",
+      "docs": [
+        "A resting order left the book; what it locked waits in its owner's book balance (D99)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "order_id",
+            "type": "u64"
+          },
+          {
+            "name": "side",
+            "docs": [
+              "The resting order's side: a bid buys Yes, an offer sells it."
+            ],
+            "type": {
+              "defined": {
+                "name": "Side"
+              }
+            }
+          },
+          {
+            "name": "price",
+            "type": "u8"
+          },
+          {
+            "name": "quantity",
+            "type": "u32"
+          },
+          {
+            "name": "reason",
+            "type": {
+              "defined": {
+                "name": "CancelReason"
+              }
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "OrderKind",
+      "docs": [
+        "A Market order fills what it can now and the rest is not placed; a Limit order's rest rests at its price (§3)."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Market"
+          },
+          {
+            "name": "Limit"
+          }
+        ]
+      }
+    },
+    {
+      "name": "OrderPlaced",
+      "docs": [
+        "A Limit order's remainder now rests on the book."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "order_id",
+            "type": "u64"
+          },
+          {
+            "name": "side",
+            "type": {
+              "defined": {
+                "name": "Side"
+              }
+            }
+          },
+          {
+            "name": "price",
+            "type": "u8"
+          },
+          {
+            "name": "quantity",
+            "type": "u32"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PlaceOrderArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "side",
+            "type": {
+              "defined": {
+                "name": "Side"
+              }
+            }
+          },
+          {
+            "name": "kind",
+            "type": {
+              "defined": {
+                "name": "OrderKind"
+              }
+            }
+          },
+          {
+            "name": "price",
+            "docs": [
+              "A Limit order's price, or a Market order's worst price (D15), in cents."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "quantity",
+            "type": "u32"
+          },
+          {
+            "name": "order_id",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Side",
+      "docs": [
+        "What the order does with Yes. Buy No and Sell No (M2) build on these."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Buy"
+          },
+          {
+            "name": "Sell"
           }
         ]
       }
@@ -441,6 +1070,50 @@
               "New markets only for enabled stocks."
             ],
             "type": "bool"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Trader",
+      "docs": [
+        "A trader with resting orders or free balances (56 bytes). Reused once both balances are zero and it has no open",
+        "orders (D107)."
+      ],
+      "serialization": "bytemuck",
+      "repr": {
+        "kind": "c"
+      },
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "free_usdc",
+            "docs": [
+              "USDC credited by fills and cancels, waiting for Return to owner (D99), in its smallest units."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "free_yes",
+            "type": "u64"
+          },
+          {
+            "name": "open_orders",
+            "type": "u16"
+          },
+          {
+            "name": "_pad",
+            "type": {
+              "array": [
+                "u8",
+                6
+              ]
+            }
           }
         ]
       }

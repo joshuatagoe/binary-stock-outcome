@@ -28,26 +28,58 @@ export const MERIDIAN_ERROR__INVALID_TICKERS = 0x1774; // 6004
 export const MERIDIAN_ERROR__INVALID_LADDER = 0x1775; // 6005
 /** InvalidThresholds: A threshold is out of range */
 export const MERIDIAN_ERROR__INVALID_THRESHOLDS = 0x1776; // 6006
+/** InvalidPrice: Prices are 1 to 99 cents */
+export const MERIDIAN_ERROR__INVALID_PRICE = 0x1777; // 6007
+/** InvalidQuantity: Quantities must be above 0 */
+export const MERIDIAN_ERROR__INVALID_QUANTITY = 0x1778; // 6008
+/** BookFull: This market's order book is full. */
+export const MERIDIAN_ERROR__BOOK_FULL = 0x1779; // 6009
+/** DuplicateOrderId: An order with this ID is already resting */
+export const MERIDIAN_ERROR__DUPLICATE_ORDER_ID = 0x177a; // 6010
+/** FillLimitNotSet: The fill limit is not set */
+export const MERIDIAN_ERROR__FILL_LIMIT_NOT_SET = 0x177b; // 6011
+/** Paused: Trading is paused by the admin. You can still cancel orders, close pairs and redeem. */
+export const MERIDIAN_ERROR__PAUSED = 0x177c; // 6012
+/** BookShort: The book's token accounts hold less than its orders and balances */
+export const MERIDIAN_ERROR__BOOK_SHORT = 0x177d; // 6013
+/** DuplicateAccount: An account is passed twice */
+export const MERIDIAN_ERROR__DUPLICATE_ACCOUNT = 0x177e; // 6014
 
 export type MeridianError =
+  | typeof MERIDIAN_ERROR__BOOK_FULL
+  | typeof MERIDIAN_ERROR__BOOK_SHORT
+  | typeof MERIDIAN_ERROR__DUPLICATE_ACCOUNT
+  | typeof MERIDIAN_ERROR__DUPLICATE_ORDER_ID
+  | typeof MERIDIAN_ERROR__FILL_LIMIT_NOT_SET
   | typeof MERIDIAN_ERROR__INVALID_LADDER
+  | typeof MERIDIAN_ERROR__INVALID_PRICE
+  | typeof MERIDIAN_ERROR__INVALID_QUANTITY
   | typeof MERIDIAN_ERROR__INVALID_RECEIVERS
   | typeof MERIDIAN_ERROR__INVALID_THRESHOLDS
   | typeof MERIDIAN_ERROR__INVALID_TICKERS
   | typeof MERIDIAN_ERROR__MAINNET_USDC_ON_DEVNET
   | typeof MERIDIAN_ERROR__MISSING_KEY
-  | typeof MERIDIAN_ERROR__NOT_UPGRADE_AUTHORITY;
+  | typeof MERIDIAN_ERROR__NOT_UPGRADE_AUTHORITY
+  | typeof MERIDIAN_ERROR__PAUSED;
 
 let meridianErrorMessages: Record<MeridianError, string> | undefined;
 if (process.env["NODE_ENV"] !== "production") {
   meridianErrorMessages = {
+    [MERIDIAN_ERROR__BOOK_FULL]: `This market's order book is full.`,
+    [MERIDIAN_ERROR__BOOK_SHORT]: `The book's token accounts hold less than its orders and balances`,
+    [MERIDIAN_ERROR__DUPLICATE_ACCOUNT]: `An account is passed twice`,
+    [MERIDIAN_ERROR__DUPLICATE_ORDER_ID]: `An order with this ID is already resting`,
+    [MERIDIAN_ERROR__FILL_LIMIT_NOT_SET]: `The fill limit is not set`,
     [MERIDIAN_ERROR__INVALID_LADDER]: `The strike ladder must be 1 to 50 percent, in rising order`,
+    [MERIDIAN_ERROR__INVALID_PRICE]: `Prices are 1 to 99 cents`,
+    [MERIDIAN_ERROR__INVALID_QUANTITY]: `Quantities must be above 0`,
     [MERIDIAN_ERROR__INVALID_RECEIVERS]: `Accepted price programs: one or two, distinct, none missing`,
     [MERIDIAN_ERROR__INVALID_THRESHOLDS]: `A threshold is out of range`,
     [MERIDIAN_ERROR__INVALID_TICKERS]: `Tickers: one to eight, distinct, 1 to 8 capital letters, a feed ID and a strike step each`,
     [MERIDIAN_ERROR__MAINNET_USDC_ON_DEVNET]: `The devnet build refuses mainnet USDC`,
     [MERIDIAN_ERROR__MISSING_KEY]: `A key in the config is missing`,
     [MERIDIAN_ERROR__NOT_UPGRADE_AUTHORITY]: `Only the program's upgrade key may initialize the config`,
+    [MERIDIAN_ERROR__PAUSED]: `Trading is paused by the admin. You can still cancel orders, close pairs and redeem.`,
   };
 }
 

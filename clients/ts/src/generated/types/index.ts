@@ -6,5 +6,10 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./cancelReason.ts";
+export * from "./order.ts";
+export * from "./orderKind.ts";
+export * from "./side.ts";
 export * from "./thresholds.ts";
 export * from "./ticker.ts";
+export * from "./trader.ts";

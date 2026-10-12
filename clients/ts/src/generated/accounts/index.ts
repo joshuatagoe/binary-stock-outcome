@@ -6,4 +6,5 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./book.ts";
 export * from "./config.ts";
