@@ -7,6 +7,7 @@
     ".": "./src/generated/index.ts"
   },
   "dependencies": {
-    "@solana/kit": "8.3.0"
+    "@solana/kit": "8.3.0",
+    "@solana/program-client-core": "8.3.0"
   }
 }

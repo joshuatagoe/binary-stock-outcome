@@ -575,19 +575,20 @@ These began as estimates from `accounts.mjs`. Rent is 5,080 lamports a byte (M0.
 | Market | "market", ticker, day, strike | Identity, mint-open, open and close times, the bumps of its linked accounts, the owed counter (D64), state and hold reason, the result with its price, band and publish time, any proposal, who created it (D139) | 258 B, measured (M1.02) | 0.0020 SOL | Kept for good: redeem stays open (D66) |
 | Yes mint, No mint | "yes" / "no", market | Token-2022 with Permissioned Burn (D94) and a name wallets show, such as "META 680+ Yes 10/08" (D108). Decimals 0. The mint, burn and close authority is the market's address (D140); no freeze authority | 412 B and 410 B, measured (M1.02) | 0.0028 SOL each | Kept for good, unless removed before minting (D140) |
 | Vault | "vault", market | USDC, at least 1.00 per pair outstanding (D64) | 165 B, measured | 0.0015 SOL | Kept for good |
-| Book | "book", market | 64 orders a side and 64 traders (D107) | 6,728 B, measured | 0.0348 SOL | Returned after settlement and the returns (D50, D99) |
-| Book USDC, Book Yes | "book_usdc" / "book_yes", market | USDC locked by bids, Yes locked by offers, and owners' free balances | 165 B each, measured | 0.0030 SOL together | Returned with the book |
+| Book | "book", market | 64 orders a side and 64 traders (D107, D142) | 7,240 B, measured | 0.0374 SOL | Returned after settlement and the returns (D50, D99) |
+| Book USDC, Book Yes | "book_usdc" / "book_yes", market | USDC locked by bids, Yes locked by offers, and owners' free balances | 165 B each, measured | 0.0030 SOL together |
+| Book No | "book_no", market | Paired offers' No: a Buy No limit order's unsold pairs (D142) | 165 B, measured | 0.0015 SOL | Returned with the book | Returned with the book |
 | A trader's Yes and No accounts | The wallet's associated accounts | Their tokens | 170 B each | 0.0030 SOL per market | Returned when closed, which Redeem does (D94) |
 
-Per market, as built (M1.02): 0.0089 SOL is kept for good (the market, its two named mints and the vault), and 0.0378 SOL goes out and comes back (the book and its two token accounts). At 46 markets a day, with the 7 recorded closes, that is about **0.42 SOL a day kept for good** and **1.74 SOL a day out and back**. The plan's estimates were 0.61 and 2.38.
+Per market, as built (M1.02): 0.0089 SOL is kept for good (the market, its two named mints and the vault), and 0.0419 SOL goes out and comes back (the book and its three token accounts). At 46 markets a day, with the 7 recorded closes, that is about **0.42 SOL a day kept for good** and **1.93 SOL a day out and back**. The plan's estimates were 0.61 and 2.38.
 
-The vault and the book's USDC are separate accounts, so anyone can check "vault = pairs outstanding × 1.00" by reading one balance. At 6,728 bytes the book is under the 10,240 bytes a program can create in one call (AR.11), so Create Market creates it. D22's client-created book is needed only for books above that size.
+The vault and the book's USDC are separate accounts, so anyone can check "vault = pairs outstanding × 1.00" by reading one balance. At 7,240 bytes the book is under the 10,240 bytes a program can create in one call (AR.11), so Create Market creates it. D22's client-created book is needed only for books above that size.
 
 ### The order book's layout
 
 **Orders.** One order takes 24 bytes: a sequence number for time priority, the sender's order ID (D101), the quantity, the trader's index and the price in cents. Bids are kept sorted highest first and asks lowest first, so the best price is always at the front, and adding an order shifts at most 64 entries.
 
-**Traders.** One trader entry takes 56 bytes: the owner, their free USDC, their free Yes and their open-order count. An entry is reused once its balances are zero and it has no open orders.
+**Traders.** One trader entry takes 64 bytes: the owner, their free USDC, Yes and No (D142), and their open-order count. An entry is reused once its balances are zero and it has no open orders.
 
 **Full book.** A full side or a full trader table refuses new resting orders with "This market's order book is full"; Market orders still trade.
 
@@ -1029,7 +1030,7 @@ The Pyth SDK compiles in one receiver address, and its account type checks the o
 | Store | SQLite through `better-sqlite3` 13.0.3, backed up by Fly.io's daily volume snapshots, with Litestream 0.5.17 to Cloudflare R2 ready to switch on (D134) | Under 1 GB at about 2,000 rows a day: one file, and no extra service to keep awake. Neon's free Postgres suspends after 5 minutes and caps compute, and a writer every minute would likely run out mid-month. Supabase pauses after a week. `node:sqlite` is still a release candidate (AR.15) |
 | Logs | pino 10.3.1 | One JSON line per job step (D70) |
 | Input checks | zod 4.6.5 | Report and error-report bodies (D91, D120) |
-| Scheduler | None | The repeatable check (D97) is a 30-second loop. New York time comes from the built-in `Intl`, tested on the clock-change days of 1 November 2026 and 8 March 2027 |
+| Scheduler | None | The repeatable check (D97) is a 30-second loop. New York time comes from `packages/shared`'s own rule for the clock changes, checked against the built-in `Intl` and tested on the clock-change days of 1 November 2026 and 14 March 2027 |
 
 ### Tests and tools
 
@@ -1093,7 +1094,7 @@ A test counts only once it has been seen failing before it passes, and the money
 | **Program, whole lifecycle** | Create, mint, trade, close pairs, record, settle or hold, override, redeem, all with the fake clock.<br>Also early-close days and the backstops (D68).<br>After every step: the vault holds at least what it owes, and supply stays at or below the counter (D64). | LiteSVM 0.16.0 |
 | **Property tests** | Random sequences of instructions, with the vault and book checks after each one (D64) | proptest 1.11.0 |
 | **Fuzzing** | Coverage-guided search for crashes and broken checks, run nightly (D126) | Crucible v0.2.1 |
-| **Backend, against a real store and the local chain** | The repeatable check with a fake clock:<br>- holidays and early closes<br>- the clock changes of 1 November 2026 and 8 March 2027<br>- a crash at 8:41 (D97)<br><br>The send queue: its pace and the rate-limit replies (D56).<br>Also:<br>- provider failover, the halt detector and the standby's takeover (D75, D98)<br>- the stream's snapshot and resume (D16)<br>- report and error-report limits (D91, D120)<br>- reconciliation (D109) | Vitest 5.0.2, SQLite, Surfpool 1.6.0 |
+| **Backend, against a real store and the local chain** | The repeatable check with a fake clock:<br>- holidays and early closes<br>- the clock changes of 1 November 2026 and 14 March 2027<br>- a crash at 8:41 (D97)<br><br>The send queue: its pace and the rate-limit replies (D56).<br>Also:<br>- provider failover, the halt detector and the standby's takeover (D75, D98)<br>- the stream's snapshot and resume (D16)<br>- report and error-report limits (D91, D120)<br>- reconciliation (D109) | Vitest 5.0.2, SQLite, Surfpool 1.6.0 |
 | **Website** | The pure functions against the golden files; every screen state (D36); the transaction tracker's states (§7) | Vitest |
 | **End to end, with accessibility** | Flows F1 to F20 on `make dev`: keyboard only, at 320 px wide and at 200% zoom, with an accessibility scan on every page (D116) | Playwright 1.63.0, `@axe-core/playwright` 4.13.0 |
 | **Load, race and outage tests** | §1's L1 and L2 load tests, its seven race tests and its five outage drills | Our own scripts |

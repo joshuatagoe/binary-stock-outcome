@@ -1,12 +1,13 @@
-//! Place order (ARCHITECTURE.md §6, instruction 10), in M1-a's form for the order-book spike (D21): the matching, the
-//! token moves, the events and the book check, without the market account and its trading window, which arrive with
-//! Create market (M1-b) and the full instruction (M1-c).
+//! Place order and Cancel order (ARCHITECTURE.md §6, instructions 10 and 13): matching on the market's book within
+//! its trading window, the taker's tokens moved straight to and from its own wallet, makers credited in the book
+//! (D99), events in match order, and the book's balance checked after each (D137).
 use anchor_lang::prelude::*;
 
 use crate::{
-    book::{Book, Match, PlaceOrderArgs, BOOK_SEED, BOOK_USDC_SEED, BOOK_YES_SEED},
+    book::{Book, Match, PlaceOrderArgs, BOOK_NO_SEED, BOOK_SEED, BOOK_USDC_SEED, BOOK_YES_SEED},
     errors::MeridianError,
     events::{CancelReason, EventWriter, Fill, OrderCancelled, OrderPlaced},
+    market::{Market, MarketStatus, MARKET_SEED, NO_SEED, VAULT_SEED, YES_SEED},
     token::{self, OUTCOME_DECIMALS, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID, USDC_DECIMALS},
     Config, CONFIG_SEED,
 };
@@ -16,9 +17,11 @@ use crate::{
 pub struct PlaceOrder<'info> {
     #[account(seeds = [CONFIG_SEED], bump = config.bump)]
     pub config: Box<Account<'info, Config>>,
-    /// CHECK: the market's address, which the book's addresses come from. Its account and trading window arrive with
-    /// Create market (M1-b) and the full Place order (M1-c).
-    pub market: UncheckedAccount<'info>,
+    #[account(
+        seeds = [MARKET_SEED, market.ticker_bytes(), &market.day.to_le_bytes(), &market.strike_cents.to_le_bytes()],
+        bump = market.bump
+    )]
+    pub market: Box<Account<'info, Market>>,
     #[account(mut, seeds = [BOOK_SEED, market.key().as_ref()], bump = book.load()?.bump)]
     pub book: AccountLoader<'info, Book>,
     /// CHECK: the book's USDC account, at its own address; the token program checks its mint on every transfer.
@@ -38,7 +41,9 @@ pub struct PlaceOrder<'info> {
     /// CHECK: Config's USDC mint.
     #[account(address = config.usdc_mint)]
     pub usdc_mint: UncheckedAccount<'info>,
-    /// CHECK: the market's Yes mint; TransferChecked refuses any other. Its address is fixed by Create market (M1-b).
+    /// CHECK: the market's Yes mint, at its address. TransferChecked also refuses a token account of any other mint, and
+    /// one not owned by the token program it is sent to, which covers §5's token-account rule for every account here.
+    #[account(seeds = [YES_SEED, market.key().as_ref()], bump = market.yes_bump)]
     pub yes_mint: UncheckedAccount<'info>,
     /// CHECK: the classic token program, for USDC.
     #[account(address = TOKEN_PROGRAM_ID)]
@@ -50,6 +55,10 @@ pub struct PlaceOrder<'info> {
 
 pub fn handle_place_order(ctx: Context<PlaceOrder>, args: PlaceOrderArgs) -> Result<()> {
     require!(!ctx.accounts.config.paused, MeridianError::Paused);
+    check_order_window(&ctx.accounts.market, &ctx.accounts.config)?;
+    for account in [&ctx.accounts.taker_usdc, &ctx.accounts.taker_yes] {
+        require_keys_eq!(token::owner(account)?, ctx.accounts.taker.key(), MeridianError::NotYourAccount);
+    }
     let market = ctx.accounts.market.key();
     let taker = ctx.accounts.taker.key();
     let (placement, bump) = {
@@ -105,3 +114,74 @@ pub fn check_book(book: &AccountLoader<Book>, book_usdc: &AccountInfo, book_yes:
     require!(token::amount(book_yes)? >= b.locked_yes() + b.free_yes(), MeridianError::BookShort);
     Ok(())
 }
+
+/// Orders are taken from the open until 5 seconds before the stored close, by the chain's clock (D37, D46, D102).
+pub fn check_order_window(market: &Market, config: &Config) -> Result<()> {
+    let now = Clock::get()?.unix_timestamp;
+    require!(now >= market.open, MeridianError::NotOpenYet);
+    let orders_close = market.close - config.thresholds.orders_close_before_secs as i64;
+    require!(now < orders_close && market.status == MarketStatus::Trading, MeridianError::OrdersClosed);
+    Ok(())
+}
+
+/// The vault, the mints and the book's token accounts are listed for a paired offer, whose cancel closes its pairs
+/// and credits their 1.00 each to the owner's balance (D39, D142).
+#[event_cpi]
+#[derive(Accounts)]
+pub struct CancelOrder<'info> {
+    #[account(seeds = [CONFIG_SEED], bump = config.bump)]
+    pub config: Box<Account<'info, Config>>,
+    #[account(
+        mut,
+        seeds = [MARKET_SEED, market.ticker_bytes(), &market.day.to_le_bytes(), &market.strike_cents.to_le_bytes()],
+        bump = market.bump
+    )]
+    pub market: Box<Account<'info, Market>>,
+    #[account(mut, seeds = [BOOK_SEED, market.key().as_ref()], bump = book.load()?.bump)]
+    pub book: AccountLoader<'info, Book>,
+    pub owner: Signer<'info>,
+    /// CHECK: the book's USDC account, at its address.
+    #[account(mut, seeds = [BOOK_USDC_SEED, market.key().as_ref()], bump = book.load()?.book_usdc_bump)]
+    pub book_usdc: UncheckedAccount<'info>,
+    /// CHECK: the book's Yes account, at its address.
+    #[account(mut, seeds = [BOOK_YES_SEED, market.key().as_ref()], bump = book.load()?.book_yes_bump)]
+    pub book_yes: UncheckedAccount<'info>,
+    /// CHECK: the book's No account, at its address.
+    #[account(mut, seeds = [BOOK_NO_SEED, market.key().as_ref()], bump = book.load()?.book_no_bump)]
+    pub book_no: UncheckedAccount<'info>,
+    /// CHECK: the market's vault, at its address.
+    #[account(mut, seeds = [VAULT_SEED, market.key().as_ref()], bump = market.vault_bump)]
+    pub vault: UncheckedAccount<'info>,
+    /// CHECK: the market's Yes mint, at its address.
+    #[account(mut, seeds = [YES_SEED, market.key().as_ref()], bump = market.yes_bump)]
+    pub yes_mint: UncheckedAccount<'info>,
+    /// CHECK: the market's No mint, at its address.
+    #[account(mut, seeds = [NO_SEED, market.key().as_ref()], bump = market.no_bump)]
+    pub no_mint: UncheckedAccount<'info>,
+    /// CHECK: Config's USDC mint.
+    #[account(address = config.usdc_mint)]
+    pub usdc_mint: UncheckedAccount<'info>,
+    /// CHECK: the classic token program.
+    #[account(address = TOKEN_PROGRAM_ID)]
+    pub token_program: UncheckedAccount<'info>,
+    /// CHECK: Token-2022.
+    #[account(address = TOKEN_2022_PROGRAM_ID)]
+    pub token_2022_program: UncheckedAccount<'info>,
+}
+
+/// Any time while the order rests, never paused (D68): what it locked moves to the owner's balance in the book, which
+/// Return to owner then pays out (D99). No tokens move, so the book's balance holds as it was.
+pub fn handle_cancel_order(ctx: Context<CancelOrder>, order_id: u64) -> Result<()> {
+    let owner = ctx.accounts.owner.key();
+    let cancelled = ctx.accounts.book.load_mut()?.cancel(&owner, order_id)?;
+    EventWriter::new(ctx.accounts.event_authority.to_account_info()).emit(&OrderCancelled {
+        market: ctx.accounts.market.key(),
+        owner,
+        order_id,
+        side: cancelled.0,
+        price: cancelled.1,
+        quantity: cancelled.2,
+        reason: CancelReason::Owner,
+    })
+}
+

@@ -86,8 +86,10 @@ export interface HealthResponse {
   role: 'primary' | 'standby';
   commit: string;
   last_pass_at: string | null;
-  chain: { slot: number; seen_at: string };
-  database: { answers: boolean; migrations: { applied: number; current: number } };
+  /** Null until the first check reaches the chain. */
+  chain: { slot: number; seen_at: string } | null;
+  /** Null migrations when the database doesn't answer. */
+  database: { answers: boolean; migrations: { applied: string[]; current: boolean } | null };
 }
 
 /** The query of `GET /api/timeline` and `GET /api/wallets/{address}/history`; every field is optional. */

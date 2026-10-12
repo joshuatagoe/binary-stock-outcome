@@ -70,14 +70,55 @@ export const MERIDIAN_ERROR__VAULT_SHORT = 0x1789; // 6025
 export const MERIDIAN_ERROR__SUPPLY_OVER_OWED = 0x178a; // 6026
 /** NotYourAccount: A token account belongs to someone else */
 export const MERIDIAN_ERROR__NOT_YOUR_ACCOUNT = 0x178b; // 6027
+/** NotAdmin: Not the admin */
+export const MERIDIAN_ERROR__NOT_ADMIN = 0x178c; // 6028
+/** NotPendingAdmin: Only the proposed admin can accept */
+export const MERIDIAN_ERROR__NOT_PENDING_ADMIN = 0x178d; // 6029
+/** FillLimitTooHigh: The fill limit is 1 to 32 (M1.01) */
+export const MERIDIAN_ERROR__FILL_LIMIT_TOO_HIGH = 0x178e; // 6030
+/** OrderNotFound: No resting order of yours has that ID */
+export const MERIDIAN_ERROR__ORDER_NOT_FOUND = 0x178f; // 6031
+/** RemoveTooLate: Strikes can be removed only before 9:00 AM ET, before anyone can trade. */
+export const MERIDIAN_ERROR__REMOVE_TOO_LATE = 0x1790; // 6032
+/** WaitNotOver: The proposal's wait isn't over */
+export const MERIDIAN_ERROR__WAIT_NOT_OVER = 0x1791; // 6033
+/** PriceNotGenuine: The price account isn't a verified Pyth update from an accepted receiver */
+export const MERIDIAN_ERROR__PRICE_NOT_GENUINE = 0x1792; // 6034
+/** WrongFeed: The price account is for another feed */
+export const MERIDIAN_ERROR__WRONG_FEED = 0x1793; // 6035
+/** OutsideWindow: The price was published outside the window before the close */
+export const MERIDIAN_ERROR__OUTSIDE_WINDOW = 0x1794; // 6036
+/** BandTooWide: The price's band is too wide */
+export const MERIDIAN_ERROR__BAND_TOO_WIDE = 0x1795; // 6037
+/** BeforeClose: The close hasn't happened yet */
+export const MERIDIAN_ERROR__BEFORE_CLOSE = 0x1796; // 6038
+/** AlreadySettled: The market already has a result */
+export const MERIDIAN_ERROR__ALREADY_SETTLED = 0x1797; // 6039
+/** BookNotEmpty: The book still has orders or balances */
+export const MERIDIAN_ERROR__BOOK_NOT_EMPTY = 0x1798; // 6040
+/** NotUnderReview: The market isn't under review */
+export const MERIDIAN_ERROR__NOT_UNDER_REVIEW = 0x1799; // 6041
+/** NoProposal: There is no proposal */
+export const MERIDIAN_ERROR__NO_PROPOSAL = 0x179a; // 6042
+/** SourceTooLong: The source is longer than 32 bytes */
+export const MERIDIAN_ERROR__SOURCE_TOO_LONG = 0x179b; // 6043
+/** PriceNotLater: A recorded close is replaced only by a later price */
+export const MERIDIAN_ERROR__PRICE_NOT_LATER = 0x179c; // 6044
+/** RecordFrozen: The recorded close is frozen: a market of this stock has settled on it */
+export const MERIDIAN_ERROR__RECORD_FROZEN = 0x179d; // 6045
 
 export type MeridianError =
+  | typeof MERIDIAN_ERROR__ALREADY_SETTLED
+  | typeof MERIDIAN_ERROR__BAND_TOO_WIDE
+  | typeof MERIDIAN_ERROR__BEFORE_CLOSE
   | typeof MERIDIAN_ERROR__BOOK_FULL
+  | typeof MERIDIAN_ERROR__BOOK_NOT_EMPTY
   | typeof MERIDIAN_ERROR__BOOK_SHORT
   | typeof MERIDIAN_ERROR__CREATE_AFTER_OPEN
   | typeof MERIDIAN_ERROR__DUPLICATE_ACCOUNT
   | typeof MERIDIAN_ERROR__DUPLICATE_ORDER_ID
   | typeof MERIDIAN_ERROR__FILL_LIMIT_NOT_SET
+  | typeof MERIDIAN_ERROR__FILL_LIMIT_TOO_HIGH
   | typeof MERIDIAN_ERROR__INVALID_LADDER
   | typeof MERIDIAN_ERROR__INVALID_PRICE
   | typeof MERIDIAN_ERROR__INVALID_QUANTITY
@@ -89,27 +130,45 @@ export type MeridianError =
   | typeof MERIDIAN_ERROR__MAINNET_USDC_ON_DEVNET
   | typeof MERIDIAN_ERROR__MARKET_SETTLED
   | typeof MERIDIAN_ERROR__MISSING_KEY
+  | typeof MERIDIAN_ERROR__NO_PROPOSAL
+  | typeof MERIDIAN_ERROR__NOT_ADMIN
   | typeof MERIDIAN_ERROR__NOT_FINAL
   | typeof MERIDIAN_ERROR__NOT_IMPLEMENTED
   | typeof MERIDIAN_ERROR__NOT_OPEN_YET
   | typeof MERIDIAN_ERROR__NOT_OPERATOR
+  | typeof MERIDIAN_ERROR__NOT_PENDING_ADMIN
+  | typeof MERIDIAN_ERROR__NOT_UNDER_REVIEW
   | typeof MERIDIAN_ERROR__NOT_UPGRADE_AUTHORITY
   | typeof MERIDIAN_ERROR__NOT_YOUR_ACCOUNT
+  | typeof MERIDIAN_ERROR__ORDER_NOT_FOUND
   | typeof MERIDIAN_ERROR__ORDERS_CLOSED
+  | typeof MERIDIAN_ERROR__OUTSIDE_WINDOW
   | typeof MERIDIAN_ERROR__PAUSED
+  | typeof MERIDIAN_ERROR__PRICE_NOT_GENUINE
+  | typeof MERIDIAN_ERROR__PRICE_NOT_LATER
+  | typeof MERIDIAN_ERROR__RECORD_FROZEN
+  | typeof MERIDIAN_ERROR__REMOVE_TOO_LATE
+  | typeof MERIDIAN_ERROR__SOURCE_TOO_LONG
   | typeof MERIDIAN_ERROR__SUPPLY_OVER_OWED
   | typeof MERIDIAN_ERROR__TICKER_NOT_ENABLED
-  | typeof MERIDIAN_ERROR__VAULT_SHORT;
+  | typeof MERIDIAN_ERROR__VAULT_SHORT
+  | typeof MERIDIAN_ERROR__WAIT_NOT_OVER
+  | typeof MERIDIAN_ERROR__WRONG_FEED;
 
 let meridianErrorMessages: Record<MeridianError, string> | undefined;
 if (process.env["NODE_ENV"] !== "production") {
   meridianErrorMessages = {
+    [MERIDIAN_ERROR__ALREADY_SETTLED]: `The market already has a result`,
+    [MERIDIAN_ERROR__BAND_TOO_WIDE]: `The price's band is too wide`,
+    [MERIDIAN_ERROR__BEFORE_CLOSE]: `The close hasn't happened yet`,
     [MERIDIAN_ERROR__BOOK_FULL]: `This market's order book is full.`,
+    [MERIDIAN_ERROR__BOOK_NOT_EMPTY]: `The book still has orders or balances`,
     [MERIDIAN_ERROR__BOOK_SHORT]: `The book's token accounts hold less than its orders and balances`,
     [MERIDIAN_ERROR__CREATE_AFTER_OPEN]: `A market must be created before it opens`,
     [MERIDIAN_ERROR__DUPLICATE_ACCOUNT]: `An account is passed twice`,
     [MERIDIAN_ERROR__DUPLICATE_ORDER_ID]: `An order with this ID is already resting`,
     [MERIDIAN_ERROR__FILL_LIMIT_NOT_SET]: `The fill limit is not set`,
+    [MERIDIAN_ERROR__FILL_LIMIT_TOO_HIGH]: `The fill limit is 1 to 32 (M1.01)`,
     [MERIDIAN_ERROR__INVALID_LADDER]: `The strike ladder must be 1 to 50 percent, in rising order`,
     [MERIDIAN_ERROR__INVALID_PRICE]: `Prices are 1 to 99 cents`,
     [MERIDIAN_ERROR__INVALID_QUANTITY]: `Quantities must be above 0`,
@@ -121,17 +180,30 @@ if (process.env["NODE_ENV"] !== "production") {
     [MERIDIAN_ERROR__MAINNET_USDC_ON_DEVNET]: `The devnet build refuses mainnet USDC`,
     [MERIDIAN_ERROR__MARKET_SETTLED]: `Pairs can be closed only before the result is final`,
     [MERIDIAN_ERROR__MISSING_KEY]: `A key in the config is missing`,
+    [MERIDIAN_ERROR__NO_PROPOSAL]: `There is no proposal`,
+    [MERIDIAN_ERROR__NOT_ADMIN]: `Not the admin`,
     [MERIDIAN_ERROR__NOT_FINAL]: `Redeem opens when the result is final.`,
     [MERIDIAN_ERROR__NOT_IMPLEMENTED]: `Not built yet`,
     [MERIDIAN_ERROR__NOT_OPEN_YET]: `Not open yet`,
     [MERIDIAN_ERROR__NOT_OPERATOR]: `Not the operator`,
+    [MERIDIAN_ERROR__NOT_PENDING_ADMIN]: `Only the proposed admin can accept`,
+    [MERIDIAN_ERROR__NOT_UNDER_REVIEW]: `The market isn't under review`,
     [MERIDIAN_ERROR__NOT_UPGRADE_AUTHORITY]: `Only the program's upgrade key may initialize the config`,
     [MERIDIAN_ERROR__NOT_YOUR_ACCOUNT]: `A token account belongs to someone else`,
+    [MERIDIAN_ERROR__ORDER_NOT_FOUND]: `No resting order of yours has that ID`,
     [MERIDIAN_ERROR__ORDERS_CLOSED]: `Trading ended before your order reached the network. Nothing was bought; only the network fee was charged.`,
+    [MERIDIAN_ERROR__OUTSIDE_WINDOW]: `The price was published outside the window before the close`,
     [MERIDIAN_ERROR__PAUSED]: `Trading is paused by the admin. You can still cancel orders, close pairs and redeem.`,
+    [MERIDIAN_ERROR__PRICE_NOT_GENUINE]: `The price account isn't a verified Pyth update from an accepted receiver`,
+    [MERIDIAN_ERROR__PRICE_NOT_LATER]: `A recorded close is replaced only by a later price`,
+    [MERIDIAN_ERROR__RECORD_FROZEN]: `The recorded close is frozen: a market of this stock has settled on it`,
+    [MERIDIAN_ERROR__REMOVE_TOO_LATE]: `Strikes can be removed only before 9:00 AM ET, before anyone can trade.`,
+    [MERIDIAN_ERROR__SOURCE_TOO_LONG]: `The source is longer than 32 bytes`,
     [MERIDIAN_ERROR__SUPPLY_OVER_OWED]: `A token's supply is above what the market owes`,
     [MERIDIAN_ERROR__TICKER_NOT_ENABLED]: `This stock isn't enabled in the config`,
     [MERIDIAN_ERROR__VAULT_SHORT]: `The vault holds less than the market owes`,
+    [MERIDIAN_ERROR__WAIT_NOT_OVER]: `The proposal's wait isn't over`,
+    [MERIDIAN_ERROR__WRONG_FEED]: `The price account is for another feed`,
   };
 }
 

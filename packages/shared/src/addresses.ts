@@ -34,6 +34,8 @@ export interface MarketAccounts {
   book: Address;
   bookUsdc: Address;
   bookYes: Address;
+  /** Paired offers' No (D142). */
+  bookNo: Address;
 }
 
 /** The six per-market accounts, each from its word and the market's address. */
@@ -43,8 +45,8 @@ export async function marketAccounts(market: Address): Promise<MarketAccounts> {
     const [address] = await getProgramDerivedAddress({ programAddress: PROGRAM_ADDRESS, seeds: [text.encode(word), marketBytes] });
     return address;
   };
-  const [yesMint, noMint, vault, book, bookUsdc, bookYes] = await Promise.all(
-    ['yes', 'no', 'vault', 'book', 'book_usdc', 'book_yes'].map(derive),
+  const [yesMint, noMint, vault, book, bookUsdc, bookYes, bookNo] = await Promise.all(
+    ['yes', 'no', 'vault', 'book', 'book_usdc', 'book_yes', 'book_no'].map(derive),
   );
-  return { yesMint: yesMint!, noMint: noMint!, vault: vault!, book: book!, bookUsdc: bookUsdc!, bookYes: bookYes! };
+  return { yesMint: yesMint!, noMint: noMint!, vault: vault!, book: book!, bookUsdc: bookUsdc!, bookYes: bookYes!, bookNo: bookNo! };
 }

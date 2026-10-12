@@ -33,8 +33,10 @@ export type DefaultWorst =
 
 /**
  * The four buttons. Buy Yes and Sell No go to the asks (Sell No buys Yes first, D38); Sell Yes and Buy No go to the bids (Buy No sells
- * the Yes it mints, D5). `worstYesCents` is the Yes price the program receives; `traderCents` is the price the ticket shows
- * (the No price, 100 minus the Yes price, on the two No buttons); `totalCents` is that price times the quantity.
+ * the Yes it mints, D5). `worstYesCents` is the Yes price; `traderCents` is the price the ticket shows (the No price, 100
+ * minus the Yes price, on the two No buttons); `totalCents` is that price times the quantity. What each instruction takes
+ * as its price: Place order and Sell No take `worstYesCents` (the worst Yes price); Buy No takes `traderCents`, the most it
+ * pays per No (BuyNoArgs.price, programs/meridian/src/trade_paths.rs).
  */
 export function defaultWorst(action: TradeAction, book: Book, quantity: number): DefaultWorst {
   const walksAsks = action === 'buyYes' || action === 'sellNo';

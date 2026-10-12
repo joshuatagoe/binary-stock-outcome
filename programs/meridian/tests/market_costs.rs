@@ -22,9 +22,10 @@ fn what_a_market_costs() {
         ("yes mint", pda(YES_SEED, &market), 412, true),
         ("no mint", pda(NO_SEED, &market), 410, true),
         ("vault", pda(VAULT_SEED, &market), 165, true),
-        ("book", pda(BOOK_SEED, &market), 6_728, false),
+        ("book", pda(BOOK_SEED, &market), 7_240, false),
         ("book usdc", pda(BOOK_USDC_SEED, &market), 165, false),
         ("book yes", pda(BOOK_YES_SEED, &market), 165, false),
+        ("book no", pda(meridian::BOOK_NO_SEED, &market), 165, false),
     ] {
         let account = c.account(&key).unwrap();
         assert_eq!(account.lamports, rent(&c.m, account.data.len()), "{name}: exactly its deposit");

@@ -30,6 +30,9 @@ fn events(o: Order) -> Vec<String> {
             svm.set_account(*key, account.clone()).unwrap();
         }
     }
+    let mut clock: anchor_lang::prelude::Clock = svm.get_sysvar();
+    clock.unix_timestamp = common::AT_10_16;
+    svm.set_sysvar(&clock);
     let msg = Message::new_with_blockhash(&[mk.ix.clone()], Some(&taker.pubkey()), &svm.latest_blockhash());
     let tx = VersionedTransaction::try_new(VersionedMessage::Legacy(msg.clone()), &[&taker]).unwrap();
     let meta = svm.send_transaction(tx).unwrap_or_else(|e| panic!("{:?}\n{}", e.err, e.meta.logs.join("\n")));

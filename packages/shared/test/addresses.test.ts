@@ -32,7 +32,7 @@ describe('market addresses (D139)', () => {
     expect(await marketAddress('META', 20261008, 69000n)).not.toBe(a);
   });
 
-  it('known values for the six linked accounts of that market (a one-off script with Node Buffers, not this code)', async () => {
+  it('known values for the seven linked accounts of that market (a one-off script with Node Buffers, not this code)', async () => {
     const a = await marketAccounts(await marketAddress('META', 20261008, 68000n));
     expect(a).toEqual({
       yesMint: '8hDf4WfhCE1Y7zzW9Yck9gibcWmPDnJJJznBomyT7EcL',
@@ -41,6 +41,7 @@ describe('market addresses (D139)', () => {
       book: 'ASsemutV7jjJhdWhikzVHZwtAWzreisfBFGHp2qwqaHo',
       bookUsdc: 'AwFjFRZBH6BKStV2dUhM31WTTqKHrADWELkoHEVTV6rf',
       bookYes: '4pqvkC81Tw1WgiqH461goMYDAoPPhFABY7bCFP5Kw2BB',
+      bookNo: 'GpN8GhNptTJRuQKcnXzrJpSAaiAcqYaW1pM8TXDu2c3J',
     });
   });
 

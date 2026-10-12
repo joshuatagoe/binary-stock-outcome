@@ -51,6 +51,7 @@ import {
   findBookUsdcPda,
   findBookYesPda,
   findConfigPda,
+  findYesMintPda,
 } from "../pdas/index.ts";
 import { MERIDIAN_PROGRAM_ADDRESS } from "../programs/index.ts";
 import {
@@ -216,7 +217,6 @@ export type PlaceOrderAsyncInput<
   TAccountProgram extends InstructionAccountInput = InstructionAccountInput,
 > = {
   config?: TAccountConfig;
-  /** Create market (M1-b) and the full Place order (M1-c). */
   market: TAccountMarket;
   book?: TAccountBook;
   bookUsdc?: TAccountBookUsdc;
@@ -225,7 +225,8 @@ export type PlaceOrderAsyncInput<
   takerUsdc: TAccountTakerUsdc;
   takerYes: TAccountTakerYes;
   usdcMint: TAccountUsdcMint;
-  yesMint: TAccountYesMint;
+  /** one not owned by the token program it is sent to, which covers §5's token-account rule for every account here. */
+  yesMint?: TAccountYesMint;
   tokenProgram?: TAccountTokenProgram;
   token2022Program?: TAccountToken2022Program;
   eventAuthority: TAccountEventAuthority;
@@ -440,6 +441,17 @@ export async function getPlaceOrderInstructionAsync<
       { programAddress },
     );
   }
+  if (!accounts.yesMint.value) {
+    accounts.yesMint.value = await findYesMintPda(
+      {
+        market: getAddressFromResolvedInstructionAccount(
+          "market",
+          accounts.market.value,
+        ),
+      },
+      { programAddress },
+    );
+  }
   if (!accounts.tokenProgram.value) {
     accounts.tokenProgram.value =
       "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA" as Address<"TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA">;
@@ -551,7 +563,6 @@ export type PlaceOrderInput<
   TAccountProgram extends InstructionAccountInput = InstructionAccountInput,
 > = {
   config: TAccountConfig;
-  /** Create market (M1-b) and the full Place order (M1-c). */
   market: TAccountMarket;
   book: TAccountBook;
   bookUsdc: TAccountBookUsdc;
@@ -560,6 +571,7 @@ export type PlaceOrderInput<
   takerUsdc: TAccountTakerUsdc;
   takerYes: TAccountTakerYes;
   usdcMint: TAccountUsdcMint;
+  /** one not owned by the token program it is sent to, which covers §5's token-account rule for every account here. */
   yesMint: TAccountYesMint;
   tokenProgram?: TAccountTokenProgram;
   token2022Program?: TAccountToken2022Program;
@@ -835,7 +847,6 @@ export type ParsedPlaceOrderInstruction<
   programAddress: Address<TProgram>;
   accounts: {
     config: TAccountMetas[0];
-    /** Create market (M1-b) and the full Place order (M1-c). */
     market: TAccountMetas[1];
     book: TAccountMetas[2];
     bookUsdc: TAccountMetas[3];
@@ -844,6 +855,7 @@ export type ParsedPlaceOrderInstruction<
     takerUsdc: TAccountMetas[6];
     takerYes: TAccountMetas[7];
     usdcMint: TAccountMetas[8];
+    /** one not owned by the token program it is sent to, which covers §5's token-account rule for every account here. */
     yesMint: TAccountMetas[9];
     tokenProgram: TAccountMetas[10];
     token2022Program: TAccountMetas[11];

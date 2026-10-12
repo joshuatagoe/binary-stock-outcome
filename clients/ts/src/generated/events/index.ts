@@ -6,10 +6,24 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./adminAccepted.ts";
+export * from "./adminProposed.ts";
+export * from "./balanceReturned.ts";
+export * from "./bookClosed.ts";
+export * from "./closeRecorded.ts";
 export * from "./configInitialized.ts";
+export * from "./configUpdated.ts";
 export * from "./fill.ts";
 export * from "./marketCreated.ts";
+export * from "./marketHeld.ts";
+export * from "./marketRemoved.ts";
+export * from "./marketSettled.ts";
+export * from "./operatorChanged.ts";
 export * from "./orderCancelled.ts";
 export * from "./orderPlaced.ts";
 export * from "./pairsMinted.ts";
+export * from "./paused.ts";
+export * from "./proposalWithdrawn.ts";
 export * from "./redeemed.ts";
+export * from "./resultProposed.ts";
+export * from "./unpaused.ts";

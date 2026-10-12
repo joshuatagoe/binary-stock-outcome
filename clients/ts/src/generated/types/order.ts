@@ -8,10 +8,6 @@
 
 import {
   combineCodec,
-  fixDecoderSize,
-  fixEncoderSize,
-  getBytesDecoder,
-  getBytesEncoder,
   getStructDecoder,
   getStructEncoder,
   getU32Decoder,
@@ -23,7 +19,6 @@ import {
   type FixedSizeCodec,
   type FixedSizeDecoder,
   type FixedSizeEncoder,
-  type ReadonlyUint8Array,
 } from "@solana/kit";
 
 /** A resting order (24 bytes): a bid locks price × quantity in USDC, an offer locks quantity in Yes. */
@@ -36,7 +31,9 @@ export type Order = {
   trader: number;
   /** In cents, 1 to 99. */
   price: number;
-  pad: ReadonlyUint8Array;
+  /** PAIRED, or 0. */
+  flags: number;
+  pad: number;
 };
 
 export type OrderArgs = {
@@ -48,7 +45,9 @@ export type OrderArgs = {
   trader: number;
   /** In cents, 1 to 99. */
   price: number;
-  pad: ReadonlyUint8Array;
+  /** PAIRED, or 0. */
+  flags: number;
+  pad: number;
 };
 
 export function getOrderEncoder(): FixedSizeEncoder<OrderArgs> {
@@ -58,7 +57,8 @@ export function getOrderEncoder(): FixedSizeEncoder<OrderArgs> {
     ["quantity", getU32Encoder()],
     ["trader", getU8Encoder()],
     ["price", getU8Encoder()],
-    ["pad", fixEncoderSize(getBytesEncoder(), 2)],
+    ["flags", getU8Encoder()],
+    ["pad", getU8Encoder()],
   ]);
 }
 
@@ -69,7 +69,8 @@ export function getOrderDecoder(): FixedSizeDecoder<Order> {
     ["quantity", getU32Decoder()],
     ["trader", getU8Decoder()],
     ["price", getU8Decoder()],
-    ["pad", fixDecoderSize(getBytesDecoder(), 2)],
+    ["flags", getU8Decoder()],
+    ["pad", getU8Decoder()],
   ]);
 }
 

@@ -45,28 +45,109 @@ import {
   type MarketArgs,
 } from "../accounts/index.ts";
 import {
+  getAcceptAdminInstructionAsync,
+  getBuyNoInstructionAsync,
+  getCancelOrderInstructionAsync,
+  getCloseBookInstructionAsync,
   getCreateMarketInstructionAsync,
+  getFinalizeInstruction,
+  getHoldInstructionAsync,
   getInitializeConfigInstructionAsync,
   getMintPairsInstructionAsync,
+  getPauseInstructionAsync,
   getPlaceOrderInstructionAsync,
+  getProposeAdminInstructionAsync,
+  getProposeResultInstructionAsync,
+  getRecordCloseInstructionAsync,
   getRedeemInstructionAsync,
+  getRemoveMarketInstructionAsync,
+  getReplaceQuotesInstructionAsync,
+  getReturnToOwnerInstructionAsync,
+  getSellNoInstructionAsync,
+  getSetOperatorInstructionAsync,
+  getSettleInstructionAsync,
+  getSweepInstructionAsync,
+  getUnpauseInstructionAsync,
+  getUpdateConfigInstructionAsync,
+  getWithdrawProposalInstructionAsync,
+  parseAcceptAdminInstruction,
+  parseBuyNoInstruction,
+  parseCancelOrderInstruction,
+  parseCloseBookInstruction,
   parseCreateMarketInstruction,
+  parseFinalizeInstruction,
+  parseHoldInstruction,
   parseInitializeConfigInstruction,
   parseMintPairsInstruction,
+  parsePauseInstruction,
   parsePlaceOrderInstruction,
+  parseProposeAdminInstruction,
+  parseProposeResultInstruction,
+  parseRecordCloseInstruction,
   parseRedeemInstruction,
+  parseRemoveMarketInstruction,
+  parseReplaceQuotesInstruction,
+  parseReturnToOwnerInstruction,
+  parseSellNoInstruction,
+  parseSetOperatorInstruction,
+  parseSettleInstruction,
+  parseSweepInstruction,
+  parseUnpauseInstruction,
+  parseUpdateConfigInstruction,
+  parseWithdrawProposalInstruction,
+  type AcceptAdminAsyncInput,
+  type BuyNoAsyncInput,
+  type CancelOrderAsyncInput,
+  type CloseBookAsyncInput,
   type CreateMarketAsyncInput,
+  type FinalizeInput,
+  type HoldAsyncInput,
   type InitializeConfigAsyncInput,
   type MintPairsAsyncInput,
+  type ParsedAcceptAdminInstruction,
+  type ParsedBuyNoInstruction,
+  type ParsedCancelOrderInstruction,
+  type ParsedCloseBookInstruction,
   type ParsedCreateMarketInstruction,
+  type ParsedFinalizeInstruction,
+  type ParsedHoldInstruction,
   type ParsedInitializeConfigInstruction,
   type ParsedMintPairsInstruction,
+  type ParsedPauseInstruction,
   type ParsedPlaceOrderInstruction,
+  type ParsedProposeAdminInstruction,
+  type ParsedProposeResultInstruction,
+  type ParsedRecordCloseInstruction,
   type ParsedRedeemInstruction,
+  type ParsedRemoveMarketInstruction,
+  type ParsedReplaceQuotesInstruction,
+  type ParsedReturnToOwnerInstruction,
+  type ParsedSellNoInstruction,
+  type ParsedSetOperatorInstruction,
+  type ParsedSettleInstruction,
+  type ParsedSweepInstruction,
+  type ParsedUnpauseInstruction,
+  type ParsedUpdateConfigInstruction,
+  type ParsedWithdrawProposalInstruction,
+  type PauseAsyncInput,
   type PlaceOrderAsyncInput,
+  type ProposeAdminAsyncInput,
+  type ProposeResultAsyncInput,
+  type RecordCloseAsyncInput,
   type RedeemAsyncInput,
+  type RemoveMarketAsyncInput,
+  type ReplaceQuotesAsyncInput,
+  type ReturnToOwnerAsyncInput,
+  type SellNoAsyncInput,
+  type SetOperatorAsyncInput,
+  type SettleAsyncInput,
+  type SweepAsyncInput,
+  type UnpauseAsyncInput,
+  type UpdateConfigAsyncInput,
+  type WithdrawProposalAsyncInput,
 } from "../instructions/index.ts";
 import {
+  findBookNoPda,
   findBookPda,
   findBookUsdcPda,
   findBookYesPda,
@@ -137,20 +218,48 @@ export function identifyMeridianAccount(
 }
 
 export const MeridianEvent = {
-  0: "ConfigInitialized",
-  1: "Fill",
-  2: "MarketCreated",
-  3: "OrderCancelled",
-  4: "OrderPlaced",
-  5: "PairsMinted",
-  6: "Redeemed",
-  ConfigInitialized: 0,
-  Fill: 1,
-  MarketCreated: 2,
-  OrderCancelled: 3,
-  OrderPlaced: 4,
-  PairsMinted: 5,
-  Redeemed: 6,
+  0: "AdminAccepted",
+  1: "AdminProposed",
+  2: "BalanceReturned",
+  3: "BookClosed",
+  4: "CloseRecorded",
+  5: "ConfigInitialized",
+  6: "ConfigUpdated",
+  7: "Fill",
+  8: "MarketCreated",
+  9: "MarketHeld",
+  10: "MarketRemoved",
+  11: "MarketSettled",
+  12: "OperatorChanged",
+  13: "OrderCancelled",
+  14: "OrderPlaced",
+  15: "PairsMinted",
+  16: "Paused",
+  17: "ProposalWithdrawn",
+  18: "Redeemed",
+  19: "ResultProposed",
+  20: "Unpaused",
+  AdminAccepted: 0,
+  AdminProposed: 1,
+  BalanceReturned: 2,
+  BookClosed: 3,
+  CloseRecorded: 4,
+  ConfigInitialized: 5,
+  ConfigUpdated: 6,
+  Fill: 7,
+  MarketCreated: 8,
+  MarketHeld: 9,
+  MarketRemoved: 10,
+  MarketSettled: 11,
+  OperatorChanged: 12,
+  OrderCancelled: 13,
+  OrderPlaced: 14,
+  PairsMinted: 15,
+  Paused: 16,
+  ProposalWithdrawn: 17,
+  Redeemed: 18,
+  ResultProposed: 19,
+  Unpaused: 20,
 } as const;
 
 export type MeridianEvent = (typeof MeridianEvent)[Exclude<
@@ -166,12 +275,78 @@ export function identifyMeridianEvent(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([174, 12, 76, 139, 158, 99, 110, 254]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianEvent.AdminAccepted;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([129, 249, 226, 227, 199, 82, 110, 243]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianEvent.AdminProposed;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([121, 22, 38, 154, 225, 170, 226, 242]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianEvent.BalanceReturned;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([82, 77, 120, 113, 7, 80, 29, 41]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianEvent.BookClosed;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([95, 210, 131, 175, 154, 69, 226, 131]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianEvent.CloseRecorded;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([181, 49, 200, 156, 19, 167, 178, 91]),
       ),
       0,
     )
   ) {
     return MeridianEvent.ConfigInitialized;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([40, 241, 230, 122, 11, 19, 198, 194]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianEvent.ConfigUpdated;
   }
   if (
     containsBytes(
@@ -194,6 +369,50 @@ export function identifyMeridianEvent(
     )
   ) {
     return MeridianEvent.MarketCreated;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([12, 69, 58, 250, 120, 182, 222, 186]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianEvent.MarketHeld;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([216, 73, 177, 100, 76, 12, 211, 140]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianEvent.MarketRemoved;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([237, 212, 22, 175, 201, 117, 215, 99]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianEvent.MarketSettled;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([231, 79, 62, 226, 190, 139, 176, 51]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianEvent.OperatorChanged;
   }
   if (
     containsBytes(
@@ -232,6 +451,28 @@ export function identifyMeridianEvent(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([172, 248, 5, 253, 49, 255, 255, 232]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianEvent.Paused;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([118, 247, 117, 254, 124, 178, 46, 200]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianEvent.ProposalWithdrawn;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([14, 29, 183, 71, 31, 165, 107, 38]),
       ),
       0,
@@ -239,22 +480,84 @@ export function identifyMeridianEvent(
   ) {
     return MeridianEvent.Redeemed;
   }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([216, 229, 56, 182, 48, 192, 53, 251]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianEvent.ResultProposed;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([156, 150, 47, 174, 120, 216, 93, 117]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianEvent.Unpaused;
+  }
   throw new Error(
     "The provided event could not be identified as a meridian event.",
   );
 }
 
 export const MeridianInstruction = {
-  0: "CreateMarket",
-  1: "InitializeConfig",
-  2: "MintPairs",
-  3: "PlaceOrder",
-  4: "Redeem",
-  CreateMarket: 0,
-  InitializeConfig: 1,
-  MintPairs: 2,
-  PlaceOrder: 3,
-  Redeem: 4,
+  0: "AcceptAdmin",
+  1: "BuyNo",
+  2: "CancelOrder",
+  3: "CloseBook",
+  4: "CreateMarket",
+  5: "Finalize",
+  6: "Hold",
+  7: "InitializeConfig",
+  8: "MintPairs",
+  9: "Pause",
+  10: "PlaceOrder",
+  11: "ProposeAdmin",
+  12: "ProposeResult",
+  13: "RecordClose",
+  14: "Redeem",
+  15: "RemoveMarket",
+  16: "ReplaceQuotes",
+  17: "ReturnToOwner",
+  18: "SellNo",
+  19: "SetOperator",
+  20: "Settle",
+  21: "Sweep",
+  22: "Unpause",
+  23: "UpdateConfig",
+  24: "WithdrawProposal",
+  AcceptAdmin: 0,
+  BuyNo: 1,
+  CancelOrder: 2,
+  CloseBook: 3,
+  CreateMarket: 4,
+  Finalize: 5,
+  Hold: 6,
+  InitializeConfig: 7,
+  MintPairs: 8,
+  Pause: 9,
+  PlaceOrder: 10,
+  ProposeAdmin: 11,
+  ProposeResult: 12,
+  RecordClose: 13,
+  Redeem: 14,
+  RemoveMarket: 15,
+  ReplaceQuotes: 16,
+  ReturnToOwner: 17,
+  SellNo: 18,
+  SetOperator: 19,
+  Settle: 20,
+  Sweep: 21,
+  Unpause: 22,
+  UpdateConfig: 23,
+  WithdrawProposal: 24,
 } as const;
 
 export type MeridianInstruction = (typeof MeridianInstruction)[Exclude<
@@ -270,12 +573,78 @@ export function identifyMeridianInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([112, 42, 45, 90, 116, 181, 13, 170]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.AcceptAdmin;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([89, 240, 244, 16, 196, 201, 190, 163]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.BuyNo;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([95, 129, 237, 240, 8, 49, 223, 132]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.CancelOrder;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([216, 209, 72, 159, 209, 206, 135, 66]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.CloseBook;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([103, 226, 97, 235, 200, 188, 251, 254]),
       ),
       0,
     )
   ) {
     return MeridianInstruction.CreateMarket;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([171, 61, 218, 56, 127, 115, 12, 217]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.Finalize;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([83, 159, 208, 118, 203, 182, 239, 221]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.Hold;
   }
   if (
     containsBytes(
@@ -303,12 +672,56 @@ export function identifyMeridianInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([211, 22, 221, 251, 74, 121, 193, 47]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.Pause;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([51, 194, 155, 175, 109, 130, 96, 106]),
       ),
       0,
     )
   ) {
     return MeridianInstruction.PlaceOrder;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([121, 214, 199, 212, 87, 39, 117, 234]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.ProposeAdmin;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([7, 96, 132, 38, 128, 145, 133, 242]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.ProposeResult;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([224, 89, 94, 71, 158, 164, 43, 199]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.RecordClose;
   }
   if (
     containsBytes(
@@ -321,6 +734,116 @@ export function identifyMeridianInstruction(
   ) {
     return MeridianInstruction.Redeem;
   }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([138, 35, 250, 163, 200, 202, 40, 110]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.RemoveMarket;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([61, 242, 52, 182, 4, 168, 58, 63]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.ReplaceQuotes;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([193, 147, 61, 16, 61, 157, 54, 201]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.ReturnToOwner;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([189, 194, 132, 42, 80, 249, 154, 103]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.SellNo;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([238, 153, 101, 169, 243, 131, 36, 1]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.SetOperator;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([175, 42, 185, 87, 144, 131, 102, 212]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.Settle;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([40, 23, 234, 175, 14, 61, 154, 177]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.Sweep;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([169, 144, 4, 38, 10, 141, 188, 255]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.Unpause;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([29, 158, 252, 191, 10, 83, 219, 99]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.UpdateConfig;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([135, 1, 185, 99, 36, 69, 15, 38]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.WithdrawProposal;
+  }
   throw new SolanaError(
     SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_INSTRUCTION,
     { instructionData: data, programName: "meridian" },
@@ -331,8 +854,26 @@ export type ParsedMeridianInstruction<
   TProgram extends string = "kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQX3Ly",
 > =
   | ({
+      instructionType: typeof MeridianInstruction.AcceptAdmin;
+    } & ParsedAcceptAdminInstruction<TProgram>)
+  | ({
+      instructionType: typeof MeridianInstruction.BuyNo;
+    } & ParsedBuyNoInstruction<TProgram>)
+  | ({
+      instructionType: typeof MeridianInstruction.CancelOrder;
+    } & ParsedCancelOrderInstruction<TProgram>)
+  | ({
+      instructionType: typeof MeridianInstruction.CloseBook;
+    } & ParsedCloseBookInstruction<TProgram>)
+  | ({
       instructionType: typeof MeridianInstruction.CreateMarket;
     } & ParsedCreateMarketInstruction<TProgram>)
+  | ({
+      instructionType: typeof MeridianInstruction.Finalize;
+    } & ParsedFinalizeInstruction<TProgram>)
+  | ({
+      instructionType: typeof MeridianInstruction.Hold;
+    } & ParsedHoldInstruction<TProgram>)
   | ({
       instructionType: typeof MeridianInstruction.InitializeConfig;
     } & ParsedInitializeConfigInstruction<TProgram>)
@@ -340,22 +881,106 @@ export type ParsedMeridianInstruction<
       instructionType: typeof MeridianInstruction.MintPairs;
     } & ParsedMintPairsInstruction<TProgram>)
   | ({
+      instructionType: typeof MeridianInstruction.Pause;
+    } & ParsedPauseInstruction<TProgram>)
+  | ({
       instructionType: typeof MeridianInstruction.PlaceOrder;
     } & ParsedPlaceOrderInstruction<TProgram>)
   | ({
+      instructionType: typeof MeridianInstruction.ProposeAdmin;
+    } & ParsedProposeAdminInstruction<TProgram>)
+  | ({
+      instructionType: typeof MeridianInstruction.ProposeResult;
+    } & ParsedProposeResultInstruction<TProgram>)
+  | ({
+      instructionType: typeof MeridianInstruction.RecordClose;
+    } & ParsedRecordCloseInstruction<TProgram>)
+  | ({
       instructionType: typeof MeridianInstruction.Redeem;
-    } & ParsedRedeemInstruction<TProgram>);
+    } & ParsedRedeemInstruction<TProgram>)
+  | ({
+      instructionType: typeof MeridianInstruction.RemoveMarket;
+    } & ParsedRemoveMarketInstruction<TProgram>)
+  | ({
+      instructionType: typeof MeridianInstruction.ReplaceQuotes;
+    } & ParsedReplaceQuotesInstruction<TProgram>)
+  | ({
+      instructionType: typeof MeridianInstruction.ReturnToOwner;
+    } & ParsedReturnToOwnerInstruction<TProgram>)
+  | ({
+      instructionType: typeof MeridianInstruction.SellNo;
+    } & ParsedSellNoInstruction<TProgram>)
+  | ({
+      instructionType: typeof MeridianInstruction.SetOperator;
+    } & ParsedSetOperatorInstruction<TProgram>)
+  | ({
+      instructionType: typeof MeridianInstruction.Settle;
+    } & ParsedSettleInstruction<TProgram>)
+  | ({
+      instructionType: typeof MeridianInstruction.Sweep;
+    } & ParsedSweepInstruction<TProgram>)
+  | ({
+      instructionType: typeof MeridianInstruction.Unpause;
+    } & ParsedUnpauseInstruction<TProgram>)
+  | ({
+      instructionType: typeof MeridianInstruction.UpdateConfig;
+    } & ParsedUpdateConfigInstruction<TProgram>)
+  | ({
+      instructionType: typeof MeridianInstruction.WithdrawProposal;
+    } & ParsedWithdrawProposalInstruction<TProgram>);
 
 export function parseMeridianInstruction<TProgram extends string>(
   instruction: Instruction<TProgram> & InstructionWithData<ReadonlyUint8Array>,
 ): ParsedMeridianInstruction<TProgram> {
   const instructionType = identifyMeridianInstruction(instruction);
   switch (instructionType) {
+    case MeridianInstruction.AcceptAdmin: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.AcceptAdmin,
+        ...parseAcceptAdminInstruction(instruction),
+      };
+    }
+    case MeridianInstruction.BuyNo: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.BuyNo,
+        ...parseBuyNoInstruction(instruction),
+      };
+    }
+    case MeridianInstruction.CancelOrder: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.CancelOrder,
+        ...parseCancelOrderInstruction(instruction),
+      };
+    }
+    case MeridianInstruction.CloseBook: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.CloseBook,
+        ...parseCloseBookInstruction(instruction),
+      };
+    }
     case MeridianInstruction.CreateMarket: {
       assertIsInstructionWithAccounts(instruction);
       return {
         instructionType: MeridianInstruction.CreateMarket,
         ...parseCreateMarketInstruction(instruction),
+      };
+    }
+    case MeridianInstruction.Finalize: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.Finalize,
+        ...parseFinalizeInstruction(instruction),
+      };
+    }
+    case MeridianInstruction.Hold: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.Hold,
+        ...parseHoldInstruction(instruction),
       };
     }
     case MeridianInstruction.InitializeConfig: {
@@ -372,6 +997,13 @@ export function parseMeridianInstruction<TProgram extends string>(
         ...parseMintPairsInstruction(instruction),
       };
     }
+    case MeridianInstruction.Pause: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.Pause,
+        ...parsePauseInstruction(instruction),
+      };
+    }
     case MeridianInstruction.PlaceOrder: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -379,11 +1011,102 @@ export function parseMeridianInstruction<TProgram extends string>(
         ...parsePlaceOrderInstruction(instruction),
       };
     }
+    case MeridianInstruction.ProposeAdmin: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.ProposeAdmin,
+        ...parseProposeAdminInstruction(instruction),
+      };
+    }
+    case MeridianInstruction.ProposeResult: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.ProposeResult,
+        ...parseProposeResultInstruction(instruction),
+      };
+    }
+    case MeridianInstruction.RecordClose: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.RecordClose,
+        ...parseRecordCloseInstruction(instruction),
+      };
+    }
     case MeridianInstruction.Redeem: {
       assertIsInstructionWithAccounts(instruction);
       return {
         instructionType: MeridianInstruction.Redeem,
         ...parseRedeemInstruction(instruction),
+      };
+    }
+    case MeridianInstruction.RemoveMarket: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.RemoveMarket,
+        ...parseRemoveMarketInstruction(instruction),
+      };
+    }
+    case MeridianInstruction.ReplaceQuotes: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.ReplaceQuotes,
+        ...parseReplaceQuotesInstruction(instruction),
+      };
+    }
+    case MeridianInstruction.ReturnToOwner: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.ReturnToOwner,
+        ...parseReturnToOwnerInstruction(instruction),
+      };
+    }
+    case MeridianInstruction.SellNo: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.SellNo,
+        ...parseSellNoInstruction(instruction),
+      };
+    }
+    case MeridianInstruction.SetOperator: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.SetOperator,
+        ...parseSetOperatorInstruction(instruction),
+      };
+    }
+    case MeridianInstruction.Settle: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.Settle,
+        ...parseSettleInstruction(instruction),
+      };
+    }
+    case MeridianInstruction.Sweep: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.Sweep,
+        ...parseSweepInstruction(instruction),
+      };
+    }
+    case MeridianInstruction.Unpause: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.Unpause,
+        ...parseUnpauseInstruction(instruction),
+      };
+    }
+    case MeridianInstruction.UpdateConfig: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.UpdateConfig,
+        ...parseUpdateConfigInstruction(instruction),
+      };
+    }
+    case MeridianInstruction.WithdrawProposal: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.WithdrawProposal,
+        ...parseWithdrawProposalInstruction(instruction),
       };
     }
     default:
@@ -412,10 +1135,31 @@ export type MeridianPluginAccounts = {
 };
 
 export type MeridianPluginInstructions = {
+  acceptAdmin: (
+    input: AcceptAdminAsyncInput,
+  ) => ReturnType<typeof getAcceptAdminInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  buyNo: (
+    input: BuyNoAsyncInput,
+  ) => ReturnType<typeof getBuyNoInstructionAsync> & SelfPlanAndSendFunctions;
+  cancelOrder: (
+    input: CancelOrderAsyncInput,
+  ) => ReturnType<typeof getCancelOrderInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  closeBook: (
+    input: CloseBookAsyncInput,
+  ) => ReturnType<typeof getCloseBookInstructionAsync> &
+    SelfPlanAndSendFunctions;
   createMarket: (
     input: CreateMarketAsyncInput,
   ) => ReturnType<typeof getCreateMarketInstructionAsync> &
     SelfPlanAndSendFunctions;
+  finalize: (
+    input: FinalizeInput,
+  ) => ReturnType<typeof getFinalizeInstruction> & SelfPlanAndSendFunctions;
+  hold: (
+    input: HoldAsyncInput,
+  ) => ReturnType<typeof getHoldInstructionAsync> & SelfPlanAndSendFunctions;
   initializeConfig: (
     input: InitializeConfigAsyncInput,
   ) => ReturnType<typeof getInitializeConfigInstructionAsync> &
@@ -424,23 +1168,75 @@ export type MeridianPluginInstructions = {
     input: MintPairsAsyncInput,
   ) => ReturnType<typeof getMintPairsInstructionAsync> &
     SelfPlanAndSendFunctions;
+  pause: (
+    input: PauseAsyncInput,
+  ) => ReturnType<typeof getPauseInstructionAsync> & SelfPlanAndSendFunctions;
   placeOrder: (
     input: PlaceOrderAsyncInput,
   ) => ReturnType<typeof getPlaceOrderInstructionAsync> &
     SelfPlanAndSendFunctions;
+  proposeAdmin: (
+    input: ProposeAdminAsyncInput,
+  ) => ReturnType<typeof getProposeAdminInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  proposeResult: (
+    input: ProposeResultAsyncInput,
+  ) => ReturnType<typeof getProposeResultInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  recordClose: (
+    input: RecordCloseAsyncInput,
+  ) => ReturnType<typeof getRecordCloseInstructionAsync> &
+    SelfPlanAndSendFunctions;
   redeem: (
     input: RedeemAsyncInput,
   ) => ReturnType<typeof getRedeemInstructionAsync> & SelfPlanAndSendFunctions;
+  removeMarket: (
+    input: RemoveMarketAsyncInput,
+  ) => ReturnType<typeof getRemoveMarketInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  replaceQuotes: (
+    input: ReplaceQuotesAsyncInput,
+  ) => ReturnType<typeof getReplaceQuotesInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  returnToOwner: (
+    input: ReturnToOwnerAsyncInput,
+  ) => ReturnType<typeof getReturnToOwnerInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  sellNo: (
+    input: SellNoAsyncInput,
+  ) => ReturnType<typeof getSellNoInstructionAsync> & SelfPlanAndSendFunctions;
+  setOperator: (
+    input: SetOperatorAsyncInput,
+  ) => ReturnType<typeof getSetOperatorInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  settle: (
+    input: SettleAsyncInput,
+  ) => ReturnType<typeof getSettleInstructionAsync> & SelfPlanAndSendFunctions;
+  sweep: (
+    input: SweepAsyncInput,
+  ) => ReturnType<typeof getSweepInstructionAsync> & SelfPlanAndSendFunctions;
+  unpause: (
+    input: UnpauseAsyncInput,
+  ) => ReturnType<typeof getUnpauseInstructionAsync> & SelfPlanAndSendFunctions;
+  updateConfig: (
+    input: UpdateConfigAsyncInput,
+  ) => ReturnType<typeof getUpdateConfigInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  withdrawProposal: (
+    input: WithdrawProposalAsyncInput,
+  ) => ReturnType<typeof getWithdrawProposalInstructionAsync> &
+    SelfPlanAndSendFunctions;
 };
 
 export type MeridianPluginPdas = {
   config: typeof findConfigPda;
-  yesMint: typeof findYesMintPda;
-  noMint: typeof findNoMintPda;
-  vault: typeof findVaultPda;
   book: typeof findBookPda;
   bookUsdc: typeof findBookUsdcPda;
   bookYes: typeof findBookYesPda;
+  bookNo: typeof findBookNoPda;
+  vault: typeof findVaultPda;
+  yesMint: typeof findYesMintPda;
+  noMint: typeof findNoMintPda;
 };
 
 export type MeridianPluginRequirements = ClientWithRpc<
@@ -461,11 +1257,35 @@ export function meridianProgram() {
           market: addSelfFetchFunctions(client, getMarketCodec()),
         },
         instructions: {
+          acceptAdmin: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getAcceptAdminInstructionAsync(input),
+            ),
+          buyNo: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getBuyNoInstructionAsync(input),
+            ),
+          cancelOrder: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCancelOrderInstructionAsync(input),
+            ),
+          closeBook: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCloseBookInstructionAsync(input),
+            ),
           createMarket: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getCreateMarketInstructionAsync(input),
             ),
+          finalize: (input) =>
+            addSelfPlanAndSendFunctions(client, getFinalizeInstruction(input)),
+          hold: (input) =>
+            addSelfPlanAndSendFunctions(client, getHoldInstructionAsync(input)),
           initializeConfig: (input) =>
             addSelfPlanAndSendFunctions(
               client,
@@ -476,25 +1296,96 @@ export function meridianProgram() {
               client,
               getMintPairsInstructionAsync(input),
             ),
+          pause: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getPauseInstructionAsync(input),
+            ),
           placeOrder: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getPlaceOrderInstructionAsync(input),
+            ),
+          proposeAdmin: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getProposeAdminInstructionAsync(input),
+            ),
+          proposeResult: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getProposeResultInstructionAsync(input),
+            ),
+          recordClose: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getRecordCloseInstructionAsync(input),
             ),
           redeem: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getRedeemInstructionAsync(input),
             ),
+          removeMarket: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getRemoveMarketInstructionAsync(input),
+            ),
+          replaceQuotes: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getReplaceQuotesInstructionAsync(input),
+            ),
+          returnToOwner: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getReturnToOwnerInstructionAsync(input),
+            ),
+          sellNo: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getSellNoInstructionAsync(input),
+            ),
+          setOperator: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getSetOperatorInstructionAsync(input),
+            ),
+          settle: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getSettleInstructionAsync(input),
+            ),
+          sweep: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getSweepInstructionAsync(input),
+            ),
+          unpause: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getUnpauseInstructionAsync(input),
+            ),
+          updateConfig: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getUpdateConfigInstructionAsync(input),
+            ),
+          withdrawProposal: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getWithdrawProposalInstructionAsync(input),
+            ),
         },
         pdas: {
           config: findConfigPda,
-          yesMint: findYesMintPda,
-          noMint: findNoMintPda,
-          vault: findVaultPda,
           book: findBookPda,
           bookUsdc: findBookUsdcPda,
           bookYes: findBookYesPda,
+          bookNo: findBookNoPda,
+          vault: findVaultPda,
+          yesMint: findYesMintPda,
+          noMint: findNoMintPda,
         },
         identifyAccount: identifyMeridianAccount,
         identifyInstruction: identifyMeridianInstruction,

@@ -154,3 +154,108 @@ pub struct Redeemed {
     pub quantity: u64,
     pub usdc: u64,
 }
+
+/// Config's settings after a change, in full, so the record shows what changed (D70).
+#[event]
+pub struct ConfigUpdated {
+    pub admin: Pubkey,
+    pub pyth_receivers: Vec<Pubkey>,
+    pub tickers: Vec<crate::Ticker>,
+    pub ladder_bps: [u16; 3],
+    pub thresholds: crate::Thresholds,
+    pub fill_limit: u16,
+}
+
+#[event]
+pub struct AdminProposed {
+    pub admin: Pubkey,
+    pub proposed: Pubkey,
+}
+
+#[event]
+pub struct AdminAccepted {
+    pub previous: Pubkey,
+    pub admin: Pubkey,
+}
+
+#[event]
+pub struct OperatorChanged {
+    pub previous: Pubkey,
+    pub operator: Pubkey,
+}
+
+#[event]
+pub struct Paused {
+    pub admin: Pubkey,
+}
+
+#[event]
+pub struct Unpaused {
+    pub admin: Pubkey,
+}
+
+#[event]
+pub struct MarketRemoved {
+    pub market: Pubkey,
+}
+
+/// An owner's balance in the book paid to its own accounts (D99).
+#[event]
+pub struct BalanceReturned {
+    pub market: Pubkey,
+    pub owner: Pubkey,
+    pub usdc: u64,
+    pub yes: u64,
+}
+
+#[event]
+pub struct BookClosed {
+    pub market: Pubkey,
+}
+
+/// A stock's close recorded or improved (D105).
+#[event]
+pub struct CloseRecorded {
+    pub ticker: String,
+    pub day: u32,
+    pub price: i64,
+    pub conf: u64,
+    pub expo: i32,
+    pub publish_time: i64,
+    pub price_account: Pubkey,
+    pub recorder: Pubkey,
+}
+
+#[event]
+pub struct MarketSettled {
+    pub market: Pubkey,
+    pub outcome: crate::market::Outcome,
+    pub settled_by: crate::market::SettledBy,
+    pub price: i64,
+    pub conf: u64,
+    pub expo: i32,
+    pub publish_time: i64,
+}
+
+#[event]
+pub struct MarketHeld {
+    pub market: Pubkey,
+    pub reason: crate::market::HoldReason,
+    /// The admin's public note on an admin hold (D70, D91); empty otherwise.
+    pub note: String,
+}
+
+#[event]
+pub struct ResultProposed {
+    pub market: Pubkey,
+    pub outcome: crate::market::Outcome,
+    pub official_close_cents: u64,
+    /// Where the official close came from, kept here because a re-proposal overwrites the market's copy.
+    pub source: String,
+    pub final_at: i64,
+}
+
+#[event]
+pub struct ProposalWithdrawn {
+    pub market: Pubkey,
+}
