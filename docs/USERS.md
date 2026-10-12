@@ -168,7 +168,7 @@ Out of scope: accounts or sign-up, price charts, news.
 Edge cases:
 
 - **No wallet installed:** "No Solana wallet found. Install one (for example Phantom), then reload this page."
-- **Wallet popup closed:** "You closed the wallet window. Nothing was sent." (D13)
+- **Wallet popup closed, or refused for the network:** "Nothing was sent. If your wallet said the network doesn't match, switch it to Solana Devnet and try again." (D13, D136)
 - **Wallet on the wrong network:** no wallet tells a website its network (AR.12), so the site sends every transaction itself through devnet after the wallet signs, and a wallet left on Mainnet can't misroute an order. When a wallet refuses a transaction that passed the site's devnet simulation: "Your wallet seems to be on Mainnet. Switch it to Solana Devnet, then try again." (D36, D115)
 - **Faucet limit reached:** "Circle's faucet gives 20 USDC every 2 hours per address. Until then, the recorded run in the README shows the full cycle."
 - **Low SOL during use:** "You have 0.0003 SOL. Orders need about 0.003 SOL for fees and deposits." with the faucet link.

@@ -5,8 +5,10 @@ import {
   createTransactionMessage,
   lamports,
   pipe,
+  setTransactionMessageComputeUnitLimit,
   setTransactionMessageFeePayerSigner,
   setTransactionMessageLifetimeUsingBlockhash,
+  setTransactionMessageLoadedAccountsDataSizeLimit,
   type Address,
   type Blockhash,
   type Instruction,
@@ -56,7 +58,13 @@ export function batchOfThree(wallet: TransactionSigner, to: Address, lifetime: L
   );
 }
 
-// A version 1 transaction: can the wallet sign it (D110)?
+// A version 1 transaction: can the wallet sign it (D110)? A v1 transaction states its own limits; without them,
+// devnet's simulation refused it with "MaxLoadedAccountsDataSizeExceeded" (M0.13). 64 KiB and 10,000 compute
+// units are ample for one transfer.
 export function v1Transfer(wallet: TransactionSigner, to: Address, lifetime: Lifetime) {
-  return v1(wallet, lifetime, [getTransferSolInstruction({ source: wallet, destination: to, amount: lamports(4n) })]);
+  return pipe(
+    v1(wallet, lifetime, [getTransferSolInstruction({ source: wallet, destination: to, amount: lamports(4n) })]),
+    (m) => setTransactionMessageLoadedAccountsDataSizeLimit(64 * 1024, m),
+    (m) => setTransactionMessageComputeUnitLimit(10_000, m),
+  );
 }

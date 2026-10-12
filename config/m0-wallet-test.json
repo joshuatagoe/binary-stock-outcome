@@ -5,6 +5,22 @@
   "mints": [
     {
       "side": "Yes",
+      "address": "BeGsxbF1MYU5UVaptoas4ayzz6ddMDJVHLWcFS2rNxrB",
+      "name": "META 680+ Yes 10/08 (TEST)",
+      "symbol": "YES",
+      "uri": "https://meridian-devnet-2qv.pages.dev/tokens/m0-yes.json"
+    },
+    {
+      "side": "No",
+      "address": "Ba5zKqsknmzH8aCVm5pYSmXGzr9SNTUadWWqVboVx9Ay",
+      "name": "META 680+ No 10/08 (TEST)",
+      "symbol": "NO",
+      "uri": "https://meridian-devnet-2qv.pages.dev/tokens/m0-no.json"
+    }
+  ],
+  "earlierMints": [
+    {
+      "side": "Yes",
       "address": "9XqLMoYz4iteiumAiKb5Myv98efzpfYWpFSLb1KvJRGG",
       "name": "META 680+ Yes 10/08 (TEST)",
       "symbol": "YES"
