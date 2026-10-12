@@ -1,11 +1,12 @@
 //! The order book (ARCHITECTURE.md §3, §5; D107): 64 resting orders a side and 64 traders in one zero-copy account,
 //! and the matching rules: best price first, then oldest; at the resting order's price (D42); never beyond the taker's
 //! worst price (D15); a self-trade cancels the resting order and matching continues (D90); an owner's order IDs are
-//! unique among their resting orders (D101). The taker's side never enters the book: Place order moves it straight
-//! to and from the taker's wallet, while makers are credited inside the book until they're returned (D99).
+//! unique among their resting orders (D101). The taker's side never enters the book: Place order, Buy No and Sell No
+//! move it straight to and from the taker's wallet, while makers are credited inside the book until they're returned
+//! (D99). A Buy No limit order's unsold pairs rest as a paired offer, their No held in the book (D142).
 use anchor_lang::prelude::*;
 
-use crate::errors::MeridianError;
+use crate::{errors::MeridianError, market::USDC_PER_PAIR};
 
 pub const BOOK_SEED: &[u8] = b"book";
 pub const BOOK_USDC_SEED: &[u8] = b"book_usdc";
@@ -213,9 +214,34 @@ impl Book {
     /// A remainder that can't rest, because its side or the trader table is full, refuses the whole order (D107).
     /// On an error the book may already be changed, so the instruction must fail with it, which rolls everything back.
     pub fn place(&mut self, owner: &Pubkey, args: &PlaceOrderArgs, fill_limit: u16) -> Result<Placement> {
+        self.place_flagged(owner, args, fill_limit, 0)
+    }
+
+    /// Buy No on the book (D5, D142): the Yes of the pairs it mints are sold into the bids, as a sell of Yes at no less
+    /// than `args.price`, and a Limit order's remainder rests as a paired offer. The pairs to mint are what it filled
+    /// plus what rests. Otherwise as `place`.
+    pub fn place_paired(&mut self, owner: &Pubkey, args: &PlaceOrderArgs, fill_limit: u16) -> Result<Placement> {
+        self.place_flagged(owner, &PlaceOrderArgs { side: Side::Sell, ..*args }, fill_limit, PAIRED)
+    }
+
+    /// Sell No on the book (D38): a Market order that never rests and has no order ID of its own, so the owner's
+    /// resting IDs aren't checked. Otherwise as `place`.
+    pub fn take(&mut self, owner: &Pubkey, side: Side, price: u8, quantity: u32, fill_limit: u16) -> Result<Placement> {
+        let args = PlaceOrderArgs { side, kind: OrderKind::Market, price, quantity, order_id: 0 };
+        Self::check_order(&args, fill_limit)?;
+        Ok(self.match_orders(owner, &args, fill_limit))
+    }
+
+    fn check_order(args: &PlaceOrderArgs, fill_limit: u16) -> Result<()> {
         require!((1..=99).contains(&args.price), MeridianError::InvalidPrice);
         require!(args.quantity > 0, MeridianError::InvalidQuantity);
         require!(fill_limit > 0, MeridianError::FillLimitNotSet);
+        Ok(())
+    }
+
+    /// Matches, then rests a Limit order's remainder with `flags`.
+    fn place_flagged(&mut self, owner: &Pubkey, args: &PlaceOrderArgs, fill_limit: u16, flags: u8) -> Result<Placement> {
+        Self::check_order(args, fill_limit)?;
         if let Some(t) = self.trader_index(owner) {
             let resting = self.bids().iter().chain(self.asks().iter());
             require!(
@@ -223,7 +249,17 @@ impl Book {
                 MeridianError::DuplicateOrderId
             );
         }
+        let mut p = self.match_orders(owner, args, fill_limit);
+        let remaining = args.quantity - p.filled;
+        if remaining > 0 && args.kind == OrderKind::Limit && !p.stopped_at_fill_limit {
+            self.rest(owner, args, remaining, flags)?;
+            p.rested = remaining;
+        }
+        Ok(p)
+    }
 
+    /// The matching itself (§3), with nothing rested.
+    fn match_orders(&mut self, owner: &Pubkey, args: &PlaceOrderArgs, fill_limit: u16) -> Placement {
         let mut p = Placement::default();
         let mut remaining = args.quantity;
         let mut taken = 0; // resting orders used up, all at the front of the side
@@ -296,16 +332,11 @@ impl Book {
                 self.bid_count -= taken as u8;
             }
         }
-
-        if remaining > 0 && args.kind == OrderKind::Limit && !p.stopped_at_fill_limit {
-            self.rest(owner, args, remaining)?;
-            p.rested = remaining;
-        }
-        Ok(p)
+        p
     }
 
     /// Adds a resting order behind every order at the same or a better price, for time priority.
-    fn rest(&mut self, owner: &Pubkey, args: &PlaceOrderArgs, quantity: u32) -> Result<()> {
+    fn rest(&mut self, owner: &Pubkey, args: &PlaceOrderArgs, quantity: u32, flags: u8) -> Result<()> {
         let side_count = match args.side {
             Side::Buy => self.bid_count,
             Side::Sell => self.ask_count,
@@ -324,7 +355,7 @@ impl Book {
             quantity,
             trader: trader as u8,
             price: args.price,
-            flags: 0,
+            flags,
             _pad: 0,
         };
         self.next_seq += 1;
@@ -343,12 +374,10 @@ impl Book {
     }
 
     /// Takes an owner's resting order off the book and credits what it locked to the owner's balance (D99): a bid's
-    /// USDC or an offer's Yes. Returns the order's side, as what it does with Yes, its price and its quantity.
-    pub fn cancel(&mut self, owner: &Pubkey, order_id: u64) -> Result<(Side, u8, u32)> {
-        if self.paired(owner, order_id) {
-            // Closing a paired offer's pairs needs the vault and both mints (D142); built with Buy No in M2.
-            return err!(MeridianError::NotImplemented);
-        }
+    /// USDC or an offer's Yes. A paired offer's pairs are closed instead, 1.00 each (D39, D142). Returns the order's
+    /// side, as what it does with Yes, its price, its quantity, and whether it was a paired offer: then the caller must
+    /// burn that many Yes and No in the book and move 1.00 each from the vault to the book's USDC.
+    pub fn cancel(&mut self, owner: &Pubkey, order_id: u64) -> Result<(Side, u8, u32, bool)> {
         let trader = self.trader_index(owner).ok_or(MeridianError::OrderNotFound)?;
         for side in [Side::Buy, Side::Sell] {
             let (orders, count) = match side {
@@ -359,6 +388,7 @@ impl Book {
                 continue;
             };
             let o = orders[at];
+            let paired = o.flags & PAIRED != 0;
             orders.copy_within(at + 1..count, at);
             let entry = &mut self.traders[trader];
             match side {
@@ -368,30 +398,28 @@ impl Book {
                 }
                 Side::Sell => {
                     self.ask_count -= 1;
-                    entry.free_yes += o.quantity as u64;
+                    if paired {
+                        entry.free_usdc += o.quantity as u64 * USDC_PER_PAIR;
+                    } else {
+                        entry.free_yes += o.quantity as u64;
+                    }
                 }
             }
             entry.open_orders -= 1;
-            return Ok((side, o.price, o.quantity));
+            return Ok((side, o.price, o.quantity, paired));
         }
         err!(MeridianError::OrderNotFound)
-    }
-
-    /// Whether an owner's resting order is a paired offer (D142).
-    pub fn paired(&self, owner: &Pubkey, order_id: u64) -> bool {
-        let Some(t) = self.trader_index(owner) else { return false };
-        self.asks().iter().any(|o| o.trader as usize == t && o.order_id == order_id && o.flags & PAIRED != 0)
     }
 
     fn trader_index(&self, owner: &Pubkey) -> Option<usize> {
         self.traders.iter().position(|t| t.owner == *owner)
     }
 
-    /// An entry never used, or one with no balances and no open orders (D107).
+    /// An entry never used, or one with no balances, No included (D142), and no open orders (D107).
     fn free_trader_index(&self) -> Option<usize> {
-        self.traders
-            .iter()
-            .position(|t| t.owner == Pubkey::default() || (t.free_usdc == 0 && t.free_yes == 0 && t.open_orders == 0))
+        self.traders.iter().position(|t| {
+            t.owner == Pubkey::default() || (t.free_usdc == 0 && t.free_yes == 0 && t.free_no == 0 && t.open_orders == 0)
+        })
     }
 
     /// USDC locked by resting bids.
@@ -696,8 +724,104 @@ mod tests {
         assert_eq!(p.filled, 4);
         assert_eq!((b.trader(&bob).unwrap().free_usdc, b.trader(&bob).unwrap().free_no), (cents(4 * 67), 4));
         assert_eq!((b.locked_no(), b.locked_no() + b.free_no()), (2, 6), "the No only move inside the book");
-        assert!(b.paired(&bob, 1));
-        assert_eq!(b.cancel(&bob, 1).unwrap_err(), MeridianError::NotImplemented.into(), "closing pairs comes with Buy No (M2)");
+        assert_eq!(b.asks()[0].flags, PAIRED);
+        // Cancelling closes the 2 unsold pairs, 1.00 each to Bob's balance; the instruction burns their tokens.
+        assert_eq!(b.cancel(&bob, 1).unwrap(), (Side::Sell, 67, 2, true), "a paired offer's pairs close");
+        let entry = b.trader(&bob).unwrap();
+        assert_eq!((entry.free_usdc, entry.free_yes, entry.free_no), (cents(4 * 67) + 2 * USDC_PER_PAIR, 0, 4));
+        assert_eq!((b.locked_yes(), b.locked_no()), (0, 0));
+    }
+
+    #[test]
+    fn buy_no_sells_into_the_bids_and_a_limit_remainder_rests_as_a_paired_offer() {
+        // F5's 11:00 bids, 65¢ × 5 from the bot and then Dave. Bob's Buy No Limit of 12 at 36¢ sells Yes at 64¢ or more.
+        let mut b = book();
+        let (bot, dave, bob) = (Pubkey::new_unique(), Pubkey::new_unique(), Pubkey::new_unique());
+        b.place(&bot, &buy(OrderKind::Limit, 65, 5, 1), 10).unwrap();
+        b.place(&dave, &buy(OrderKind::Limit, 65, 5, 1), 10).unwrap();
+        let p = b.place_paired(&bob, &sell(OrderKind::Limit, 64, 12, 7), 10).unwrap();
+        assert_eq!(
+            p.fills(),
+            vec![
+                Fill { maker: bot, maker_order_id: 1, price: 65, quantity: 5 },
+                Fill { maker: dave, maker_order_id: 1, price: 65, quantity: 5 },
+            ]
+        );
+        assert_eq!((p.filled, p.fill_usdc, p.rested), (10, cents(650), 2), "12 pairs to mint: 10 sold, 2 resting");
+        assert_eq!(levels(b.asks()), vec![(64, 2)]);
+        assert_eq!(b.asks()[0].flags, PAIRED);
+        assert_eq!(b.traders[b.asks()[0].trader as usize].owner, bob);
+        assert_eq!((b.locked_yes(), b.locked_no()), (2, 2));
+        assert_eq!((b.trader(&bot).unwrap().free_yes, b.trader(&dave).unwrap().free_yes), (5, 5));
+    }
+
+    #[test]
+    fn a_market_buy_no_rests_nothing() {
+        let mut b = book();
+        b.place(&Pubkey::new_unique(), &buy(OrderKind::Limit, 65, 6, 1), 10).unwrap();
+        let p = b.place_paired(&Pubkey::new_unique(), &sell(OrderKind::Market, 64, 10, 7), 10).unwrap();
+        assert_eq!((p.filled, p.rested), (6, 0), "F5's partial fill: 6 of 10, so only 6 pairs are minted");
+        assert!(b.asks().is_empty() && b.bids().is_empty());
+    }
+
+    #[test]
+    fn cancelling_an_unsold_paired_offer_credits_1_00_per_pair() {
+        let mut b = book();
+        let bob = Pubkey::new_unique();
+        b.place_paired(&bob, &sell(OrderKind::Limit, 67, 10, 1), 10).unwrap();
+        assert_eq!(b.cancel(&bob, 1).unwrap(), (Side::Sell, 67, 10, true));
+        let entry = b.trader(&bob).unwrap();
+        assert_eq!((entry.free_usdc, entry.free_yes, entry.free_no, entry.open_orders), (10 * USDC_PER_PAIR, 0, 0, 0));
+        assert!(b.asks().is_empty());
+    }
+
+    #[test]
+    fn sell_no_takes_without_an_order_id_and_never_rests() {
+        let TenSixteen { mut book, dave, bot, .. } = ten_sixteen();
+        // Dave rests a bid with order ID 0, the ID Sell No's matching uses; it doesn't refuse his Sell No.
+        book.place(&dave, &buy(OrderKind::Limit, 50, 1, 0), 10).unwrap();
+        let p = book.take(&dave, Side::Buy, 66, 20, 10).unwrap();
+        // His own offer at 65¢ is cancelled and its 10 Yes go back to his wallet (D90); the bot's 5 at 66¢ fill.
+        assert_eq!(
+            p.matches,
+            vec![
+                Match::SelfTrade(SelfTrade { order_id: 1, price: 65, quantity: 10 }),
+                Match::Fill(Fill { maker: bot, maker_order_id: 1, price: 66, quantity: 5 }),
+            ]
+        );
+        assert_eq!((p.filled, p.fill_usdc, p.returned, p.rested), (5, cents(330), 10, 0), "the other 15 are not placed");
+        assert!(book.asks().is_empty());
+        assert_eq!(levels(book.bids()), vec![(64, 5), (60, 10), (50, 1)]);
+    }
+
+    #[test]
+    fn sell_no_checks_its_price_quantity_and_the_fill_limit() {
+        let mut b = book();
+        let o = Pubkey::new_unique();
+        for price in [0, 100] {
+            assert_eq!(b.take(&o, Side::Buy, price, 1, 10).unwrap_err(), MeridianError::InvalidPrice.into());
+        }
+        assert_eq!(b.take(&o, Side::Buy, 50, 0, 10).unwrap_err(), MeridianError::InvalidQuantity.into());
+        assert_eq!(b.take(&o, Side::Buy, 50, 1, 0).unwrap_err(), MeridianError::FillLimitNotSet.into());
+    }
+
+    #[test]
+    fn an_entry_holding_only_released_no_is_not_reused() {
+        // Bob's paired offer of 1 sells, which leaves his entry 0.67 and 1 No and no orders. With the 0.67 paid out
+        // (by hand here, as Return to owner would), the No alone keeps the entry his (D142).
+        let mut b = book();
+        let bob = Pubkey::new_unique();
+        b.place_paired(&bob, &sell(OrderKind::Limit, 67, 1, 1), 10).unwrap();
+        for i in 1..TRADER_CAPACITY {
+            b.place(&Pubkey::new_unique(), &buy(OrderKind::Limit, 1 + (i % 50) as u8, 1, 1), 10).unwrap();
+        }
+        b.place(&Pubkey::new_unique(), &buy(OrderKind::Market, 67, 1, 1), 10).unwrap();
+        let index = b.traders.iter().position(|t| t.owner == bob).unwrap();
+        assert_eq!((b.traders[index].free_usdc, b.traders[index].free_no, b.traders[index].open_orders), (cents(67), 1, 0));
+        b.traders[index].free_usdc = 0;
+        let refused = b.place(&Pubkey::new_unique(), &buy(OrderKind::Limit, 5, 1, 1), 10);
+        assert_eq!(refused.unwrap_err(), MeridianError::BookFull.into());
+        assert_eq!((b.traders[index].owner, b.traders[index].free_no), (bob, 1));
     }
 
     #[test]
@@ -705,12 +829,12 @@ mod tests {
         // Carol cancels her bid of 10 at 60¢: 6.00 waits in the book for her (D99), and the book still balances.
         let TenSixteen { mut book, carol, dave, .. } = ten_sixteen();
         let locked = book.locked_usdc() + book.free_usdc();
-        assert_eq!(book.cancel(&carol, 1).unwrap(), (Side::Buy, 60, 10));
+        assert_eq!(book.cancel(&carol, 1).unwrap(), (Side::Buy, 60, 10, false));
         assert_eq!(book.trader(&carol).unwrap().free_usdc, cents(600));
         assert_eq!(book.trader(&carol).unwrap().open_orders, 0);
         assert_eq!(levels(book.bids()), vec![(64, 5)]);
         assert_eq!(book.locked_usdc() + book.free_usdc(), locked);
-        assert_eq!(book.cancel(&dave, 1).unwrap(), (Side::Sell, 65, 10), "an offer's Yes go to the owner's balance");
+        assert_eq!(book.cancel(&dave, 1).unwrap(), (Side::Sell, 65, 10, false), "an offer's Yes go to the owner's balance");
         assert_eq!(book.trader(&dave).unwrap().free_yes, 10);
         assert_eq!(book.cancel(&carol, 1).unwrap_err(), MeridianError::OrderNotFound.into(), "only once");
         assert_eq!(book.cancel(&Pubkey::new_unique(), 1).unwrap_err(), MeridianError::OrderNotFound.into(), "only your own");

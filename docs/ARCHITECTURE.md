@@ -352,10 +352,11 @@ sequenceDiagram
   Site->>Wallet: one transaction: Buy No 10, sell Yes at no less than 64c
   Wallet->>Prog: signed by Bob
   Prog->>Prog: market open, not paused (D37, D68)
-  Prog->>Prog: mint 10 pairs, 10.00 USDC from Bob to the vault (D5)
   Prog->>Prog: sell the 10 Yes into the bids at 65c: bot 5, Dave 5 (D42)
+  Prog-->>Bob: 6.50 USDC from the bids, paid first (D143)
+  Prog->>Prog: mint 10 pairs, 10.00 USDC from Bob to the vault (D5)
   Prog->>Prog: credit bot and Dave 5 Yes each inside the book
-  Prog-->>Bob: 6.50 USDC from the bids, 10 No kept: net 3.50
+  Prog-->>Bob: 10 No kept: net 3.50
   Prog-->>Back: events: mint, 2 fills (D62)
   Back-->>Site: META book change (D16)
   Site-->>Bob: Bought 10 No at 35c, 3.50 USDC
@@ -615,7 +616,7 @@ After Alice's buy, Dave's offer is gone and his entry holds 6.50 USDC free until
 | After every money instruction: the vault holds at least what is owed, supply never exceeds the counter, and the book's token accounts hold at least locked plus free balances (D137) | Asserts at the end of each instruction | Any bug that would leave money short (D64) |
 | A result is written once | A state check | Changing a result (D2) |
 | Burning needs the program's co-signature | Permissioned Burn (D94) | Holders burning their own tokens |
-| Pause is checked only in Mint Pair and Place Order | Where the check sits | Freezing people's exits (D68) |
+| Pause is checked only in Mint Pair, Place Order, Buy No and Sell No (D143) | Where the check sits | Freezing people's exits (D68) |
 | A sender's order ID is unique per owner per market | A scan of that owner's orders | Double orders (D101) |
 | A full book refuses new resting orders | A capacity check (D107) | Unbounded growth |
 
@@ -732,9 +733,9 @@ A contract is the exact shape of a request: what it sends, who must sign it, whe
 | 8 | Mint pairs (quantity) | Anyone | From 9:00 until orders close, not paused (D43, D102) | Moves the quantity in USDC into the vault, and mints that many Yes and No | PairsMinted |
 | 9 | Redeem (mode: pairs, winning or losing; quantity) | The holder | Pairs: before Settled. Winning or losing: once Settled. Never paused (D38, D68) | Pairs and winning tokens pay 1.00 each from the vault. The tokens are burned with the program's co-signature, and emptied token accounts are closed (D94) | Redeemed |
 | 10 | Place order (buy or sell Yes; market or limit; price; quantity; the sender's order ID) | Anyone | From the open until orders close, not paused (D46, D102) | Matches (§3); a limit order rests what is left | OrderPlaced, Fill, OrderCancelled (self-trade) |
-| 11 | Buy No (market or limit; worst No price; quantity; order ID) | Anyone | The same | Mints pairs and sells their Yes (D5). A limit order's unsold Yes rests as an offer; cancelling it closes those pairs (D39) | PairsMinted, Fill |
-| 12 | Sell No (worst Yes price; quantity) | Anyone | The same | Buys Yes and closes pairs; it never rests (D38) | Fill, Redeemed (pairs) |
-| 13 | Cancel order (order ID) | The order's owner | Any time while it rests; never paused (D68) | Moves what it locked into the owner's book balance (D99). A Buy No offer closes its pairs instead | OrderCancelled (owner) |
+| 11 | Buy No (market or limit; worst No price; quantity; order ID) | Anyone | The same | Mints pairs and sells their Yes (D5). A limit order's unsold Yes rests as an offer; cancelling it closes those pairs (D39) | PairsMinted, then a Fill or a self-trade OrderCancelled per resting order reached, then OrderPlaced if pairs rest (D143) |
+| 12 | Sell No (worst Yes price; quantity) | Anyone | The same | Buys Yes and closes pairs; it never rests (D38) | A Fill or a self-trade OrderCancelled per offer reached, then Redeemed (pairs). Its fills name taker order 0 (D143) |
+| 13 | Cancel order (order ID) | The order's owner | Any time while it rests; never paused (D68) | Moves what it locked into the owner's book balance (D99). A Buy No offer closes its pairs instead, at 1.00 each into the owner's book balance, even after settlement (D142, D143) | OrderCancelled (owner); for a Buy No offer, then Redeemed (pairs) |
 | 14 | Replace quotes (a list of books, each with new orders) | Any maker; the bot uses it (D111) | Order window, not paused | Cancels the signer's orders on each listed book, places the new ones, and collects the signer's free balances | OrderCancelled, OrderPlaced |
 | 15 | Sweep (market) | Operator | After orders close (D37) | Cancels every resting order into book balances | OrderCancelled (sweep) |
 | 16 | Return to owner (market, owner) | Anyone | While the owner's book balance is above zero | Pays it to the owner's own token accounts (D99) | BalanceReturned |

@@ -111,7 +111,7 @@ pub fn initialize_account<'info>(
     Ok(())
 }
 
-/// Mints `amount` to `to`, signed by the mint's authority.
+/// Mints `amount` to `to`, signed by the mint's authority. Nothing is minted for 0.
 pub fn mint_to<'info>(
     program: &AccountInfo<'info>,
     mint: &AccountInfo<'info>,
@@ -120,13 +120,17 @@ pub fn mint_to<'info>(
     amount: u64,
     signer_seeds: &[&[&[u8]]],
 ) -> Result<()> {
+    if amount == 0 {
+        return Ok(());
+    }
     let ix = spl_token_2022_interface::instruction::mint_to(program.key, mint.key, to.key, authority.key, &[], amount)?;
     invoke_signed(&ix, &[mint.clone(), to.clone(), authority.clone(), program.clone()], signer_seeds)?;
     Ok(())
 }
 
 /// Burns `amount` of the holder's tokens with Permissioned Burn: the holder signs, and so does the burn authority,
-/// which only this program can sign for (D94).
+/// which only this program can sign for (D94). The holder may be one of this program's addresses, such as the book,
+/// which then signs through `signer_seeds` too. Nothing is burned for 0.
 #[allow(clippy::too_many_arguments)]
 pub fn permissioned_burn<'info>(
     program: &AccountInfo<'info>,
@@ -137,6 +141,9 @@ pub fn permissioned_burn<'info>(
     amount: u64,
     signer_seeds: &[&[&[u8]]],
 ) -> Result<()> {
+    if amount == 0 {
+        return Ok(());
+    }
     let ix = spl_token_2022_interface::extension::permissioned_burn::instruction::burn_checked(
         program.key,
         account.key,
