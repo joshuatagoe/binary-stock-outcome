@@ -678,3 +678,17 @@ The user ran `/wallet-test` on the dev server with a new Phantom account (`8RMY2
 - **Stopping.** On Windows, force-killing `make dev` itself also ended the backend, the website and Surfpool. On Linux, SIGTERM after ready stopped everything. SIGTERM during start-up left Surfpool running, because Surfpool ignores a SIGTERM that arrives in its first 0.3 s or so: sent at 0.3 s it was still running 10 s later, while sent at 1 s or 3 s it stopped in 0.11 s. `make dev` now forces whatever hasn't stopped after 5 s, and the same check then left no Surfpool and every port free.
 - **The build's key.** A plain `anchor build --ignore-keys` in a new build folder left a random `deploy/meridian-keypair.json`; after `make dev`'s build, `deploy/` held only `meridian.so`.
 - **Not yet measured:** the run on a second, fresh Ubuntu that D74 asks for.
+
+## 2026-10-12 M0 make dev on a fresh Ubuntu (main session)
+
+### M0.15 [D74] [P29] CONFIRMED (measured)
+
+- **The machine.** A second Ubuntu next to the main one, installed with `wsl --install Ubuntu --name meridian-fresh --no-launch` in 35 s: Ubuntu 26.04.1 LTS, with none of our tools on its PATH (no `node`, `cargo` or `anchor`), and 16 CPUs and 7 GB of memory for WSL. A user named `meridian` stood in for the first-launch prompt: in the sudo group, with no password and sudo without one. The image had `git` and `curl`; `make` came with `build-essential`.
+- **The README's steps, in order,** from `main` at 1890941:
+  - the apt packages from Build tools: 33 s;
+  - `git clone`: 1 s;
+  - `bash scripts/toolchain/install.sh`: 43 s, ending with every tool at its pin (rustc 1.98.0, solana 4.3.0, anchor 1.2.0, surfpool 1.6.0, solana-verify 0.5.2, litestream 0.5.17, node 24.21.0, flyctl 0.4.108);
+  - `npm ci`, in a new login shell: 40 s for 486 packages, with npm reporting "5 low severity vulnerabilities";
+  - `make dev-check`: "ready in 209.6 s (build 206.5 s, keys 0.1 s, chain 0.5 s, program 0.0 s, config 1.0 s, backend 0.5 s, website 0.8 s)", then "Every part answered". Cargo timed the program's compile at 1 min 07 s and the interface build at 38.8 s.
+- **From nothing to ready:** 327 s, about 5½ minutes, plus 35 s to install the Ubuntu. No step needed anything the README doesn't say, so D74's container isn't needed.
+- The Ubuntu was removed afterwards with `wsl --unregister meridian-fresh`. The main Ubuntu was untouched.
