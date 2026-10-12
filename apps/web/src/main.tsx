@@ -9,7 +9,13 @@ import './theme.css';
 
 // M0's wallet test is local only (the user's choice): the build drops it, so the deployed site has no such page.
 const devOnly = import.meta.env.DEV
-  ? [{ path: '/wallet-test', lazy: async () => ({ Component: (await import('./wallet-test/WalletTest.tsx')).WalletTest }) }]
+  ? [
+      {
+        path: '/wallet-test',
+        hydrateFallbackElement: <p role="status">Loading the wallet test…</p>,
+        lazy: async () => ({ Component: (await import('./wallet-test/WalletTest.tsx')).WalletTest }),
+      },
+    ]
   : [];
 
 const router = createBrowserRouter([

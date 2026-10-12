@@ -17,7 +17,7 @@ import {
   type TransactionSigner,
 } from '@solana/kit';
 import { walletWithoutSigner } from '@solana/kit-plugin-wallet';
-import { useConnect, useConnectedWallet, useWallets } from '@solana/kit-plugin-wallet/react';
+import { useConnect, useConnectedWallet, useDisconnect, useWallets } from '@solana/kit-plugin-wallet/react';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import test from '../../../../config/m0-wallet-test.json';
 import { RPC_URL } from '../network.ts';
@@ -63,7 +63,8 @@ async function signAndSend(message: Parameters<typeof compileTransaction>[0]) {
 export function WalletTest() {
   const wallets = useWallets(client);
   const connected = useConnectedWallet(client);
-  const { dispatch: connect } = useConnect(client);
+  const { dispatch: connect, error: connectError, isRunning: connecting } = useConnect(client);
+  const { dispatch: disconnect } = useDisconnect(client);
   const key = connected ? `meridian-wallet-test:${connected.wallet.name}` : null;
   const [results, setResults] = useState<Results>({});
   const [busy, setBusy] = useState<string | null>(null);
@@ -140,19 +141,33 @@ export function WalletTest() {
       </p>
 
       <Step title="1. Connect">
-        {connected ? (
+        {connected && (
           <p>
             Connected <strong>{connected.wallet.name}</strong>: <span className="mono">{connected.account.address}</span>
           </p>
-        ) : wallets.length === 0 ? (
+        )}
+        {wallets.length === 0 ? (
           <p>No wallet found. Install Phantom or Solflare in this browser, then reload.</p>
         ) : (
-          wallets.map((w) => (
-            <button key={w.name} type="button" onClick={() => connect(w)}>
-              Connect {w.name}
-            </button>
-          ))
+          // Every wallet stays listed, so you can switch from one to the other; each keeps its own results.
+          <p className="answers">
+            {wallets
+              .filter((w) => w.name !== connected?.wallet.name)
+              .map((w) => (
+                <button key={w.name} type="button" onClick={() => connect(w)}>
+                  Connect {w.name}
+                </button>
+              ))}
+            {connected && (
+              <button type="button" onClick={() => disconnect()}>
+                Disconnect {connected.wallet.name}
+              </button>
+            )}
+          </p>
         )}
+        {connecting && <p role="status">Waiting for the wallet: approve the connection in its pop-up, which may be behind this window.</p>}
+        {connectError != null && <p role="alert" className="notice danger">The wallet didn't connect: {String((connectError as Error).message ?? connectError)}</p>}
+        {connected && !connected.signer && <p role="alert" className="notice danger">Connected, but the wallet gave the page no way to sign, so the steps can't run.</p>}
         {connected && <p className="muted">Ask for test SOL and tokens for this address, then continue.</p>}
       </Step>
 
@@ -161,6 +176,7 @@ export function WalletTest() {
           <Step title="2. Token names (D108)">
             <p>Open your wallet's token list. Is there "{test.mints[0].name}" and "{test.mints[1].name}", 5 of each?</p>
             <Answers step="names" record={record} options={['Both names show', 'Tokens show without names', 'Tokens don’t show']} />
+            <Outcome result={results.names} />
           </Step>
 
           <Step title="3. Send a token (D94)">
@@ -168,6 +184,7 @@ export function WalletTest() {
             <button type="button" disabled={!!busy} onClick={() => attempt('send', async (s) => signAndSend(await sendOneToken(s, yesMint, authority, await latest())))}>
               Send 1 Yes token
             </button>
+            <Outcome result={results.send} />
           </Step>
 
           <Step title="4. Wallet set to Mainnet (D115)">
@@ -178,6 +195,7 @@ export function WalletTest() {
             <button type="button" disabled={!!busy} onClick={() => attempt('mainnet', async (s) => signAndSend(await sendOneToken(s, noMint, authority, await latest())))}>
               Sign a devnet transaction while on Mainnet
             </button>
+            <Outcome result={results.mainnet} />
           </Step>
 
           <Step title="5. Three at once (D66)">
@@ -185,7 +203,9 @@ export function WalletTest() {
             <button type="button" disabled={!!busy} onClick={() => batch(connected.signer!)}>
               Sign three at once
             </button>
+            <Outcome result={results.batch} />
             <Answers step="batch-approvals" record={record} options={['One approval', 'Three approvals', 'Something else']} />
+            <Outcome result={results['batch-approvals']} />
           </Step>
 
           <Step title="6. A version 1 transaction (D110)">
@@ -193,6 +213,7 @@ export function WalletTest() {
             <button type="button" disabled={!!busy} onClick={() => attempt('v1', async (s) => signAndSend(v1Transfer(s, authority, await latest())))}>
               Sign a v1 transaction
             </button>
+            <Outcome result={results.v1} />
           </Step>
         </>
       )}
@@ -214,6 +235,19 @@ function Step({ title, children }: { title: string; children: ReactNode }) {
       <h2>{title}</h2>
       {children}
     </section>
+  );
+}
+
+// What a step recorded, right under it, so each click shows its result.
+function Outcome({ result }: { result?: Result }) {
+  if (!result) return null;
+  const time = new Date(result.at).toLocaleTimeString();
+  const detail = typeof result.detail === 'string' ? result.detail : result.detail ? JSON.stringify(result.detail).slice(0, 300) : '';
+  return (
+    <p role="status" className={result.outcome === 'failed' ? 'notice danger' : 'notice ok'}>
+      Recorded at {time}: <strong>{result.outcome}</strong>
+      {detail && <span className="mono"> {detail}</span>}
+    </p>
   );
 }
 

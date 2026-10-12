@@ -405,7 +405,7 @@ Rejected:
 
 | Breaks at | Chain shows | User sees (USERS.md wording) | How it is settled |
 |---|---|---|---|
-| The wallet popup is closed | Nothing | "You closed the wallet window. Nothing was sent." | — |
+| The wallet popup is closed, or the wallet refuses for the network (code 4001) | Nothing | "Nothing was sent. If your wallet said the network doesn't match, switch it to Solana Devnet and try again." (D136) | — |
 | Simulation fails: wrong network, or too little SOL | Nothing | F2's messages | — |
 | Sent, not landed yet | Nothing yet | "Sent, may still land" | The tracker polls until the transaction lands or expires, and never re-sends first (D13) |
 | Expired without landing | Nothing | "Your order expired before it reached the network. Nothing was spent. [Try again]" | A new transaction |
@@ -846,7 +846,7 @@ No wallet documents a way for a website to read which network it is set to (AR.1
 1. **The site sends every transaction itself.** After the wallet signs (`signTransaction`), the site sends the transaction through its own devnet connection. The wallet's setting therefore can't route an order to Mainnet.
 2. **The site simulates on devnet before opening the wallet.** Too little USDC, a closed market or a full book is caught first and shown with USERS.md's message.
 3. **On first connect, a short step says how to switch the wallet to devnet:** in Solflare, Settings, then Network; in Phantom, its testnet mode under the developer settings.
-4. **A refusal after a successful devnet simulation means the wrong network.** If the wallet refuses a transaction that passed simulation (for Phantom, error -32003), the site shows F2's "Your wallet seems to be on Mainnet. Switch it to Solana Devnet, then try again." A closed wallet window (error 4001) shows "You closed the wallet window. Nothing was sent."
+4. **A refusal after a successful devnet simulation means the wrong network.** If the wallet refuses a transaction that passed simulation (for Phantom, error -32003), the site shows F2's "Your wallet seems to be on Mainnet. Switch it to Solana Devnet, then try again." Error 4001, which Solflare also returns when it refuses a devnet transaction while set to Mainnet (M0.13), shows "Nothing was sent. If your wallet said the network doesn't match, switch it to Solana Devnet and try again." (D136).
 5. **M0 tests Phantom and Solflare.** With each set to Mainnet, it records exactly what they do with a devnet transaction. It also checks:
    - whether a batch for Redeem All needs one approval or several (USERS assumption 10, D66);
    - whether the wallets sign v1 transactions (D110);
@@ -1211,6 +1211,7 @@ These go into the risks and limitations note as plain facts, with no regulatory 
 **Wallets and the website**
 
 - No wallet tells a website its network, so "your wallet seems to be on Mainnet" is an inference (D115).
+- On devnet, Phantom and Solflare don't name new tokens: Phantom doesn't list them, and Solflare shows "Unknown". Positions are named on our site and on explorers (D108, M0.13).
 - How wallets handle Permissioned Burn mints, v1 transactions and signing a batch is checked at M0 (AR.12).
 
 **Running it**

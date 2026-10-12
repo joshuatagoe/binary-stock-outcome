@@ -5,7 +5,9 @@
 // size and deposit, checks that a holder can't burn alone but can with the burn authority's signature, and writes
 // the mints to config/m0-wallet-test.json for the wallet test. Run in WSL, where the key files are (D92):
 //   wsl -e bash -lc "cd /mnt/c/dev/binary-stock-outcome && node scripts/devnet/m0-mints.ts"
-// The upgrade key tops the operator key up to 0.05 SOL first if it holds less.
+// The upgrade key tops the operator key up to 0.05 SOL first if it holds less. With --uri-base <url>, each mint
+// links its name-and-picture file (<url>/m0-yes.json, <url>/m0-no.json) from creation, as market mints will (D108);
+// the earlier mints in the file move to `earlierMints`.
 import { readFileSync, writeFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -46,6 +48,8 @@ import {
 } from '@solana-program/token-2022';
 
 const RPC = process.env.SOLANA_RPC_URL ?? 'https://api.devnet.solana.com';
+const flag = process.argv.indexOf('--uri-base');
+const uriBase = flag > 0 ? process.argv[flag + 1] : '';
 const repo = join(import.meta.dirname, '..', '..');
 const rpc = createSolanaRpc(RPC);
 const send = sendAndConfirmTransactionFactory({ rpc, rpcSubscriptions: createSolanaRpcSubscriptions(RPC.replace(/^http/, 'ws')) });
@@ -86,6 +90,7 @@ async function createMint(side: 'Yes' | 'No') {
   const mint = await generateKeyPairSigner();
   const name = `META 680+ ${side} 10/08 (TEST)`;
   const symbol = side.toUpperCase();
+  const uri = uriBase ? `${uriBase}/m0-${side.toLowerCase()}.json` : '';
   const fixed = [
     extension('PermissionedBurn', { authority: some(operator.address) }),
     extension('MetadataPointer', { authority: some(operator.address), metadataAddress: some(mint.address) }),
@@ -95,7 +100,7 @@ async function createMint(side: 'Yes' | 'No') {
     mint: mint.address,
     name,
     symbol,
-    uri: '',
+    uri,
     additionalMetadata: new Map(),
   });
   // The account starts with room for the fixed extensions; the name's extension grows it, paid for up front.
@@ -106,9 +111,9 @@ async function createMint(side: 'Yes' | 'No') {
     getInitializeMetadataPointerInstruction({ mint: mint.address, authority: operator.address, metadataAddress: mint.address }),
     getInitializePermissionedBurnInstruction({ mint: mint.address, authority: operator.address }),
     getInitializeMint2Instruction({ mint: mint.address, decimals: 0, mintAuthority: operator.address, freezeAuthority: none() }),
-    getInitializeTokenMetadataInstruction({ metadata: mint.address, updateAuthority: operator.address, mint: mint.address, mintAuthority: operator, name, symbol, uri: '' }),
+    getInitializeTokenMetadataInstruction({ metadata: mint.address, updateAuthority: operator.address, mint: mint.address, mintAuthority: operator, name, symbol, uri }),
   ]);
-  return { side, address: mint.address, name, symbol, signature, expected: getMintSize([...fixed, metadata]) };
+  return { side, address: mint.address, name, symbol, uri, signature, expected: getMintSize([...fixed, metadata]) };
 }
 
 const yes = await createMint('Yes');
@@ -149,14 +154,23 @@ const results = {
 };
 console.log(JSON.stringify(results, null, 2));
 
+const file = join(repo, 'config', 'm0-wallet-test.json');
+let previous: Record<string, unknown> = {};
+try {
+  previous = JSON.parse(readFileSync(file, 'utf8'));
+} catch {
+  /* the first run */
+}
 writeFileSync(
-  join(repo, 'config', 'm0-wallet-test.json'),
+  file,
   JSON.stringify(
     {
       _about: "Devnet test mints for M0's wallet test (D94, D108), made by scripts/devnet/m0-mints.ts. Test tokens only; the operator key holds the mint and burn authority.",
       network: 'devnet',
       authority: operator.address,
-      mints: results.mints.map(({ side, address, name, symbol }) => ({ side, address, name, symbol })),
+      mints: results.mints.map(({ side, address, name, symbol, uri }) => ({ side, address, name, symbol, uri })),
+      ...(previous.mints ? { earlierMints: [...((previous.earlierMints as unknown[]) ?? []), ...(previous.mints as unknown[])] } : {}),
+      ...(previous.control ? { control: previous.control } : {}),
     },
     null,
     2,

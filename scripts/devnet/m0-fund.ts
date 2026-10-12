@@ -1,7 +1,8 @@
 // Gives a wallet what M0's wallet test needs (D94, D115): 0.05 devnet SOL for fees, and 5 Yes and 5 No test tokens
 // from config/m0-wallet-test.json. The operator key pays and mints; the upgrade key tops it up first if needed.
 // Run in WSL, where the key files are (D92), with the wallet's public address:
-//   wsl -e bash -lc "cd /mnt/c/dev/binary-stock-outcome && node scripts/devnet/m0-fund.ts <wallet address>"
+//   wsl -e bash -lc "cd /mnt/c/dev/binary-stock-outcome && node scripts/devnet/m0-fund.ts <wallet address> [--tokens-only]"
+// --tokens-only sends the tokens without the SOL, for a wallet funded before.
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -31,6 +32,7 @@ import {
 } from '@solana-program/token-2022';
 
 const wallet = address(process.argv[2] ?? '');
+const tokensOnly = process.argv.includes('--tokens-only');
 const RPC = process.env.SOLANA_RPC_URL ?? 'https://api.devnet.solana.com';
 const rpc = createSolanaRpc(RPC);
 const send = sendAndConfirmTransactionFactory({ rpc, rpcSubscriptions: createSolanaRpcSubscriptions(RPC.replace(/^http/, 'ws')) });
@@ -62,7 +64,7 @@ if (balance < need) {
   console.log(`topped the operator key up by ${(need - balance) / 1e9} SOL: ${sig}`);
 }
 
-const instructions: Instruction[] = [getTransferSolInstruction({ source: operator, destination: wallet, amount: lamports(50_000_000n) })];
+const instructions: Instruction[] = tokensOnly ? [] : [getTransferSolInstruction({ source: operator, destination: wallet, amount: lamports(50_000_000n) })];
 for (const mint of test.mints as { address: string; name: string }[]) {
   const [ata] = await findAssociatedTokenPda({ owner: wallet, mint: address(mint.address), tokenProgram: TOKEN_2022_PROGRAM_ADDRESS });
   instructions.push(
@@ -71,5 +73,5 @@ for (const mint of test.mints as { address: string; name: string }[]) {
   );
 }
 const signature = await run(operator, instructions);
-console.log(`sent 0.05 SOL and 5 of each test token to ${wallet}: https://explorer.solana.com/tx/${signature}?cluster=devnet`);
+console.log(`sent ${tokensOnly ? '' : '0.05 SOL and '}5 of each test token to ${wallet}: https://explorer.solana.com/tx/${signature}?cluster=devnet`);
 process.exit(0);

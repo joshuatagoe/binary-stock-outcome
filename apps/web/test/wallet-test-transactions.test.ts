@@ -1,5 +1,11 @@
 // The wallet test's transactions (M0 slice f): what the page asks Phantom and Solflare to sign.
-import { address, createNoopSigner, type Blockhash } from '@solana/kit';
+import {
+  address,
+  createNoopSigner,
+  getTransactionMessageComputeUnitLimit,
+  getTransactionMessageLoadedAccountsDataSizeLimit,
+  type Blockhash,
+} from '@solana/kit';
 import { findAssociatedTokenPda, TOKEN_2022_PROGRAM_ADDRESS } from '@solana-program/token-2022';
 import { describe, expect, it } from 'vitest';
 import { batchOfThree, sendOneToken, v1Transfer } from '../src/wallet-test/transactions.ts';
@@ -28,7 +34,10 @@ describe("the wallet test's transactions", () => {
     expect(new Set(data).size).toBe(3);
   });
 
-  it('builds the v1 transaction as version 1 (D110)', () => {
-    expect(v1Transfer(wallet, authority, lifetime).version).toBe(1);
+  it('builds the v1 transaction as version 1 (D110), stating its own limits, which devnet needs (M0.13)', () => {
+    const message = v1Transfer(wallet, authority, lifetime);
+    expect(message.version).toBe(1);
+    expect(getTransactionMessageLoadedAccountsDataSizeLimit(message)).toBe(64 * 1024);
+    expect(getTransactionMessageComputeUnitLimit(message)).toBe(10_000);
   });
 });
