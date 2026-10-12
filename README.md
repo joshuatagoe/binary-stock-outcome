@@ -35,7 +35,7 @@ In order, it:
 6. starts the backend;
 7. starts the website.
 
-When every part answers, it prints how long each step took. With the program already built, it is ready in about 3 seconds (M0.14). The website shows the "Local demo · fake prices and a fake clock" banner and the local Config. Later milestones add the fake prices and the demo clock (D89).
+When every part answers, it prints how long each step took. With the program already built, it is ready in about 3 seconds (M0.14). On a fresh Ubuntu, this README's steps took about 5½ minutes from nothing to ready, 3½ of them the first build of the program (M0.15). The website shows the "Local demo · fake prices and a fake clock" banner and the local Config. Later milestones add the fake prices and the demo clock (D89).
 
 | | |
 |---|---|
