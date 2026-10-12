@@ -6,5 +6,8 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./createMarket.ts";
 export * from "./initializeConfig.ts";
+export * from "./mintPairs.ts";
 export * from "./placeOrder.ts";
+export * from "./redeem.ts";

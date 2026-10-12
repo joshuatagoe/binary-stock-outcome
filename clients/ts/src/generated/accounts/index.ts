@@ -8,3 +8,4 @@
 
 export * from "./book.ts";
 export * from "./config.ts";
+export * from "./market.ts";

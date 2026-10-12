@@ -7,8 +7,14 @@
  */
 
 export * from "./cancelReason.ts";
+export * from "./holdReason.ts";
+export * from "./marketStatus.ts";
 export * from "./order.ts";
 export * from "./orderKind.ts";
+export * from "./outcome.ts";
+export * from "./proposal.ts";
+export * from "./redeemMode.ts";
+export * from "./settledBy.ts";
 export * from "./side.ts";
 export * from "./thresholds.ts";
 export * from "./ticker.ts";

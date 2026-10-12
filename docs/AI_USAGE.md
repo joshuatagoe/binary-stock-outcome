@@ -116,3 +116,15 @@ How AI was used on this project: tools, what worked, where it misled us, and how
     - No test showed that events reach the chain, and the sell side of a self-trade was untested. Both now are, in LiteSVM and in the book's tests.
 
     Lesson: check what a failure actually is before naming a limit, and when a specific decision and a general one meet, build the specific one.
+
+## 2026-10-12 — M1 slice b (the money core)
+
+### Where AI misled us or we course-corrected
+
+29. **A fresh-context review of the money core found four gaps in the AI's design and tests.**
+    - The market didn't record who paid its deposits, though Close book, which anyone may send, must return them to the payer, and the operator key can change (D50). A `creator` field was added before the layout freezes (D139).
+    - Mint pairs and Redeem took any token accounts, so their events could name a wallet that didn't get the tokens. They now use the signer's own accounts.
+    - Redeem's automatic close would have failed, and undone the whole redeem, for an account whose close authority is another key: a way out blocked (D68). It now skips that close.
+    - The card's negative cases for Mint pairs and Redeem (wrong signer, swapped and duplicate accounts) had no tests. Twelve were added, and each new check was seen failing first (M1.02).
+
+    Lesson, as in 23, 26 and 28: review against the design before calling a slice done.

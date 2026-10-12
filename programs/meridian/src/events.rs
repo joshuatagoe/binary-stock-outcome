@@ -123,3 +123,34 @@ mod tests {
         assert_eq!(buffer, anchor);
     }
 }
+
+/// A market and its accounts exist (§6, instruction 6).
+#[event]
+pub struct MarketCreated {
+    pub market: Pubkey,
+    pub ticker: String,
+    pub day: u32,
+    pub strike_cents: u64,
+    pub mint_open: i64,
+    pub open: i64,
+    pub close: i64,
+    pub creator: Pubkey,
+}
+
+/// `quantity` pairs minted: that many USDC into the vault, that many Yes and No to the owner (§6, instruction 8).
+#[event]
+pub struct PairsMinted {
+    pub market: Pubkey,
+    pub owner: Pubkey,
+    pub quantity: u64,
+}
+
+/// Tokens redeemed or burned, and the USDC paid (§6, instruction 9).
+#[event]
+pub struct Redeemed {
+    pub market: Pubkey,
+    pub owner: Pubkey,
+    pub mode: crate::pairs::RedeemMode,
+    pub quantity: u64,
+    pub usdc: u64,
+}

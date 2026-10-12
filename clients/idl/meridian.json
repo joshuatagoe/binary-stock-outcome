@@ -8,6 +8,246 @@
   },
   "instructions": [
     {
+      "name": "create_market",
+      "docs": [
+        "Instruction 6 (§6): the operator or the admin creates a market, before its open, with its named Yes and No",
+        "mints, its vault, its book and the book's token accounts."
+      ],
+      "discriminator": [
+        103,
+        226,
+        97,
+        235,
+        200,
+        188,
+        251,
+        254
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "creator",
+          "docs": [
+            "The operator or the admin (D24); pays every deposit."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "arg",
+                "path": "args.ticker"
+              },
+              {
+                "kind": "arg",
+                "path": "args.day"
+              },
+              {
+                "kind": "arg",
+                "path": "args.strike_cents"
+              }
+            ]
+          }
+        },
+        {
+          "name": "yes_mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  121,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "no_mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  110,
+                  111
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "book",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  111,
+                  107
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "book_usdc",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  111,
+                  107,
+                  95,
+                  117,
+                  115,
+                  100,
+                  99
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "book_yes",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  98,
+                  111,
+                  111,
+                  107,
+                  95,
+                  121,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "system_program",
+          "address": "11111111111111111111111111111111"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "token_2022_program",
+          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "args",
+          "type": {
+            "defined": {
+              "name": "CreateMarketArgs"
+            }
+          }
+        }
+      ]
+    },
+    {
       "name": "initialize_config",
       "docs": [
         "Instruction 1 (ARCHITECTURE.md §6): creates Config, once, signed by the program's upgrade key (AR.03)."
@@ -73,6 +313,175 @@
               "name": "InitializeConfigArgs"
             }
           }
+        }
+      ]
+    },
+    {
+      "name": "mint_pairs",
+      "docs": [
+        "Instruction 8 (§6): 1.00 USDC into the vault for each pair of Yes and No, while minting is open (D43, D46)."
+      ],
+      "discriminator": [
+        63,
+        216,
+        104,
+        77,
+        215,
+        189,
+        83,
+        81
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              },
+              {
+                "kind": "account",
+                "path": "market.day",
+                "account": "Market"
+              },
+              {
+                "kind": "account",
+                "path": "market.strike_cents",
+                "account": "Market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "minter",
+          "signer": true
+        },
+        {
+          "name": "minter_usdc",
+          "writable": true
+        },
+        {
+          "name": "minter_yes",
+          "writable": true
+        },
+        {
+          "name": "minter_no",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "yes_mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  121,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "no_mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  110,
+                  111
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "token_2022_program",
+          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "quantity",
+          "type": "u64"
         }
       ]
     },
@@ -233,6 +642,187 @@
           }
         }
       ]
+    },
+    {
+      "name": "redeem",
+      "docs": [
+        "Instruction 9 (§6): pairs back for 1.00 each before the result (D38); winning and losing tokens after it."
+      ],
+      "discriminator": [
+        184,
+        12,
+        86,
+        149,
+        70,
+        196,
+        97,
+        225
+      ],
+      "accounts": [
+        {
+          "name": "config",
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  99,
+                  111,
+                  110,
+                  102,
+                  105,
+                  103
+                ]
+              }
+            ]
+          }
+        },
+        {
+          "name": "market",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  109,
+                  97,
+                  114,
+                  107,
+                  101,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              },
+              {
+                "kind": "account",
+                "path": "market.day",
+                "account": "Market"
+              },
+              {
+                "kind": "account",
+                "path": "market.strike_cents",
+                "account": "Market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "holder",
+          "docs": [
+            "Receives the USDC, and the deposits of any account emptied here (D94)."
+          ],
+          "writable": true,
+          "signer": true
+        },
+        {
+          "name": "holder_usdc",
+          "writable": true
+        },
+        {
+          "name": "holder_yes",
+          "writable": true
+        },
+        {
+          "name": "holder_no",
+          "writable": true
+        },
+        {
+          "name": "vault",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  118,
+                  97,
+                  117,
+                  108,
+                  116
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "yes_mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  121,
+                  101,
+                  115
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "no_mint",
+          "writable": true,
+          "pda": {
+            "seeds": [
+              {
+                "kind": "const",
+                "value": [
+                  110,
+                  111
+                ]
+              },
+              {
+                "kind": "account",
+                "path": "market"
+              }
+            ]
+          }
+        },
+        {
+          "name": "usdc_mint"
+        },
+        {
+          "name": "token_program",
+          "address": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA"
+        },
+        {
+          "name": "token_2022_program",
+          "address": "TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb"
+        },
+        {
+          "name": "event_authority"
+        },
+        {
+          "name": "program"
+        }
+      ],
+      "args": [
+        {
+          "name": "mode",
+          "type": {
+            "defined": {
+              "name": "RedeemMode"
+            }
+          }
+        },
+        {
+          "name": "quantity",
+          "type": "u64"
+        }
+      ]
     }
   ],
   "accounts": [
@@ -260,6 +850,19 @@
         250,
         204,
         130
+      ]
+    },
+    {
+      "name": "Market",
+      "discriminator": [
+        219,
+        190,
+        213,
+        55,
+        0,
+        227,
+        198,
+        154
       ]
     }
   ],
@@ -291,6 +894,19 @@
       ]
     },
     {
+      "name": "MarketCreated",
+      "discriminator": [
+        88,
+        184,
+        130,
+        231,
+        226,
+        84,
+        6,
+        58
+      ]
+    },
+    {
       "name": "OrderCancelled",
       "discriminator": [
         108,
@@ -314,6 +930,32 @@
         219,
         216,
         227
+      ]
+    },
+    {
+      "name": "PairsMinted",
+      "discriminator": [
+        108,
+        154,
+        184,
+        215,
+        50,
+        138,
+        35,
+        141
+      ]
+    },
+    {
+      "name": "Redeemed",
+      "discriminator": [
+        14,
+        29,
+        183,
+        71,
+        31,
+        165,
+        107,
+        38
       ]
     }
   ],
@@ -392,6 +1034,71 @@
       "code": 6014,
       "name": "DuplicateAccount",
       "msg": "An account is passed twice"
+    },
+    {
+      "code": 6015,
+      "name": "NotImplemented",
+      "msg": "Not built yet"
+    },
+    {
+      "code": 6016,
+      "name": "NotOperator",
+      "msg": "Not the operator"
+    },
+    {
+      "code": 6017,
+      "name": "TickerNotEnabled",
+      "msg": "This stock isn't enabled in the config"
+    },
+    {
+      "code": 6018,
+      "name": "InvalidStrike",
+      "msg": "The strike must be above zero and a multiple of the stock's step"
+    },
+    {
+      "code": 6019,
+      "name": "InvalidTimes",
+      "msg": "Minting must open no later than the open, and the open come before orders close"
+    },
+    {
+      "code": 6020,
+      "name": "CreateAfterOpen",
+      "msg": "A market must be created before it opens"
+    },
+    {
+      "code": 6021,
+      "name": "NotOpenYet",
+      "msg": "Not open yet"
+    },
+    {
+      "code": 6022,
+      "name": "OrdersClosed",
+      "msg": "Trading ended before your order reached the network. Nothing was bought; only the network fee was charged."
+    },
+    {
+      "code": 6023,
+      "name": "MarketSettled",
+      "msg": "Pairs can be closed only before the result is final"
+    },
+    {
+      "code": 6024,
+      "name": "NotFinal",
+      "msg": "Redeem opens when the result is final."
+    },
+    {
+      "code": 6025,
+      "name": "VaultShort",
+      "msg": "The vault holds less than the market owes"
+    },
+    {
+      "code": 6026,
+      "name": "SupplyOverOwed",
+      "msg": "A token's supply is above what the market owes"
+    },
+    {
+      "code": 6027,
+      "name": "NotYourAccount",
+      "msg": "A token account belongs to someone else"
     }
   ],
   "types": [
@@ -635,6 +1342,41 @@
       }
     },
     {
+      "name": "CreateMarketArgs",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ticker",
+            "type": "string"
+          },
+          {
+            "name": "day",
+            "docs": [
+              "yyyymmdd, New York."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "strike_cents",
+            "type": "u64"
+          },
+          {
+            "name": "mint_open",
+            "type": "i64"
+          },
+          {
+            "name": "open",
+            "type": "i64"
+          },
+          {
+            "name": "close",
+            "type": "i64"
+          }
+        ]
+      }
+    },
+    {
       "name": "Fill",
       "docs": [
         "The taker's order traded with one resting order, at that order's price (D42)."
@@ -680,6 +1422,29 @@
           {
             "name": "quantity",
             "type": "u32"
+          }
+        ]
+      }
+    },
+    {
+      "name": "HoldReason",
+      "docs": [
+        "Why a market is Under review (D59, D68, D83)."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "None"
+          },
+          {
+            "name": "BandOnStrike"
+          },
+          {
+            "name": "NoPrice"
+          },
+          {
+            "name": "Admin"
           }
         ]
       }
@@ -733,6 +1498,230 @@
                 "name": "Thresholds"
               }
             }
+          }
+        ]
+      }
+    },
+    {
+      "name": "Market",
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "ticker",
+            "docs": [
+              "The stock, as in Config: 1 to 8 capital letters, zero-padded."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                8
+              ]
+            }
+          },
+          {
+            "name": "day",
+            "docs": [
+              "The trading day in New York, as yyyymmdd."
+            ],
+            "type": "u32"
+          },
+          {
+            "name": "strike_cents",
+            "type": "u64"
+          },
+          {
+            "name": "mint_open",
+            "docs": [
+              "Minting opens (9:00, D46), orders open (9:30), and the stored close; Unix seconds."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "open",
+            "type": "i64"
+          },
+          {
+            "name": "close",
+            "type": "i64"
+          },
+          {
+            "name": "owed",
+            "docs": [
+              "D64: pairs outstanding before settlement, unredeemed winning tokens after. The vault holds at least this many",
+              "USDC, and no token supply exceeds it."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "status",
+            "type": {
+              "defined": {
+                "name": "MarketStatus"
+              }
+            }
+          },
+          {
+            "name": "hold",
+            "type": {
+              "defined": {
+                "name": "HoldReason"
+              }
+            }
+          },
+          {
+            "name": "outcome",
+            "type": {
+              "defined": {
+                "name": "Outcome"
+              }
+            }
+          },
+          {
+            "name": "settled_by",
+            "type": {
+              "defined": {
+                "name": "SettledBy"
+              }
+            }
+          },
+          {
+            "name": "price",
+            "docs": [
+              "The price it settled on, with its band and publish time, in Pyth's units (D105)."
+            ],
+            "type": "i64"
+          },
+          {
+            "name": "conf",
+            "type": "u64"
+          },
+          {
+            "name": "expo",
+            "type": "i32"
+          },
+          {
+            "name": "publish_time",
+            "type": "i64"
+          },
+          {
+            "name": "proposal",
+            "type": {
+              "defined": {
+                "name": "Proposal"
+              }
+            }
+          },
+          {
+            "name": "book_closed",
+            "type": "bool"
+          },
+          {
+            "name": "created_slot",
+            "type": "u64"
+          },
+          {
+            "name": "creator",
+            "docs": [
+              "Who paid the deposits: the operator or the admin, whichever created it (D24). Close book returns the book's",
+              "deposits here (D50), whoever sends it, even after the operator key changes."
+            ],
+            "type": "pubkey"
+          },
+          {
+            "name": "bump",
+            "docs": [
+              "The bumps of the market's own address and of its Yes mint, No mint and vault; the book keeps its own."
+            ],
+            "type": "u8"
+          },
+          {
+            "name": "yes_bump",
+            "type": "u8"
+          },
+          {
+            "name": "no_bump",
+            "type": "u8"
+          },
+          {
+            "name": "vault_bump",
+            "type": "u8"
+          },
+          {
+            "name": "_reserved",
+            "type": {
+              "array": [
+                "u8",
+                64
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketCreated",
+      "docs": [
+        "A market and its accounts exist (§6, instruction 6)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "ticker",
+            "type": "string"
+          },
+          {
+            "name": "day",
+            "type": "u32"
+          },
+          {
+            "name": "strike_cents",
+            "type": "u64"
+          },
+          {
+            "name": "mint_open",
+            "type": "i64"
+          },
+          {
+            "name": "open",
+            "type": "i64"
+          },
+          {
+            "name": "close",
+            "type": "i64"
+          },
+          {
+            "name": "creator",
+            "type": "pubkey"
+          }
+        ]
+      }
+    },
+    {
+      "name": "MarketStatus",
+      "docs": [
+        "What a decision has made of the market. Before any decision it is Trading, and the clock says whether that means",
+        "Upcoming, Open or Closed (§4)."
+      ],
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Trading"
+          },
+          {
+            "name": "UnderReview"
+          },
+          {
+            "name": "Proposed"
+          },
+          {
+            "name": "Settled"
           }
         ]
       }
@@ -897,6 +1886,46 @@
       }
     },
     {
+      "name": "Outcome",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "None"
+          },
+          {
+            "name": "Yes"
+          },
+          {
+            "name": "No"
+          }
+        ]
+      }
+    },
+    {
+      "name": "PairsMinted",
+      "docs": [
+        "`quantity` pairs minted: that many USDC into the vault, that many Yes and No to the owner (§6, instruction 8)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "quantity",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
       "name": "PlaceOrderArgs",
       "type": {
         "kind": "struct",
@@ -931,6 +1960,124 @@
           {
             "name": "order_id",
             "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Proposal",
+      "docs": [
+        "The admin's proposed result while Under review (D63, D104)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "outcome",
+            "type": {
+              "defined": {
+                "name": "Outcome"
+              }
+            }
+          },
+          {
+            "name": "official_close_cents",
+            "docs": [
+              "The exchange's official close, in cents."
+            ],
+            "type": "u64"
+          },
+          {
+            "name": "proposed_at",
+            "type": "i64"
+          },
+          {
+            "name": "final_at",
+            "type": "i64"
+          },
+          {
+            "name": "source",
+            "docs": [
+              "Where the official close came from, as text, zero-padded."
+            ],
+            "type": {
+              "array": [
+                "u8",
+                32
+              ]
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "RedeemMode",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "Pairs"
+          },
+          {
+            "name": "Winning"
+          },
+          {
+            "name": "Losing"
+          }
+        ]
+      }
+    },
+    {
+      "name": "Redeemed",
+      "docs": [
+        "Tokens redeemed or burned, and the USDC paid (§6, instruction 9)."
+      ],
+      "type": {
+        "kind": "struct",
+        "fields": [
+          {
+            "name": "market",
+            "type": "pubkey"
+          },
+          {
+            "name": "owner",
+            "type": "pubkey"
+          },
+          {
+            "name": "mode",
+            "type": {
+              "defined": {
+                "name": "RedeemMode"
+              }
+            }
+          },
+          {
+            "name": "quantity",
+            "type": "u64"
+          },
+          {
+            "name": "usdc",
+            "type": "u64"
+          }
+        ]
+      }
+    },
+    {
+      "name": "SettledBy",
+      "type": {
+        "kind": "enum",
+        "variants": [
+          {
+            "name": "None"
+          },
+          {
+            "name": "Oracle"
+          },
+          {
+            "name": "Override"
+          },
+          {
+            "name": "Backstop"
           }
         ]
       }
