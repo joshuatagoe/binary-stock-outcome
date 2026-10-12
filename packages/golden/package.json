@@ -1,0 +1,7 @@
+{
+  "name": "@meridian/golden",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "description": "Frozen worked examples (ARCHITECTURE.md section 10): JSON read by both the Rust and the TypeScript tests. Changing a file is a logged decision."
+}

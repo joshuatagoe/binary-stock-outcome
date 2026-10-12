@@ -115,6 +115,11 @@ export type Market = {
   yesBump: number;
   noBump: number;
   vaultBump: number;
+  /**
+   * The stock's Pyth feed when the market was created: a later config change can't move today's settlement to
+   * another feed (D49).
+   */
+  feedId: ReadonlyUint8Array;
   reserved: ReadonlyUint8Array;
 };
 
@@ -155,6 +160,11 @@ export type MarketArgs = {
   yesBump: number;
   noBump: number;
   vaultBump: number;
+  /**
+   * The stock's Pyth feed when the market was created: a later config change can't move today's settlement to
+   * another feed (D49).
+   */
+  feedId: ReadonlyUint8Array;
   reserved: ReadonlyUint8Array;
 };
 
@@ -186,7 +196,8 @@ export function getMarketEncoder(): FixedSizeEncoder<MarketArgs> {
       ["yesBump", getU8Encoder()],
       ["noBump", getU8Encoder()],
       ["vaultBump", getU8Encoder()],
-      ["reserved", fixEncoderSize(getBytesEncoder(), 64)],
+      ["feedId", fixEncoderSize(getBytesEncoder(), 32)],
+      ["reserved", fixEncoderSize(getBytesEncoder(), 32)],
     ]),
     (value) => ({ ...value, discriminator: MARKET_DISCRIMINATOR }),
   );
@@ -219,7 +230,8 @@ export function getMarketDecoder(): FixedSizeDecoder<Market> {
     ["yesBump", getU8Decoder()],
     ["noBump", getU8Decoder()],
     ["vaultBump", getU8Decoder()],
-    ["reserved", fixDecoderSize(getBytesDecoder(), 64)],
+    ["feedId", fixDecoderSize(getBytesDecoder(), 32)],
+    ["reserved", fixDecoderSize(getBytesDecoder(), 32)],
   ]);
 }
 

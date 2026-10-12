@@ -4,7 +4,7 @@
 use anchor_lang::prelude::*;
 
 use crate::{
-    book::{Book, BOOK_SEED, BOOK_USDC_SEED, BOOK_YES_SEED},
+    book::{Book, BOOK_NO_SEED, BOOK_SEED, BOOK_USDC_SEED, BOOK_YES_SEED},
     errors::MeridianError,
     token::TOKEN_PROGRAM_ID,
     Config, CONFIG_SEED,
@@ -98,7 +98,10 @@ pub struct Market {
     pub yes_bump: u8,
     pub no_bump: u8,
     pub vault_bump: u8,
-    pub _reserved: [u8; 64],
+    /// The stock's Pyth feed when the market was created: a later config change can't move today's settlement to
+    /// another feed (D49).
+    pub feed_id: [u8; 32],
+    pub _reserved: [u8; 32],
 }
 
 impl Market {
@@ -165,6 +168,9 @@ pub struct CreateMarket<'info> {
     /// CHECK: created here as a Yes account owned by the book.
     #[account(mut, seeds = [BOOK_YES_SEED, market.key().as_ref()], bump)]
     pub book_yes: UncheckedAccount<'info>,
+    /// CHECK: created here as a No account owned by the book, for paired offers' No (D142).
+    #[account(mut, seeds = [BOOK_NO_SEED, market.key().as_ref()], bump)]
+    pub book_no: UncheckedAccount<'info>,
     /// CHECK: Config's USDC mint.
     #[account(address = config.usdc_mint)]
     pub usdc_mint: UncheckedAccount<'info>,
@@ -183,8 +189,9 @@ pub fn handle_create_market(ctx: Context<CreateMarket>, args: CreateMarketArgs) 
         .tickers
         .iter()
         .find(|t| t.enabled && t.symbol == args.ticker)
-        .map(|t| t.strike_step_cents as u64)
+        .map(|t| (t.strike_step_cents as u64, t.feed_id))
         .ok_or(MeridianError::TickerNotEnabled)?;
+    let (step, feed_id) = step;
     require!(args.strike_cents > 0 && step > 0 && args.strike_cents % step == 0, MeridianError::InvalidStrike);
     let orders_close = args.close - config.thresholds.orders_close_before_secs as i64;
     require!(args.mint_open <= args.open && args.open < orders_close, MeridianError::InvalidTimes);
@@ -213,8 +220,9 @@ pub fn handle_create_market(ctx: Context<CreateMarket>, args: CreateMarketArgs) 
         m.yes_bump = bumps.yes_mint;
         m.no_bump = bumps.no_mint;
         m.vault_bump = bumps.vault;
+        m.feed_id = feed_id;
     }
-    ctx.accounts.book.load_init()?.init(market_key, bumps.book, bumps.book_usdc, bumps.book_yes);
+    ctx.accounts.book.load_init()?.init(market_key, bumps.book, bumps.book_usdc, bumps.book_yes, bumps.book_no);
 
     let a = &ctx.accounts;
     let (system, creator, t22, classic) = (
@@ -275,12 +283,13 @@ pub fn handle_create_market(ctx: Context<CreateMarket>, args: CreateMarketArgs) 
         )?;
     }
 
-    // The vault and the book's two token accounts, each at its own address.
+    // The vault and the book's three token accounts, each at its own address.
     let token_bytes = 165u64;
     let accounts = [
         (a.vault.to_account_info(), VAULT_SEED, bumps.vault, &classic, a.usdc_mint.to_account_info(), market_key),
         (a.book_usdc.to_account_info(), BOOK_USDC_SEED, bumps.book_usdc, &classic, a.usdc_mint.to_account_info(), a.book.key()),
         (a.book_yes.to_account_info(), BOOK_YES_SEED, bumps.book_yes, &t22, a.yes_mint.to_account_info(), a.book.key()),
+        (a.book_no.to_account_info(), BOOK_NO_SEED, bumps.book_no, &t22, a.no_mint.to_account_info(), a.book.key()),
     ];
     for (account, seed, bump, program, mint, owner) in accounts {
         let bump = [bump];

@@ -51,6 +51,7 @@ import {
   type ResolvedInstructionAccountMeta,
 } from "@solana/program-client-core";
 import {
+  findBookNoPda,
   findBookPda,
   findBookUsdcPda,
   findBookYesPda,
@@ -82,6 +83,7 @@ export type CreateMarketInstruction<
   TAccountBook extends string | AccountMeta<string> = string,
   TAccountBookUsdc extends string | AccountMeta<string> = string,
   TAccountBookYes extends string | AccountMeta<string> = string,
+  TAccountBookNo extends string | AccountMeta<string> = string,
   TAccountUsdcMint extends string | AccountMeta<string> = string,
   TAccountSystemProgram extends string | AccountMeta<string> =
     "11111111111111111111111111111111",
@@ -124,6 +126,9 @@ export type CreateMarketInstruction<
       TAccountBookYes extends string
         ? WritableAccount<TAccountBookYes>
         : TAccountBookYes,
+      TAccountBookNo extends string
+        ? WritableAccount<TAccountBookNo>
+        : TAccountBookNo,
       TAccountUsdcMint extends string
         ? ReadonlyAccount<TAccountUsdcMint>
         : TAccountUsdcMint,
@@ -214,6 +219,7 @@ export type CreateMarketAsyncInput<
   TAccountBook extends InstructionAccountInput = InstructionAccountInput,
   TAccountBookUsdc extends InstructionAccountInput = InstructionAccountInput,
   TAccountBookYes extends InstructionAccountInput = InstructionAccountInput,
+  TAccountBookNo extends InstructionAccountInput = InstructionAccountInput,
   TAccountUsdcMint extends InstructionAccountInput = InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput =
     InstructionAccountInput,
@@ -235,6 +241,7 @@ export type CreateMarketAsyncInput<
   book?: TAccountBook;
   bookUsdc?: TAccountBookUsdc;
   bookYes?: TAccountBookYes;
+  bookNo?: TAccountBookNo;
   usdcMint: TAccountUsdcMint;
   systemProgram?: TAccountSystemProgram;
   tokenProgram?: TAccountTokenProgram;
@@ -259,6 +266,7 @@ export async function getCreateMarketInstructionAsync<
   TAccountBook extends InstructionAccountInput,
   TAccountBookUsdc extends InstructionAccountInput,
   TAccountBookYes extends InstructionAccountInput,
+  TAccountBookNo extends InstructionAccountInput,
   TAccountUsdcMint extends InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
@@ -277,6 +285,7 @@ export async function getCreateMarketInstructionAsync<
     TAccountBook,
     TAccountBookUsdc,
     TAccountBookYes,
+    TAccountBookNo,
     TAccountUsdcMint,
     TAccountSystemProgram,
     TAccountTokenProgram,
@@ -323,6 +332,10 @@ export async function getCreateMarketInstructionAsync<
     ResolvedInstructionAccountMeta<
       TAccountBookYes,
       InstructionAccountInputAddress<TAccountBookYes>
+    >,
+    ResolvedInstructionAccountMeta<
+      TAccountBookNo,
+      InstructionAccountInputAddress<TAccountBookNo>
     >,
     ResolvedInstructionAccountMeta<
       TAccountUsdcMint,
@@ -379,6 +392,7 @@ export async function getCreateMarketInstructionAsync<
       isSigner: false,
       isWritable: true,
     },
+    bookNo: { value: input.bookNo ?? null, isSigner: false, isWritable: true },
     usdcMint: {
       value: input.usdcMint ?? null,
       isSigner: false,
@@ -488,6 +502,17 @@ export async function getCreateMarketInstructionAsync<
       { programAddress },
     );
   }
+  if (!accounts.bookNo.value) {
+    accounts.bookNo.value = await findBookNoPda(
+      {
+        market: getAddressFromResolvedInstructionAccount(
+          "market",
+          accounts.market.value,
+        ),
+      },
+      { programAddress },
+    );
+  }
   if (!accounts.systemProgram.value) {
     accounts.systemProgram.value =
       "11111111111111111111111111111111" as Address<"11111111111111111111111111111111">;
@@ -512,6 +537,7 @@ export async function getCreateMarketInstructionAsync<
       getAccountMeta("book", accounts.book),
       getAccountMeta("bookUsdc", accounts.bookUsdc),
       getAccountMeta("bookYes", accounts.bookYes),
+      getAccountMeta("bookNo", accounts.bookNo),
       getAccountMeta("usdcMint", accounts.usdcMint),
       getAccountMeta("systemProgram", accounts.systemProgram),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
@@ -562,6 +588,10 @@ export async function getCreateMarketInstructionAsync<
       InstructionAccountInputAddress<TAccountBookYes>
     >,
     ResolvedInstructionAccountMeta<
+      TAccountBookNo,
+      InstructionAccountInputAddress<TAccountBookNo>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountUsdcMint,
       InstructionAccountInputAddress<TAccountUsdcMint>
     >,
@@ -598,6 +628,7 @@ export type CreateMarketInput<
   TAccountBook extends InstructionAccountInput = InstructionAccountInput,
   TAccountBookUsdc extends InstructionAccountInput = InstructionAccountInput,
   TAccountBookYes extends InstructionAccountInput = InstructionAccountInput,
+  TAccountBookNo extends InstructionAccountInput = InstructionAccountInput,
   TAccountUsdcMint extends InstructionAccountInput = InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput =
     InstructionAccountInput,
@@ -619,6 +650,7 @@ export type CreateMarketInput<
   book: TAccountBook;
   bookUsdc: TAccountBookUsdc;
   bookYes: TAccountBookYes;
+  bookNo: TAccountBookNo;
   usdcMint: TAccountUsdcMint;
   systemProgram?: TAccountSystemProgram;
   tokenProgram?: TAccountTokenProgram;
@@ -643,6 +675,7 @@ export function getCreateMarketInstruction<
   TAccountBook extends InstructionAccountInput,
   TAccountBookUsdc extends InstructionAccountInput,
   TAccountBookYes extends InstructionAccountInput,
+  TAccountBookNo extends InstructionAccountInput,
   TAccountUsdcMint extends InstructionAccountInput,
   TAccountSystemProgram extends InstructionAccountInput,
   TAccountTokenProgram extends InstructionAccountInput,
@@ -661,6 +694,7 @@ export function getCreateMarketInstruction<
     TAccountBook,
     TAccountBookUsdc,
     TAccountBookYes,
+    TAccountBookNo,
     TAccountUsdcMint,
     TAccountSystemProgram,
     TAccountTokenProgram,
@@ -706,6 +740,10 @@ export function getCreateMarketInstruction<
   ResolvedInstructionAccountMeta<
     TAccountBookYes,
     InstructionAccountInputAddress<TAccountBookYes>
+  >,
+  ResolvedInstructionAccountMeta<
+    TAccountBookNo,
+    InstructionAccountInputAddress<TAccountBookNo>
   >,
   ResolvedInstructionAccountMeta<
     TAccountUsdcMint,
@@ -761,6 +799,7 @@ export function getCreateMarketInstruction<
       isSigner: false,
       isWritable: true,
     },
+    bookNo: { value: input.bookNo ?? null, isSigner: false, isWritable: true },
     usdcMint: {
       value: input.usdcMint ?? null,
       isSigner: false,
@@ -825,6 +864,7 @@ export function getCreateMarketInstruction<
       getAccountMeta("book", accounts.book),
       getAccountMeta("bookUsdc", accounts.bookUsdc),
       getAccountMeta("bookYes", accounts.bookYes),
+      getAccountMeta("bookNo", accounts.bookNo),
       getAccountMeta("usdcMint", accounts.usdcMint),
       getAccountMeta("systemProgram", accounts.systemProgram),
       getAccountMeta("tokenProgram", accounts.tokenProgram),
@@ -875,6 +915,10 @@ export function getCreateMarketInstruction<
       InstructionAccountInputAddress<TAccountBookYes>
     >,
     ResolvedInstructionAccountMeta<
+      TAccountBookNo,
+      InstructionAccountInputAddress<TAccountBookNo>
+    >,
+    ResolvedInstructionAccountMeta<
       TAccountUsdcMint,
       InstructionAccountInputAddress<TAccountUsdcMint>
     >,
@@ -917,12 +961,13 @@ export type ParsedCreateMarketInstruction<
     book: TAccountMetas[6];
     bookUsdc: TAccountMetas[7];
     bookYes: TAccountMetas[8];
-    usdcMint: TAccountMetas[9];
-    systemProgram: TAccountMetas[10];
-    tokenProgram: TAccountMetas[11];
-    token2022Program: TAccountMetas[12];
-    eventAuthority: TAccountMetas[13];
-    program: TAccountMetas[14];
+    bookNo: TAccountMetas[9];
+    usdcMint: TAccountMetas[10];
+    systemProgram: TAccountMetas[11];
+    tokenProgram: TAccountMetas[12];
+    token2022Program: TAccountMetas[13];
+    eventAuthority: TAccountMetas[14];
+    program: TAccountMetas[15];
   };
   data: CreateMarketInstructionData;
 };
@@ -935,12 +980,12 @@ export function parseCreateMarketInstruction<
     InstructionWithAccounts<TAccountMetas> &
     InstructionWithData<ReadonlyUint8Array>,
 ): ParsedCreateMarketInstruction<TProgram, TAccountMetas> {
-  if (instruction.accounts.length < 15) {
+  if (instruction.accounts.length < 16) {
     throw new SolanaError(
       SOLANA_ERROR__PROGRAM_CLIENTS__INSUFFICIENT_ACCOUNT_METAS,
       {
         actualAccountMetas: instruction.accounts.length,
-        expectedAccountMetas: 15,
+        expectedAccountMetas: 16,
       },
     );
   }
@@ -962,6 +1007,7 @@ export function parseCreateMarketInstruction<
       book: getNextAccount(),
       bookUsdc: getNextAccount(),
       bookYes: getNextAccount(),
+      bookNo: getNextAccount(),
       usdcMint: getNextAccount(),
       systemProgram: getNextAccount(),
       tokenProgram: getNextAccount(),

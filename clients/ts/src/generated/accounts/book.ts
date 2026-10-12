@@ -69,6 +69,7 @@ export type Book = {
   bump: number;
   bookUsdcBump: number;
   bookYesBump: number;
+  bookNoBump: number;
   reserved: ReadonlyUint8Array;
   /** Highest price first, then oldest. */
   bids: Array<Order>;
@@ -86,6 +87,7 @@ export type BookArgs = {
   bump: number;
   bookUsdcBump: number;
   bookYesBump: number;
+  bookNoBump: number;
   reserved: ReadonlyUint8Array;
   /** Highest price first, then oldest. */
   bids: Array<OrderArgs>;
@@ -106,7 +108,8 @@ export function getBookEncoder(): FixedSizeEncoder<BookArgs> {
       ["bump", getU8Encoder()],
       ["bookUsdcBump", getU8Encoder()],
       ["bookYesBump", getU8Encoder()],
-      ["reserved", fixEncoderSize(getBytesEncoder(), 19)],
+      ["bookNoBump", getU8Encoder()],
+      ["reserved", fixEncoderSize(getBytesEncoder(), 18)],
       ["bids", getArrayEncoder(getOrderEncoder(), { size: 64 })],
       ["asks", getArrayEncoder(getOrderEncoder(), { size: 64 })],
       ["traders", getArrayEncoder(getTraderEncoder(), { size: 64 })],
@@ -126,7 +129,8 @@ export function getBookDecoder(): FixedSizeDecoder<Book> {
     ["bump", getU8Decoder()],
     ["bookUsdcBump", getU8Decoder()],
     ["bookYesBump", getU8Decoder()],
-    ["reserved", fixDecoderSize(getBytesDecoder(), 19)],
+    ["bookNoBump", getU8Decoder()],
+    ["reserved", fixDecoderSize(getBytesDecoder(), 18)],
     ["bids", getArrayDecoder(getOrderDecoder(), { size: 64 })],
     ["asks", getArrayDecoder(getOrderDecoder(), { size: 64 })],
     ["traders", getArrayDecoder(getTraderDecoder(), { size: 64 })],
@@ -192,5 +196,5 @@ export async function fetchAllMaybeBook(
 }
 
 export function getBookSize(): number {
-  return 6728;
+  return 7240;
 }

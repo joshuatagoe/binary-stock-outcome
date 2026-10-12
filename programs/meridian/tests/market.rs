@@ -38,6 +38,7 @@ fn the_operator_creates_the_market_and_every_account_it_owns() {
     assert_eq!((m.mint_open, m.open, m.close), (AT_9_00, AT_9_30, AT_4_00_PM));
     assert_eq!((m.owed, m.status), (0, MarketStatus::Trading));
     assert_eq!(m.creator, c.operator, "who paid the deposits, for Close book (D50)");
+    assert_eq!(m.feed_id, [5; 32], "META's feed from Config, kept for this market's settlement (D49)");
     assert_eq!(m.bump, market_pda(&meta_680()).1, "the canonical bump, found rather than passed in");
 
     for (seed, side, stored_bump) in [(YES_SEED, "Yes", m.yes_bump), (NO_SEED, "No", m.no_bump)] {
@@ -78,6 +79,9 @@ fn the_operator_creates_the_market_and_every_account_it_owns() {
     assert_eq!((book_usdc.owner, mint_and_owner(&book_usdc.data)), (TOKEN, (c.usdc_mint, book)));
     let book_yes = c.account(&address(BOOK_YES_SEED, &market).0).unwrap();
     assert_eq!((book_yes.owner, mint_and_owner(&book_yes.data)), (TOKEN_2022, (address(YES_SEED, &market).0, book)));
+    let book_no = c.account(&address(meridian::BOOK_NO_SEED, &market).0).unwrap();
+    assert_eq!((book_no.owner, mint_and_owner(&book_no.data)), (TOKEN_2022, (address(NO_SEED, &market).0, book)), "paired offers' No (D142)");
+    assert_eq!(b.book_no_bump, address(meridian::BOOK_NO_SEED, &market).1);
 }
 
 #[test]

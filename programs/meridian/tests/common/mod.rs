@@ -130,6 +130,8 @@ pub fn config_for(m: &Mollusk, usdc_mint: Pubkey, operator: Pubkey, admin: Pubke
     };
     let mut data = Vec::new();
     config.try_serialize(&mut data).unwrap();
+    // Full size, as Initialize Config allocates it, so a field that grows (a pending admin) still fits.
+    data.resize(8 + <Config as anchor_lang::Space>::INIT_SPACE, 0);
     Account { lamports: rent(m, data.len()), data, owner: meridian::ID, executable: false, rent_epoch: 0 }
 }
 
@@ -194,12 +196,13 @@ impl OrderSetup {
 /// A book of `o.makers` traders, each resting an offer and a bid of 1 Yes (all 64: offers at 36¢ to 99¢ and bids at
 /// 1¢ to 35¢, a full book), and a taker with 1,000 USDC and, for a sell, the Yes it sells.
 pub fn full_book(o: Order) -> OrderSetup {
-    let m = mollusk();
-    let market = Pubkey::new_unique();
+    let mut m = mollusk();
+    m.sysvars.clock.unix_timestamp = AT_10_16;
+    let (market, market_bump) = market_pda(&meta_680());
     let pda = |seed: &[u8]| Pubkey::find_program_address(&[seed, market.as_ref()], &meridian::ID);
     let ((book, bump), (book_usdc, usdc_bump), (book_yes, yes_bump)) = (pda(BOOK_SEED), pda(BOOK_USDC_SEED), pda(BOOK_YES_SEED));
     let mut b: Box<Book> = Box::new(bytemuck::Zeroable::zeroed());
-    b.init(market, bump, usdc_bump, yes_bump);
+    b.init(market, bump, usdc_bump, yes_bump, pda(meridian::BOOK_NO_SEED).1);
     let taker = o.taker.unwrap_or_else(Pubkey::new_unique);
     if let Some(rest) = &o.taker_rests {
         b.place(&taker, rest, 64).unwrap();
@@ -216,14 +219,14 @@ pub fn full_book(o: Order) -> OrderSetup {
     let mut book_data = Book::DISCRIMINATOR.to_vec();
     book_data.extend_from_slice(bytemuck::bytes_of(&*b));
 
-    let (usdc_mint_key, yes_mint_key) = (Pubkey::new_unique(), Pubkey::new_unique());
+    let (usdc_mint_key, (yes_mint_key, yes_bump)) = (Pubkey::new_unique(), pda(YES_SEED));
     let (taker_usdc, taker_yes) = (Pubkey::new_unique(), Pubkey::new_unique());
     let config_key = Pubkey::find_program_address(&[CONFIG_SEED], &meridian::ID).0;
     let event_authority = Pubkey::find_program_address(&[b"__event_authority"], &meridian::ID).0;
     let taker_yes_amount = if o.side == Side::Sell { o.quantity as u64 } else { 0 };
     let accounts = vec![
         (config_key, config(&m, usdc_mint_key, o.fill_limit, o.paused)),
-        (market, Account::default()),
+        (market, market_account(&m, market_bump, yes_bump)),
         (book, Account { lamports: rent(&m, book_data.len()), data: book_data, owner: meridian::ID, executable: false, rent_epoch: 0 }),
         (book_usdc, token_account(&m, TOKEN, usdc_mint_key, book, b.locked_usdc() + b.free_usdc())),
         (book_yes, token_account(&m, TOKEN_2022, yes_mint_key, book, b.locked_yes() + b.free_yes())),
@@ -371,6 +374,7 @@ impl Chain {
             book: pda(BOOK_SEED, &market),
             book_usdc: pda(BOOK_USDC_SEED, &market),
             book_yes: pda(BOOK_YES_SEED, &market),
+            book_no: pda(meridian::BOOK_NO_SEED, &market),
             usdc_mint: self.usdc_mint,
             system_program: anchor_lang::system_program::ID,
             token_program: TOKEN,
@@ -445,6 +449,27 @@ impl Chain {
         Instruction { program_id: meridian::ID, accounts: metas, data: meridian::instruction::Redeem { mode, quantity }.data() }
     }
 
+    pub fn place_order_ix(&self, market: &Pubkey, t: &Trader, args: PlaceOrderArgs) -> Instruction {
+        let metas = meridian::accounts::PlaceOrder {
+            config: self.config,
+            market: *market,
+            book: pda(BOOK_SEED, market),
+            book_usdc: pda(BOOK_USDC_SEED, market),
+            book_yes: pda(BOOK_YES_SEED, market),
+            taker: t.owner,
+            taker_usdc: t.usdc,
+            taker_yes: t.yes,
+            usdc_mint: self.usdc_mint,
+            yes_mint: pda(YES_SEED, market),
+            token_program: TOKEN,
+            token_2022_program: TOKEN_2022,
+            event_authority: self.event_authority,
+            program: meridian::ID,
+        }
+        .to_account_metas(None);
+        Instruction { program_id: meridian::ID, accounts: metas, data: meridian::instruction::PlaceOrder { args }.data() }
+    }
+
     pub fn amount(&self, key: &Pubkey) -> u64 {
         token_amount(self.account(key).unwrap())
     }
@@ -478,4 +503,50 @@ impl Chain {
 pub fn refused_by_anchor(result: &ProgramResult, error: anchor_lang::error::ErrorCode) -> bool {
     let code = error as u32;
     matches!(result, ProgramResult::Failure(e) if format!("{e:?}") == format!("Custom({code})"))
+}
+
+/// 10:16, when Alice buys Dave's offer (§3).
+pub const AT_10_16: i64 = AT_9_30 + 46 * 60;
+
+/// META $680 as Create market leaves it, for tests that start from a book.
+pub fn market_account(m: &Mollusk, bump: u8, yes_bump: u8) -> Account {
+    let args = meta_680();
+    let mut ticker = [0u8; 8];
+    ticker[..args.ticker.len()].copy_from_slice(args.ticker.as_bytes());
+    let market = Market {
+        ticker,
+        day: args.day,
+        strike_cents: args.strike_cents,
+        mint_open: args.mint_open,
+        open: args.open,
+        close: args.close,
+        owed: 0,
+        status: meridian::MarketStatus::Trading,
+        hold: meridian::HoldReason::None,
+        outcome: meridian::Outcome::None,
+        settled_by: meridian::SettledBy::None,
+        price: 0,
+        conf: 0,
+        expo: 0,
+        publish_time: 0,
+        proposal: meridian::Proposal {
+            outcome: meridian::Outcome::None,
+            official_close_cents: 0,
+            proposed_at: 0,
+            final_at: 0,
+            source: [0; 32],
+        },
+        book_closed: false,
+        created_slot: 0,
+        creator: Pubkey::new_unique(),
+        bump,
+        yes_bump,
+        no_bump: Pubkey::find_program_address(&[NO_SEED, market_pda(&meta_680()).0.as_ref()], &meridian::ID).1,
+        vault_bump: Pubkey::find_program_address(&[VAULT_SEED, market_pda(&meta_680()).0.as_ref()], &meridian::ID).1,
+        feed_id: [5; 32],
+        _reserved: [0; 32],
+    };
+    let mut data = Vec::new();
+    market.try_serialize(&mut data).unwrap();
+    Account { lamports: rent(m, data.len()), data, owner: meridian::ID, executable: false, rent_epoch: 0 }
 }

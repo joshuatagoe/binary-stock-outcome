@@ -131,3 +131,108 @@ fn a_self_trade_returns_the_takers_own_offer_to_its_wallet() {
     assert_eq!(book.asks()[0].price, 37, "its offer and the 36¢ offer are gone");
     assert_eq!((book.free_usdc(), book.free_yes()), (36 * CENT, 0), "only the maker's 0.36 waits in the book");
 }
+
+#[test]
+fn orders_open_at_9_30_and_close_5_seconds_before_the_close() {
+    // D46, D102, by the chain's clock.
+    for (at, refused) in [(common::AT_9_30 - 1, Some(MeridianError::NotOpenYet)), (common::AT_9_30, None), (common::AT_4_00_PM - 6, None), (common::AT_4_00_PM - 5, Some(MeridianError::OrdersClosed))] {
+        let mut mk = full_book(Order::reaching(Side::Buy, 1));
+        mk.m.sysvars.clock.unix_timestamp = at;
+        let r = mk.m.process_instruction(&mk.ix, &mk.accounts);
+        match refused {
+            Some(e) => assert!(refused_with(&r.program_result, e), "at {at}: {:?}", r.program_result),
+            None => assert!(r.program_result.is_ok(), "at {at}: {:?}", r.program_result),
+        }
+    }
+}
+
+#[test]
+fn the_taker_trades_from_its_own_accounts_only() {
+    let mut mk = full_book(Order::reaching(Side::Buy, 1));
+    let taker_yes = mk.taker_yes;
+    let account = mk.account_mut(taker_yes);
+    account.data[32..64].copy_from_slice(anchor_lang::prelude::Pubkey::new_unique().as_ref());
+    let r = mk.m.process_instruction(&mk.ix, &mk.accounts);
+    assert!(refused_with(&r.program_result, MeridianError::NotYourAccount), "{:?}", r.program_result);
+}
+
+#[test]
+fn another_markets_yes_mint_is_refused() {
+    let mut mk = full_book(Order::reaching(Side::Buy, 1));
+    let yes_mint = common::pda(meridian::YES_SEED, &common::market_pda(&common::meta_680()).0);
+    let meta = mk.ix.accounts.iter_mut().find(|m| m.pubkey == yes_mint).unwrap();
+    let other = anchor_lang::prelude::Pubkey::new_unique();
+    meta.pubkey = other;
+    mk.accounts.push((other, solana_account::Account::default()));
+    let r = mk.m.process_instruction(&mk.ix, &mk.accounts);
+    assert!(common::refused_by_anchor(&r.program_result, anchor_lang::error::ErrorCode::ConstraintSeeds), "{:?}", r.program_result);
+}
+
+fn cancel_ix(mk: &OrderSetup, owner: anchor_lang::prelude::Pubkey, order_id: u64) -> anchor_lang::solana_program::instruction::Instruction {
+    use anchor_lang::{InstructionData, ToAccountMetas};
+    let (config, market, usdc_mint) = (mk.ix.accounts[0].pubkey, mk.ix.accounts[1].pubkey, mk.ix.accounts[8].pubkey);
+    let event_authority = anchor_lang::prelude::Pubkey::find_program_address(&[b"__event_authority"], &meridian::ID).0;
+    let metas = meridian::accounts::CancelOrder {
+        config,
+        market,
+        book: mk.book,
+        owner,
+        book_usdc: mk.book_usdc,
+        book_yes: mk.book_yes,
+        book_no: common::pda(meridian::BOOK_NO_SEED, &market),
+        vault: common::pda(meridian::VAULT_SEED, &market),
+        yes_mint: common::pda(meridian::YES_SEED, &market),
+        no_mint: common::pda(meridian::NO_SEED, &market),
+        usdc_mint,
+        token_program: common::TOKEN,
+        token_2022_program: common::TOKEN_2022,
+        event_authority,
+        program: meridian::ID,
+    }
+    .to_account_metas(None);
+    anchor_lang::solana_program::instruction::Instruction { program_id: meridian::ID, accounts: metas, data: meridian::instruction::CancelOrder { order_id }.data() }
+}
+
+#[test]
+fn the_owner_cancels_and_what_it_locked_waits_in_the_book() {
+    // D99: Carol-like, a resting bid of 3 at 30¢ is cancelled; 0.90 moves to the owner's balance in the book.
+    let taker = anchor_lang::prelude::Pubkey::new_unique();
+    let own = PlaceOrderArgs { side: Side::Buy, kind: OrderKind::Limit, price: 30, quantity: 3, order_id: 9 };
+    let mut mk = full_book(Order { makers: 4, taker_rests: Some(own), taker: Some(taker), ..Order::reaching(Side::Buy, 1) });
+    let ix = cancel_ix(&mk, taker, 9);
+    mk.accounts.push((taker, solana_account::Account { lamports: 1_000_000_000, ..Default::default() }));
+    fill_missing(&mut mk, &ix);
+    let r = mk.m.process_instruction(&ix, &mk.accounts);
+    assert!(r.program_result.is_ok(), "{:?}", r.program_result);
+    let book: &Book = bytemuck::from_bytes(&r.get_account(&mk.book).unwrap().data[8..]);
+    assert_eq!(book.trader(&taker).unwrap().free_usdc, 90 * CENT);
+    assert!(book.bids().iter().all(|o| o.price != 30));
+    let stranger = anchor_lang::prelude::Pubkey::new_unique();
+    mk.accounts.push((stranger, solana_account::Account { lamports: 1_000_000_000, ..Default::default() }));
+    let r = mk.m.process_instruction(&cancel_ix(&mk, stranger, 9), &mk.accounts);
+    assert!(refused_with(&r.program_result, MeridianError::OrderNotFound), "only the owner's own order");
+}
+
+#[test]
+fn cancelling_works_while_paused_and_after_the_close() {
+    // D68: never paused.
+    let taker = anchor_lang::prelude::Pubkey::new_unique();
+    let own = PlaceOrderArgs { side: Side::Sell, kind: OrderKind::Limit, price: 90, quantity: 1, order_id: 4 };
+    let mut mk = full_book(Order { makers: 4, taker_rests: Some(own), taker: Some(taker), paused: true, ..Order::reaching(Side::Buy, 1) });
+    mk.m.sysvars.clock.unix_timestamp = common::AT_4_00_PM + 60;
+    mk.accounts.push((taker, solana_account::Account { lamports: 1_000_000_000, ..Default::default() }));
+    let ix = cancel_ix(&mk, taker, 4);
+    fill_missing(&mut mk, &ix);
+    let r = mk.m.process_instruction(&ix, &mk.accounts);
+    assert!(r.program_result.is_ok(), "{:?}", r.program_result);
+}
+
+/// Accounts a plain cancel lists but doesn't use (the book's No account, the vault, the No mint, D142) exist only as
+/// empty placeholders in a test book.
+fn fill_missing(mk: &mut OrderSetup, ix: &anchor_lang::solana_program::instruction::Instruction) {
+    for meta in &ix.accounts {
+        if !mk.accounts.iter().any(|(k, _)| *k == meta.pubkey) {
+            mk.accounts.push((meta.pubkey, solana_account::Account::default()));
+        }
+    }
+}

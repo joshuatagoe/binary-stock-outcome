@@ -1,0 +1,14 @@
+{
+  "name": "@meridian/shared",
+  "private": true,
+  "type": "module",
+  "version": "0.0.0",
+  "description": "The strike ladder (D52), worst price (D15), units (D84), New York calendar, market addresses (D139), and the event and stream types (D95). TypeScript run by Node's type stripping; no build step.",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "scripts": {
+    "test": "vitest run",
+    "typecheck": "tsc -p ."
+  }
+}

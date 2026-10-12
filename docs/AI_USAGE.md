@@ -128,3 +128,10 @@ How AI was used on this project: tools, what worked, where it misled us, and how
     - The card's negative cases for Mint pairs and Redeem (wrong signer, swapped and duplicate accounts) had no tests. Twelve were added, and each new check was seen failing first (M1.02).
 
     Lesson, as in 23, 26 and 28: review against the design before calling a slice done.
+
+## 2026-10-12 — M1 slices c and d (trading and the freeze)
+
+### Where AI misled us or we course-corrected
+
+30. **The agent building `packages/shared` found two errors in the AI's design docs.** §10 and the decisions dated the 2027 clock change 8 March; US daylight time starts on the second Sunday of March, 14 March 2027, and the calendar tests now check it. D52's $499.995 example (480 against 490) was left over from the half-up proposal D52 replaced; under the final rule it gives 510 and 540 against 520 and 550 when rounded to cents first. Both are corrected, and the golden strikes freeze the right numbers. Lesson: compute a worked example from the rule as finally written, not from the draft before it.
+31. **A fresh-context review of the freeze found two contracts that couldn't have been built as declared.** Record close had no way to learn a market's close time (only the market stores it, and early-close days differ), so a later after-hours price would have "improved" the record and then failed settlement. And the 4:00 sweep could never close a Buy No offer's pairs, as USERS.md says it does, because their No sat in the trader's wallet where the operator can't sign. Record close now takes a market of that stock and day, which also keeps its feed (D139), and paired offers keep their No in the book (D142). The review also found missing accounts, errors and event fields, a shared event list with 7 of 21 events, and a health type that didn't match the live backend; all fixed, and a test now fails if the shared events drift from the program's. Lesson: before freezing a contract, check that each declared instruction can actually do what the design says, account by account.

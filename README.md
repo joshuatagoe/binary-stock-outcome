@@ -56,7 +56,7 @@ npm run verify
 
 `npm run verify` is the same command locally and in CI. It runs:
 
-- the commit guard's tests (<!-- count:hooks -->9<!-- /count --> tests), verify's own tests (<!-- count:verify -->46<!-- /count --> tests), the toolchain check's tests (<!-- count:toolchain -->10<!-- /count --> tests), the key export's tests (<!-- count:keys -->2<!-- /count --> tests), the smoke test's tests (<!-- count:smoke -->9<!-- /count --> tests), make dev's tests (<!-- count:dev -->3<!-- /count --> tests), the backend's tests (<!-- count:backend -->29<!-- /count --> tests, Vitest), the website's unit tests (<!-- count:web -->10<!-- /count --> tests, Vitest) and its browser tests (<!-- count:web-e2e -->10<!-- /count --> tests, Playwright, after `npx playwright install chromium` once)
+- the commit guard's tests (<!-- count:hooks -->9<!-- /count --> tests), verify's own tests (<!-- count:verify -->46<!-- /count --> tests), the toolchain check's tests (<!-- count:toolchain -->10<!-- /count --> tests), the key export's tests (<!-- count:keys -->2<!-- /count --> tests), the smoke test's tests (<!-- count:smoke -->9<!-- /count --> tests), the shared package's tests (<!-- count:shared -->71<!-- /count --> tests, Vitest), make dev's tests (<!-- count:dev -->3<!-- /count --> tests), the backend's tests (<!-- count:backend -->29<!-- /count --> tests, Vitest), the website's unit tests (<!-- count:web -->10<!-- /count --> tests, Vitest) and its browser tests (<!-- count:web-e2e -->10<!-- /count --> tests, Playwright, after `npx playwright install chromium` once)
 - a check that `rust-toolchain.toml`, `.nvmrc`, `Cargo.toml`, `Anchor.toml`, the build image and the backend's Node image agree with the pins in `scripts/toolchain/pins.sh`
 - a check that every decision and finding cited in the docs exists
 - a check that each skill's `.cursor` and `.claude` copies match
@@ -79,7 +79,7 @@ On Windows, keep Rust's build output on WSL's disk (`CARGO_TARGET_DIR`): a clean
 
 ## Program
 
-The Solana program is in [`programs/meridian`](programs/meridian), at `kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQX3Ly`. So far it has Initialize Config, Create market, Mint pairs, Redeem (pairs) and the first form of Place order, with the order book (ARCHITECTURE.md §6, M1). Build and test it in WSL, then regenerate the TypeScript client on Windows:
+The Solana program is in [`programs/meridian`](programs/meridian), at `kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQX3Ly`. It declares all 23 instructions of ARCHITECTURE.md §6. Built so far: Initialize Config, Update config, the admin rotation, Set operator, Pause and Unpause, Create market, Mint pairs, Redeem (pairs), Place order and Cancel order, with the order book; the rest return "not implemented" until their milestone (M1's freeze, P31). Build and test it in WSL, then regenerate the TypeScript client on Windows:
 
 ```sh
 bash scripts/program/build.sh          # in WSL: builds and refreshes clients/idl/meridian.json

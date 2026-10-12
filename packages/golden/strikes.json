@@ -1,0 +1,51 @@
+{
+  "_about": "D52's strike cases, frozen. Source: D52 (nearest $10; an exact tie rounds away from the previous close, so below the close rounds down and above rounds up; the 7th strike, the rounded close itself, ties up; rounded once from Pyth's integer and exponent, never after first rounding to cents), D6 and D49 (the plus and minus 3, 6 and 9 percent ladder and the $10 step, config/program-devnet.json), and the spec's META and AAPL examples. A close is Pyth's integer price and exponent (price x 10^exponent dollars); strikes are cents. A frozen golden file: changing it is a logged decision.",
+  "ladderBps": [300, 600, 900],
+  "stepCents": 1000,
+  "includeClose": true,
+  "cases": [
+    {
+      "id": "d52-500-00",
+      "about": "D52: a $500.00 close. -3% is exactly $485.00 and rounds down to 480 (below the close); +3% is exactly $515.00 and rounds up to 520; -9% is $455.00 and rounds down to 450; +9% is $545.00 and rounds up to 550.",
+      "close": { "price": 50000000, "exponent": -5 },
+      "strikesCents": [45000, 47000, 48000, 50000, 52000, 53000, 55000]
+    },
+    {
+      "id": "d52-499-995",
+      "about": "D52: a $499.995 close, which Pyth can report with five decimals. Rounded once from the exact price: +3% is $514.99485 (510), +9% is $544.99455 (540). Rounding the close to $500.00 first would give 520 and 550 (the $500.00 case), so the order of the roundings changes two strikes.",
+      "close": { "price": 49999500, "exponent": -5 },
+      "strikesCents": [45000, 47000, 48000, 50000, 51000, 53000, 54000],
+      "ifRoundedToCentsFirstStrikesCents": [45000, 47000, 48000, 50000, 52000, 53000, 55000]
+    },
+    {
+      "id": "spec-meta-680",
+      "about": "The spec's META example: previous close $680 gives 620, 640, 660, 680, 700, 720, 740.",
+      "close": { "price": 68000000, "exponent": -5 },
+      "strikesCents": [62000, 64000, 66000, 68000, 70000, 72000, 74000]
+    },
+    {
+      "id": "spec-aapl-230",
+      "about": "The spec's AAPL example: previous close $230 gives seven ladder points that deduplicate to 5 strikes: 210, 220, 230, 240, 250.",
+      "close": { "price": 23000000, "exponent": -5 },
+      "strikesCents": [21000, 22000, 23000, 24000, 25000]
+    },
+    {
+      "id": "d52-685-00-seventh-ties-up",
+      "about": "D52: the rounded previous close itself, the 7th strike, rounds a tie up ($685.00 gives $690). Other points: 705.55 to 710, 664.45 to 660, 726.10 to 730, 643.90 to 640, 746.65 to 750, 623.35 to 620.",
+      "close": { "price": 68500000, "exponent": -5 },
+      "strikesCents": [62000, 64000, 66000, 69000, 71000, 73000, 75000]
+    },
+    {
+      "id": "exponent-minus-2",
+      "about": "The same $500.00 close written with exponent -2 (Pyth's exponent can differ): the strikes must not depend on the exponent.",
+      "close": { "price": 50000, "exponent": -2 },
+      "strikesCents": [45000, 47000, 48000, 50000, 52000, 53000, 55000]
+    },
+    {
+      "id": "exponent-minus-8",
+      "about": "The same $500.00 close written with exponent -8: the strikes must not depend on the exponent.",
+      "close": { "price": 50000000000, "exponent": -8 },
+      "strikesCents": [45000, 47000, 48000, 50000, 52000, 53000, 55000]
+    }
+  ]
+}

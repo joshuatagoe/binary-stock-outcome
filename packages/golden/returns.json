@@ -1,0 +1,79 @@
+{
+  "_about": "Refund and return amounts as ARCHITECTURE.md section 3 and USERS.md state them: a cancel and the 4:00 sweep move what an order locked into the owner's balance inside the book (D37, D99), and Return to owner pays that balance to the owner's own wallet (D99). Rows give the order, what it locked, and what comes back. A bid locks priceCents x quantity cents in USDC; an offer locks its Yes. USDC in base units (1e6 per dollar), prices in cents, tokens whole. The screen text is USERS.md's wording (D84 units). A frozen golden file: changing it is a logged decision.",
+  "refunds": [
+    {
+      "id": "carol-cancel-2pm",
+      "source": "ARCHITECTURE.md section 3 (2:00 PM row, 'Carol cancels and gets 6.00 back'); money-flow.mjs",
+      "order": { "owner": "Carol", "side": "Buy", "priceCents": 60, "quantity": 10 },
+      "trigger": "cancel",
+      "lockedUsdc": 6000000,
+      "returnedUsdc": 6000000,
+      "returnedYes": 0
+    },
+    {
+      "id": "carol-cancel-users-f6",
+      "source": "USERS.md F6: 'Order cancelled · 3.60 USDC returned'",
+      "order": { "owner": "Carol", "side": "Buy", "priceCents": 60, "quantity": 6 },
+      "trigger": "cancel",
+      "lockedUsdc": 3600000,
+      "returnedUsdc": 3600000,
+      "returnedYes": 0,
+      "text": "Order cancelled · 3.60 USDC returned"
+    },
+    {
+      "id": "carol-sweep-users-f10",
+      "source": "USERS.md F10: 'Refunded at the close · Buy 10 Yes at 60c · 6 open · 3.60 USDC returned'",
+      "order": { "owner": "Carol", "side": "Buy", "priceCents": 60, "quantity": 6 },
+      "trigger": "sweep",
+      "lockedUsdc": 3600000,
+      "returnedUsdc": 3600000,
+      "returnedYes": 0,
+      "text": "Refunded at the close · 3.60 USDC returned"
+    },
+    {
+      "id": "bot-offer-sweep-4pm",
+      "source": "ARCHITECTURE.md section 3 (4:00 PM row); money-flow.mjs: the bot's unsold offer of 5 Yes at 66c comes back as Yes, not USDC",
+      "order": { "owner": "bot", "side": "Sell", "priceCents": 66, "quantity": 5 },
+      "trigger": "sweep",
+      "lockedUsdc": 0,
+      "returnedUsdc": 0,
+      "returnedYes": 5
+    },
+    {
+      "id": "bob-buy-no-limit-cancel",
+      "source": "USERS.md F6: 'Order cancelled · 6 pairs closed · 6.00 USDC returned' (D38, D39)",
+      "order": { "owner": "Bob", "side": "Sell", "priceCents": null, "quantity": 6, "note": "the unsold Yes of a Buy No limit order rests as an offer" },
+      "trigger": "cancel",
+      "closedPairs": 6,
+      "returnedUsdc": 6000000,
+      "returnedYes": 0,
+      "text": "Order cancelled · 6 pairs closed · 6.00 USDC returned"
+    },
+    {
+      "id": "bob-buy-no-limit-sweep",
+      "source": "USERS.md F10: 'Refunded at the close · 6 pairs closed · 6.00 USDC returned'",
+      "order": { "owner": "Bob", "side": "Sell", "priceCents": null, "quantity": 6 },
+      "trigger": "sweep",
+      "closedPairs": 6,
+      "returnedUsdc": 6000000,
+      "returnedYes": 0,
+      "text": "Refunded at the close · 6 pairs closed · 6.00 USDC returned"
+    }
+  ],
+  "returnToOwner": [
+    {
+      "id": "dave-after-alice-buy",
+      "source": "ARCHITECTURE.md section 5 ('his entry holds 6.50 USDC free until it is returned'); D99",
+      "owner": "Dave",
+      "before": { "bookFree": { "usdc": 6500000, "yes": 0 }, "wallet": { "usdc": 10000000, "yes": 0 } },
+      "after": { "bookFree": { "usdc": 0, "yes": 0 }, "wallet": { "usdc": 16500000, "yes": 0 } }
+    },
+    {
+      "id": "repeat-finds-zero",
+      "source": "ARCHITECTURE.md section 3: a repeat return finds zero",
+      "owner": "Dave",
+      "before": { "bookFree": { "usdc": 0, "yes": 0 }, "wallet": { "usdc": 16500000, "yes": 0 } },
+      "after": { "bookFree": { "usdc": 0, "yes": 0 }, "wallet": { "usdc": 16500000, "yes": 0 } }
+    }
+  ]
+}

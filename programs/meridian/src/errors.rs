@@ -59,4 +59,40 @@ pub enum MeridianError {
     SupplyOverOwed,
     #[msg("A token account belongs to someone else")]
     NotYourAccount,
+    #[msg("Not the admin")]
+    NotAdmin,
+    #[msg("Only the proposed admin can accept")]
+    NotPendingAdmin,
+    #[msg("The fill limit is 1 to 32 (M1.01)")]
+    FillLimitTooHigh,
+    #[msg("No resting order of yours has that ID")]
+    OrderNotFound,
+    #[msg("Strikes can be removed only before 9:00 AM ET, before anyone can trade.")]
+    RemoveTooLate,
+    #[msg("The proposal's wait isn't over")]
+    WaitNotOver,
+    #[msg("The price account isn't a verified Pyth update from an accepted receiver")]
+    PriceNotGenuine,
+    #[msg("The price account is for another feed")]
+    WrongFeed,
+    #[msg("The price was published outside the window before the close")]
+    OutsideWindow,
+    #[msg("The price's band is too wide")]
+    BandTooWide,
+    #[msg("The close hasn't happened yet")]
+    BeforeClose,
+    #[msg("The market already has a result")]
+    AlreadySettled,
+    #[msg("The book still has orders or balances")]
+    BookNotEmpty,
+    #[msg("The market isn't under review")]
+    NotUnderReview,
+    #[msg("There is no proposal")]
+    NoProposal,
+    #[msg("The source is longer than 32 bytes")]
+    SourceTooLong,
+    #[msg("A recorded close is replaced only by a later price")]
+    PriceNotLater,
+    #[msg("The recorded close is frozen: a market of this stock has settled on it")]
+    RecordFrozen,
 }

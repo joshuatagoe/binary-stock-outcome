@@ -129,16 +129,23 @@ fn validate(args: &InitializeConfigArgs) -> Result<()> {
     require!(keys.iter().all(|k| *k != Pubkey::default()), MeridianError::MissingKey);
     #[cfg(feature = "devnet")]
     require_keys_neq!(args.usdc_mint, MAINNET_USDC, MeridianError::MainnetUsdcOnDevnet);
+    validate_receivers(&args.pyth_receivers)?;
+    validate_tickers(&args.tickers)?;
+    validate_ladder(args.ladder_bps)?;
+    validate_thresholds(&args.thresholds)
+}
 
-    let receivers = &args.pyth_receivers;
+pub(crate) fn validate_receivers(receivers: &[Pubkey]) -> Result<()> {
     require!(
         (1..=MAX_RECEIVERS).contains(&receivers.len())
             && receivers.iter().all(|r| *r != Pubkey::default())
             && (receivers.len() < 2 || receivers[0] != receivers[1]),
         MeridianError::InvalidReceivers
     );
+    Ok(())
+}
 
-    let tickers = &args.tickers;
+pub(crate) fn validate_tickers(tickers: &[Ticker]) -> Result<()> {
     require!((1..=MAX_TICKERS).contains(&tickers.len()), MeridianError::InvalidTickers);
     for (i, t) in tickers.iter().enumerate() {
         let symbol_ok = (1..=8).contains(&t.symbol.len()) && t.symbol.bytes().all(|b| b.is_ascii_uppercase());
@@ -148,11 +155,16 @@ fn validate(args: &InitializeConfigArgs) -> Result<()> {
             MeridianError::InvalidTickers
         );
     }
+    Ok(())
+}
 
-    let [a, b, c] = args.ladder_bps;
+pub(crate) fn validate_ladder(ladder_bps: [u16; 3]) -> Result<()> {
+    let [a, b, c] = ladder_bps;
     require!(0 < a && a < b && b < c && c <= 5_000, MeridianError::InvalidLadder);
+    Ok(())
+}
 
-    let th = &args.thresholds;
+pub(crate) fn validate_thresholds(th: &Thresholds) -> Result<()> {
     let bps_ok = th.max_band_bps <= 10_000 && th.override_bound_bps <= 10_000;
     let secs = [
         th.orders_close_before_secs,

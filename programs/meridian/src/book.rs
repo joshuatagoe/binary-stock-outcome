@@ -10,6 +10,10 @@ use crate::errors::MeridianError;
 pub const BOOK_SEED: &[u8] = b"book";
 pub const BOOK_USDC_SEED: &[u8] = b"book_usdc";
 pub const BOOK_YES_SEED: &[u8] = b"book_yes";
+pub const BOOK_NO_SEED: &[u8] = b"book_no";
+/// An order's flag: a Buy No limit order's unsold pairs (D39, D142). Its Yes rest as the offer and its No wait in the
+/// book's No account, so a cancel or the sweep can close the pairs without the owner's signature.
+pub const PAIRED: u8 = 1;
 pub const SIDE_CAPACITY: usize = 64;
 pub const TRADER_CAPACITY: usize = 64;
 /// USDC has 6 decimals, so one cent is 10,000 of its smallest units.
@@ -26,7 +30,8 @@ pub struct Book {
     pub bump: u8,
     pub book_usdc_bump: u8,
     pub book_yes_bump: u8,
-    pub _reserved: [u8; 19],
+    pub book_no_bump: u8,
+    pub _reserved: [u8; 18],
     /// Highest price first, then oldest.
     pub bids: [Order; SIDE_CAPACITY],
     /// Lowest price first, then oldest.
@@ -46,10 +51,12 @@ pub struct Order {
     pub trader: u8,
     /// In cents, 1 to 99.
     pub price: u8,
-    pub _pad: [u8; 2],
+    /// PAIRED, or 0.
+    pub flags: u8,
+    pub _pad: u8,
 }
 
-/// A trader with resting orders or free balances (56 bytes). Reused once both balances are zero and it has no open
+/// A trader with resting orders or free balances (64 bytes). Reused once both balances are zero and it has no open
 /// orders (D107).
 #[zero_copy]
 #[derive(Debug, PartialEq, Eq)]
@@ -58,6 +65,8 @@ pub struct Trader {
     /// USDC credited by fills and cancels, waiting for Return to owner (D99), in its smallest units.
     pub free_usdc: u64,
     pub free_yes: u64,
+    /// No released from the owner's paired offers as they sell (D142).
+    pub free_no: u64,
     pub open_orders: u16,
     pub _pad: [u8; 6],
 }
@@ -178,11 +187,12 @@ impl Placement {
 }
 
 impl Book {
-    pub fn init(&mut self, market: Pubkey, bump: u8, book_usdc_bump: u8, book_yes_bump: u8) {
+    pub fn init(&mut self, market: Pubkey, bump: u8, book_usdc_bump: u8, book_yes_bump: u8, book_no_bump: u8) {
         self.market = market;
         self.bump = bump;
         self.book_usdc_bump = book_usdc_bump;
         self.book_yes_bump = book_yes_bump;
+        self.book_no_bump = book_no_bump;
     }
 
     pub fn bids(&self) -> &[Order] {
@@ -235,12 +245,18 @@ impl Book {
             }
             let maker = &mut self.traders[o.trader as usize];
             if maker.owner == *owner {
-                // D90: what the resting order locked goes back to its owner's wallet, which this order's transaction
-                // already lists.
-                p.returned += match args.side {
-                    Side::Buy => o.quantity as u64,
-                    Side::Sell => o.quantity as u64 * o.price as u64 * USDC_PER_CENT,
-                };
+                if o.flags & PAIRED != 0 {
+                    // A paired offer's Yes and No stay together, in the owner's balance in the book (D142).
+                    maker.free_yes += o.quantity as u64;
+                    maker.free_no += o.quantity as u64;
+                } else {
+                    // D90: what the resting order locked goes back to its owner's wallet, which this order's
+                    // transaction already lists.
+                    p.returned += match args.side {
+                        Side::Buy => o.quantity as u64,
+                        Side::Sell => o.quantity as u64 * o.price as u64 * USDC_PER_CENT,
+                    };
+                }
                 maker.open_orders -= 1;
                 p.matches.push(Match::SelfTrade(SelfTrade { order_id: o.order_id, price: o.price, quantity: o.quantity }));
                 taken += 1;
@@ -251,6 +267,10 @@ impl Book {
             match args.side {
                 Side::Buy => maker.free_usdc += usdc,
                 Side::Sell => maker.free_yes += q as u64,
+            }
+            if o.flags & PAIRED != 0 {
+                // A paired offer's sold Yes release their No to the owner (D142).
+                maker.free_no += q as u64;
             }
             p.matches.push(Match::Fill(Fill { maker: maker.owner, maker_order_id: o.order_id, price: o.price, quantity: q }));
             p.fill_usdc += usdc;
@@ -304,7 +324,8 @@ impl Book {
             quantity,
             trader: trader as u8,
             price: args.price,
-            _pad: [0; 2],
+            flags: 0,
+            _pad: 0,
         };
         self.next_seq += 1;
         let (orders, behind): (&mut [Order], fn(u8, u8) -> bool) = match args.side {
@@ -319,6 +340,47 @@ impl Book {
             Side::Sell => self.ask_count += 1,
         }
         Ok(())
+    }
+
+    /// Takes an owner's resting order off the book and credits what it locked to the owner's balance (D99): a bid's
+    /// USDC or an offer's Yes. Returns the order's side, as what it does with Yes, its price and its quantity.
+    pub fn cancel(&mut self, owner: &Pubkey, order_id: u64) -> Result<(Side, u8, u32)> {
+        if self.paired(owner, order_id) {
+            // Closing a paired offer's pairs needs the vault and both mints (D142); built with Buy No in M2.
+            return err!(MeridianError::NotImplemented);
+        }
+        let trader = self.trader_index(owner).ok_or(MeridianError::OrderNotFound)?;
+        for side in [Side::Buy, Side::Sell] {
+            let (orders, count) = match side {
+                Side::Buy => (&mut self.bids, self.bid_count as usize),
+                Side::Sell => (&mut self.asks, self.ask_count as usize),
+            };
+            let Some(at) = orders[..count].iter().position(|o| o.trader as usize == trader && o.order_id == order_id) else {
+                continue;
+            };
+            let o = orders[at];
+            orders.copy_within(at + 1..count, at);
+            let entry = &mut self.traders[trader];
+            match side {
+                Side::Buy => {
+                    self.bid_count -= 1;
+                    entry.free_usdc += o.quantity as u64 * o.price as u64 * USDC_PER_CENT;
+                }
+                Side::Sell => {
+                    self.ask_count -= 1;
+                    entry.free_yes += o.quantity as u64;
+                }
+            }
+            entry.open_orders -= 1;
+            return Ok((side, o.price, o.quantity));
+        }
+        err!(MeridianError::OrderNotFound)
+    }
+
+    /// Whether an owner's resting order is a paired offer (D142).
+    pub fn paired(&self, owner: &Pubkey, order_id: u64) -> bool {
+        let Some(t) = self.trader_index(owner) else { return false };
+        self.asks().iter().any(|o| o.trader as usize == t && o.order_id == order_id && o.flags & PAIRED != 0)
     }
 
     fn trader_index(&self, owner: &Pubkey) -> Option<usize> {
@@ -346,6 +408,15 @@ impl Book {
         self.traders.iter().map(|t| t.free_usdc).sum()
     }
 
+    /// No waiting in the book with paired offers (D142).
+    pub fn locked_no(&self) -> u64 {
+        self.asks().iter().filter(|o| o.flags & PAIRED != 0).map(|o| o.quantity as u64).sum()
+    }
+
+    pub fn free_no(&self) -> u64 {
+        self.traders.iter().map(|t| t.free_no).sum()
+    }
+
     pub fn free_yes(&self) -> u64 {
         self.traders.iter().map(|t| t.free_yes).sum()
     }
@@ -356,11 +427,11 @@ mod tests {
     use super::*;
     use anchor_lang::Discriminator;
 
-    const MARKET_BOOK_BYTES: usize = 6_728;
+    const MARKET_BOOK_BYTES: usize = 7_240;
 
     fn book() -> Box<Book> {
         let mut b: Box<Book> = Box::new(bytemuck::Zeroable::zeroed());
-        b.init(Pubkey::new_unique(), 255, 254, 253);
+        b.init(Pubkey::new_unique(), 255, 254, 253, 252);
         b
     }
 
@@ -400,9 +471,9 @@ mod tests {
     }
 
     #[test]
-    fn the_book_is_6728_bytes_with_24_byte_orders_and_56_byte_traders() {
+    fn the_book_is_7240_bytes_with_24_byte_orders_and_64_byte_traders() {
         assert_eq!(std::mem::size_of::<Order>(), 24);
-        assert_eq!(std::mem::size_of::<Trader>(), 56);
+        assert_eq!(std::mem::size_of::<Trader>(), 64);
         assert_eq!(Book::DISCRIMINATOR.len() + std::mem::size_of::<Book>(), MARKET_BOOK_BYTES);
     }
 
@@ -610,6 +681,39 @@ mod tests {
         b.place(&Pubkey::new_unique(), &sell(OrderKind::Limit, 62, 1, 1), 10).unwrap();
         let p = b.place(&dave, &buy(OrderKind::Market, 99, 1, 3), 2).unwrap();
         assert_eq!((p.self_trades().len(), p.filled, p.stopped_at_fill_limit), (2, 0, true));
+    }
+
+    #[test]
+    fn a_paired_offers_sold_yes_release_their_no_to_the_owner() {
+        // D142: Bob's Buy No limit left 6 pairs unsold: 6 Yes offered at 67¢, their 6 No in the book.
+        let mut b = book();
+        let bob = Pubkey::new_unique();
+        b.place(&bob, &sell(OrderKind::Limit, 67, 6, 1), 10).unwrap();
+        b.asks[0].flags = PAIRED;
+        assert_eq!(b.locked_no(), 6);
+        let alice = Pubkey::new_unique();
+        let p = b.place(&alice, &buy(OrderKind::Market, 67, 4, 1), 10).unwrap();
+        assert_eq!(p.filled, 4);
+        assert_eq!((b.trader(&bob).unwrap().free_usdc, b.trader(&bob).unwrap().free_no), (cents(4 * 67), 4));
+        assert_eq!((b.locked_no(), b.locked_no() + b.free_no()), (2, 6), "the No only move inside the book");
+        assert!(b.paired(&bob, 1));
+        assert_eq!(b.cancel(&bob, 1).unwrap_err(), MeridianError::NotImplemented.into(), "closing pairs comes with Buy No (M2)");
+    }
+
+    #[test]
+    fn cancelling_moves_what_the_order_locked_to_its_owners_balance() {
+        // Carol cancels her bid of 10 at 60¢: 6.00 waits in the book for her (D99), and the book still balances.
+        let TenSixteen { mut book, carol, dave, .. } = ten_sixteen();
+        let locked = book.locked_usdc() + book.free_usdc();
+        assert_eq!(book.cancel(&carol, 1).unwrap(), (Side::Buy, 60, 10));
+        assert_eq!(book.trader(&carol).unwrap().free_usdc, cents(600));
+        assert_eq!(book.trader(&carol).unwrap().open_orders, 0);
+        assert_eq!(levels(book.bids()), vec![(64, 5)]);
+        assert_eq!(book.locked_usdc() + book.free_usdc(), locked);
+        assert_eq!(book.cancel(&dave, 1).unwrap(), (Side::Sell, 65, 10), "an offer's Yes go to the owner's balance");
+        assert_eq!(book.trader(&dave).unwrap().free_yes, 10);
+        assert_eq!(book.cancel(&carol, 1).unwrap_err(), MeridianError::OrderNotFound.into(), "only once");
+        assert_eq!(book.cancel(&Pubkey::new_unique(), 1).unwrap_err(), MeridianError::OrderNotFound.into(), "only your own");
     }
 
     #[test]

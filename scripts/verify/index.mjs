@@ -31,6 +31,7 @@ const SUITES = {
 
 // Vitest suites (ARCHITECTURE.md §9), by name and folder.
 const VITEST_SUITES = {
+  shared: 'packages/shared',
   backend: 'apps/backend',
   web: 'apps/web',
 };
@@ -148,7 +149,7 @@ step('client: clients/ts matches a fresh generation from clients/idl', () => {
 rmSync(clientDir, { recursive: true, force: true });
 
 // Every TypeScript project in the repository, by its tsconfig folder.
-for (const project of ['clients/ts', 'scripts/devnet', 'apps/backend', 'apps/web']) {
+for (const project of ['clients/ts', 'packages/shared', 'scripts/devnet', 'apps/backend', 'apps/web']) {
   step(`typecheck: ${project}`, () => {
     const tsc = join(ROOT, 'node_modules', 'typescript', 'bin', 'tsc');
     const r = spawnSync(process.execPath, [tsc, '-p', project], { cwd: ROOT, encoding: 'utf8' });

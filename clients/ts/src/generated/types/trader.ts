@@ -28,7 +28,7 @@ import {
 } from "@solana/kit";
 
 /**
- * A trader with resting orders or free balances (56 bytes). Reused once both balances are zero and it has no open
+ * A trader with resting orders or free balances (64 bytes). Reused once both balances are zero and it has no open
  * orders (D107).
  */
 export type Trader = {
@@ -36,6 +36,8 @@ export type Trader = {
   /** USDC credited by fills and cancels, waiting for Return to owner (D99), in its smallest units. */
   freeUsdc: bigint;
   freeYes: bigint;
+  /** No released from the owner's paired offers as they sell (D142). */
+  freeNo: bigint;
   openOrders: number;
   pad: ReadonlyUint8Array;
 };
@@ -45,6 +47,8 @@ export type TraderArgs = {
   /** USDC credited by fills and cancels, waiting for Return to owner (D99), in its smallest units. */
   freeUsdc: number | bigint;
   freeYes: number | bigint;
+  /** No released from the owner's paired offers as they sell (D142). */
+  freeNo: number | bigint;
   openOrders: number;
   pad: ReadonlyUint8Array;
 };
@@ -54,6 +58,7 @@ export function getTraderEncoder(): FixedSizeEncoder<TraderArgs> {
     ["owner", getAddressEncoder()],
     ["freeUsdc", getU64Encoder()],
     ["freeYes", getU64Encoder()],
+    ["freeNo", getU64Encoder()],
     ["openOrders", getU16Encoder()],
     ["pad", fixEncoderSize(getBytesEncoder(), 6)],
   ]);
@@ -64,6 +69,7 @@ export function getTraderDecoder(): FixedSizeDecoder<Trader> {
     ["owner", getAddressDecoder()],
     ["freeUsdc", getU64Decoder()],
     ["freeYes", getU64Decoder()],
+    ["freeNo", getU64Decoder()],
     ["openOrders", getU16Decoder()],
     ["pad", fixDecoderSize(getBytesDecoder(), 6)],
   ]);

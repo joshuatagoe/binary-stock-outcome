@@ -6,6 +6,7 @@
  * @see https://github.com/codama-idl/codama
  */
 
+export * from "./bookQuotes.ts";
 export * from "./cancelReason.ts";
 export * from "./holdReason.ts";
 export * from "./marketStatus.ts";
@@ -13,6 +14,7 @@ export * from "./order.ts";
 export * from "./orderKind.ts";
 export * from "./outcome.ts";
 export * from "./proposal.ts";
+export * from "./quote.ts";
 export * from "./redeemMode.ts";
 export * from "./settledBy.ts";
 export * from "./side.ts";
