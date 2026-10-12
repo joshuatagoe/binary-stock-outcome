@@ -1,0 +1,381 @@
+{
+  "_about": "The running example morning, 9:10 to Alice's buy at 10:16 (ARCHITECTURE.md section 3 table, section 5 book at 10:16; D41, D42, D99, D101). Derived with the arithmetic of scripts/arch/money-flow.mjs, with makers' proceeds credited in the book (D99) rather than the maker's wallet. USDC in base units (1e6 per dollar), prices in cents, tokens whole. Each \"after\" is the state once the step is done; bookUsdc and bookYes are what the book's two token accounts hold (locked plus free, D137). A frozen golden file: changing it is a logged decision.",
+  "startingUsdcPerWallet": 20000000,
+  "steps": [
+    {
+      "id": "start",
+      "at": "9:00",
+      "who": null,
+      "action": "start",
+      "note": "five wallets, 20.00 USDC each",
+      "after": {
+        "wallets": {
+          "Alice": {
+            "usdc": 20000000,
+            "yes": 0,
+            "no": 0
+          },
+          "Bob": {
+            "usdc": 20000000,
+            "yes": 0,
+            "no": 0
+          },
+          "Carol": {
+            "usdc": 20000000,
+            "yes": 0,
+            "no": 0
+          },
+          "Dave": {
+            "usdc": 20000000,
+            "yes": 0,
+            "no": 0
+          },
+          "bot": {
+            "usdc": 20000000,
+            "yes": 0,
+            "no": 0
+          }
+        },
+        "vaultUsdc": 0,
+        "owedUsdc": 0,
+        "pairsOutstanding": 0,
+        "book": {
+          "asks": [],
+          "bids": [],
+          "freeBalances": {},
+          "bookUsdc": 0,
+          "bookYes": 0
+        }
+      }
+    },
+    {
+      "id": "dave-mint",
+      "at": "9:10",
+      "who": "Dave",
+      "action": "mintPairs",
+      "quantity": 10,
+      "after": {
+        "wallets": {
+          "Alice": {
+            "usdc": 20000000,
+            "yes": 0,
+            "no": 0
+          },
+          "Bob": {
+            "usdc": 20000000,
+            "yes": 0,
+            "no": 0
+          },
+          "Carol": {
+            "usdc": 20000000,
+            "yes": 0,
+            "no": 0
+          },
+          "Dave": {
+            "usdc": 10000000,
+            "yes": 10,
+            "no": 10
+          },
+          "bot": {
+            "usdc": 20000000,
+            "yes": 0,
+            "no": 0
+          }
+        },
+        "vaultUsdc": 10000000,
+        "owedUsdc": 10000000,
+        "pairsOutstanding": 10,
+        "book": {
+          "asks": [],
+          "bids": [],
+          "freeBalances": {},
+          "bookUsdc": 0,
+          "bookYes": 0
+        }
+      }
+    },
+    {
+      "id": "bot-quotes",
+      "at": "9:30",
+      "who": "bot",
+      "action": "mintPairsThenQuote",
+      "mintQuantity": 5,
+      "quotes": [
+        {
+          "side": "sell",
+          "priceCents": 66,
+          "quantity": 5
+        },
+        {
+          "side": "buy",
+          "priceCents": 64,
+          "quantity": 5
+        }
+      ],
+      "after": {
+        "wallets": {
+          "Alice": {
+            "usdc": 20000000,
+            "yes": 0,
+            "no": 0
+          },
+          "Bob": {
+            "usdc": 20000000,
+            "yes": 0,
+            "no": 0
+          },
+          "Carol": {
+            "usdc": 20000000,
+            "yes": 0,
+            "no": 0
+          },
+          "Dave": {
+            "usdc": 10000000,
+            "yes": 10,
+            "no": 10
+          },
+          "bot": {
+            "usdc": 11800000,
+            "yes": 0,
+            "no": 5
+          }
+        },
+        "vaultUsdc": 15000000,
+        "owedUsdc": 15000000,
+        "pairsOutstanding": 15,
+        "book": {
+          "asks": [
+            {
+              "owner": "bot",
+              "priceCents": 66,
+              "quantity": 5
+            }
+          ],
+          "bids": [
+            {
+              "owner": "bot",
+              "priceCents": 64,
+              "quantity": 5
+            }
+          ],
+          "freeBalances": {},
+          "bookUsdc": 3200000,
+          "bookYes": 5
+        }
+      }
+    },
+    {
+      "id": "carol-bid",
+      "at": "10:00",
+      "who": "Carol",
+      "action": "placeLimit",
+      "side": "buy",
+      "priceCents": 60,
+      "quantity": 10,
+      "after": {
+        "wallets": {
+          "Alice": {
+            "usdc": 20000000,
+            "yes": 0,
+            "no": 0
+          },
+          "Bob": {
+            "usdc": 20000000,
+            "yes": 0,
+            "no": 0
+          },
+          "Carol": {
+            "usdc": 14000000,
+            "yes": 0,
+            "no": 0
+          },
+          "Dave": {
+            "usdc": 10000000,
+            "yes": 10,
+            "no": 10
+          },
+          "bot": {
+            "usdc": 11800000,
+            "yes": 0,
+            "no": 5
+          }
+        },
+        "vaultUsdc": 15000000,
+        "owedUsdc": 15000000,
+        "pairsOutstanding": 15,
+        "book": {
+          "asks": [
+            {
+              "owner": "bot",
+              "priceCents": 66,
+              "quantity": 5
+            }
+          ],
+          "bids": [
+            {
+              "owner": "bot",
+              "priceCents": 64,
+              "quantity": 5
+            },
+            {
+              "owner": "Carol",
+              "priceCents": 60,
+              "quantity": 10
+            }
+          ],
+          "freeBalances": {},
+          "bookUsdc": 9200000,
+          "bookYes": 5
+        }
+      }
+    },
+    {
+      "id": "dave-offer",
+      "at": "10:16",
+      "who": "Dave",
+      "action": "placeLimit",
+      "side": "sell",
+      "priceCents": 65,
+      "quantity": 10,
+      "note": "the book section 5 shows at 10:16",
+      "after": {
+        "wallets": {
+          "Alice": {
+            "usdc": 20000000,
+            "yes": 0,
+            "no": 0
+          },
+          "Bob": {
+            "usdc": 20000000,
+            "yes": 0,
+            "no": 0
+          },
+          "Carol": {
+            "usdc": 14000000,
+            "yes": 0,
+            "no": 0
+          },
+          "Dave": {
+            "usdc": 10000000,
+            "yes": 0,
+            "no": 10
+          },
+          "bot": {
+            "usdc": 11800000,
+            "yes": 0,
+            "no": 5
+          }
+        },
+        "vaultUsdc": 15000000,
+        "owedUsdc": 15000000,
+        "pairsOutstanding": 15,
+        "book": {
+          "asks": [
+            {
+              "owner": "Dave",
+              "priceCents": 65,
+              "quantity": 10
+            },
+            {
+              "owner": "bot",
+              "priceCents": 66,
+              "quantity": 5
+            }
+          ],
+          "bids": [
+            {
+              "owner": "bot",
+              "priceCents": 64,
+              "quantity": 5
+            },
+            {
+              "owner": "Carol",
+              "priceCents": 60,
+              "quantity": 10
+            }
+          ],
+          "freeBalances": {},
+          "bookUsdc": 9200000,
+          "bookYes": 15
+        }
+      }
+    },
+    {
+      "id": "alice-buy",
+      "at": "10:16",
+      "who": "Alice",
+      "action": "buyYes",
+      "worstPriceCents": 66,
+      "quantity": 10,
+      "fills": [
+        {
+          "maker": "Dave",
+          "priceCents": 65,
+          "quantity": 10
+        }
+      ],
+      "paidUsdc": 6500000,
+      "after": {
+        "wallets": {
+          "Alice": {
+            "usdc": 13500000,
+            "yes": 10,
+            "no": 0
+          },
+          "Bob": {
+            "usdc": 20000000,
+            "yes": 0,
+            "no": 0
+          },
+          "Carol": {
+            "usdc": 14000000,
+            "yes": 0,
+            "no": 0
+          },
+          "Dave": {
+            "usdc": 10000000,
+            "yes": 0,
+            "no": 10
+          },
+          "bot": {
+            "usdc": 11800000,
+            "yes": 0,
+            "no": 5
+          }
+        },
+        "vaultUsdc": 15000000,
+        "owedUsdc": 15000000,
+        "pairsOutstanding": 15,
+        "book": {
+          "asks": [
+            {
+              "owner": "bot",
+              "priceCents": 66,
+              "quantity": 5
+            }
+          ],
+          "bids": [
+            {
+              "owner": "bot",
+              "priceCents": 64,
+              "quantity": 5
+            },
+            {
+              "owner": "Carol",
+              "priceCents": 60,
+              "quantity": 10
+            }
+          ],
+          "freeBalances": {
+            "Dave": {
+              "usdc": 6500000,
+              "yes": 0
+            }
+          },
+          "bookUsdc": 15700000,
+          "bookYes": 5
+        }
+      }
+    }
+  ]
+}

@@ -1,0 +1,47 @@
+{
+  "_about": "D90's self-trade example, as the program now behaves (D138; M1.01 in docs/research/cross-cutting.md): at 10:16 AM the book holds Dave's offer of 10 Yes at 65c and the bot's offer of 5 at 66c (the morning.json state after step dave-offer). Dave sends Buy Yes of 5 at up to 66c. The first level it would meet is his own offer, so the program cancels it (reason SelfTrade), returns its 10 Yes straight to Dave's wallet in the same transaction (the cancel is the taker's own side, ARCHITECTURE.md section 3), and keeps matching: Dave buys the bot's 5 at 66c for 3.30 USDC. The cancel's event comes before the fills after it. The bot's proceeds are credited in the book (D99). Without the rule he would have paid 3.25 to himself. USDC in base units, prices in cents, tokens whole. A frozen golden file: changing it is a logged decision.",
+  "before": {
+    "wallets": {
+      "Dave": { "usdc": 10000000, "yes": 0, "no": 10 },
+      "bot": { "usdc": 11800000, "yes": 0, "no": 5 }
+    },
+    "vaultUsdc": 15000000,
+    "book": {
+      "asks": [
+        { "owner": "Dave", "priceCents": 65, "quantity": 10 },
+        { "owner": "bot", "priceCents": 66, "quantity": 5 }
+      ],
+      "bids": [
+        { "owner": "bot", "priceCents": 64, "quantity": 5 },
+        { "owner": "Carol", "priceCents": 60, "quantity": 10 }
+      ],
+      "freeBalances": {},
+      "bookUsdc": 9200000,
+      "bookYes": 15
+    }
+  },
+  "order": { "who": "Dave", "action": "buyYes", "type": "market", "worstPriceCents": 66, "quantity": 5 },
+  "events": [
+    { "kind": "OrderCancelled", "owner": "Dave", "side": "Sell", "priceCents": 65, "quantity": 10, "reason": "SelfTrade" },
+    { "kind": "Fill", "maker": "bot", "taker": "Dave", "side": "Buy", "priceCents": 66, "quantity": 5 }
+  ],
+  "paidUsdc": 3300000,
+  "wouldHavePaidHimselfUsdc": 3250000,
+  "after": {
+    "wallets": {
+      "Dave": { "usdc": 6700000, "yes": 15, "no": 10 },
+      "bot": { "usdc": 11800000, "yes": 0, "no": 5 }
+    },
+    "vaultUsdc": 15000000,
+    "book": {
+      "asks": [],
+      "bids": [
+        { "owner": "bot", "priceCents": 64, "quantity": 5 },
+        { "owner": "Carol", "priceCents": 60, "quantity": 10 }
+      ],
+      "freeBalances": { "bot": { "usdc": 3300000, "yes": 0 } },
+      "bookUsdc": 12500000,
+      "bookYes": 0
+    }
+  }
+}
