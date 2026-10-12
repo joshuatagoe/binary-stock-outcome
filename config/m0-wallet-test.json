@@ -1,0 +1,25 @@
+{
+  "_about": "Devnet test mints for M0's wallet test (D94, D108), made by scripts/devnet/m0-mints.ts. Test tokens only; the operator key holds the mint and burn authority.",
+  "network": "devnet",
+  "authority": "AXwqBeBHE8S7YgngNQmudHYijxNpvQMPEkTymR59ZZXY",
+  "mints": [
+    {
+      "side": "Yes",
+      "address": "9XqLMoYz4iteiumAiKb5Myv98efzpfYWpFSLb1KvJRGG",
+      "name": "META 680+ Yes 10/08 (TEST)",
+      "symbol": "YES"
+    },
+    {
+      "side": "No",
+      "address": "6GCpoXjvhbBcUFVdo9HeAa2pnzPnrrYQNzx7imkaDufN",
+      "name": "META 680+ No 10/08 (TEST)",
+      "symbol": "NO"
+    }
+  ],
+  "control": {
+    "address": "F7TfzURtZmwZJcjo7N3jHEYYLRN3PJjjWav4xJidg8rZ",
+    "name": "META 680+ Yes 10/08 (CONTROL)",
+    "symbol": "CTRL",
+    "note": "Token-2022 with a name but without Permissioned Burn"
+  }
+}

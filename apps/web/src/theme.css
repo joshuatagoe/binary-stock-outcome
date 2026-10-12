@@ -213,6 +213,17 @@ button {
   border-radius: 0.375rem;
 }
 
+.answers {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.results {
+  white-space: pre-wrap;
+  font-size: 0.85rem;
+}
+
 .addresses dt {
   margin-top: 0.75rem;
   font-weight: 600;
