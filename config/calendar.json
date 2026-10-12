@@ -1,0 +1,46 @@
+{
+  "_about": "NYSE's trading calendar for 2026 to 2028 (D12, ARCHITECTURE.md section 11). Holidays are full closures; early closes end at 1:00 PM ET. Keys are yyyymmdd. Weekends are not listed. The backend refuses any day outside the years below, and a test fails 60 days before the table runs out. apps/backend/test/calendar.test.ts works the holidays out again from NYSE's rules. Copied from https://www.nyse.com/markets/hours-calendars on 2026-10-12; check against it when extending.",
+  "years": [
+    2026,
+    2027,
+    2028
+  ],
+  "holidays": {
+    "20260101": "New Year's Day",
+    "20260119": "Martin Luther King Jr. Day",
+    "20260216": "Washington's Birthday",
+    "20260403": "Good Friday",
+    "20260525": "Memorial Day",
+    "20260619": "Juneteenth",
+    "20260703": "Independence Day (observed)",
+    "20260907": "Labor Day",
+    "20261126": "Thanksgiving Day",
+    "20261225": "Christmas Day",
+    "20270101": "New Year's Day",
+    "20270118": "Martin Luther King Jr. Day",
+    "20270215": "Washington's Birthday",
+    "20270326": "Good Friday",
+    "20270531": "Memorial Day",
+    "20270618": "Juneteenth (observed)",
+    "20270705": "Independence Day (observed)",
+    "20270906": "Labor Day",
+    "20271125": "Thanksgiving Day",
+    "20271224": "Christmas Day (observed)",
+    "20280117": "Martin Luther King Jr. Day",
+    "20280221": "Washington's Birthday",
+    "20280414": "Good Friday",
+    "20280529": "Memorial Day",
+    "20280619": "Juneteenth",
+    "20280704": "Independence Day",
+    "20280904": "Labor Day",
+    "20281123": "Thanksgiving Day",
+    "20281225": "Christmas Day"
+  },
+  "earlyCloses": {
+    "20261127": "Day after Thanksgiving",
+    "20261224": "Christmas Eve",
+    "20271126": "Day after Thanksgiving",
+    "20280703": "Day before Independence Day",
+    "20281124": "Day after Thanksgiving"
+  }
+}

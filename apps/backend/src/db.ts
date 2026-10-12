@@ -26,6 +26,52 @@ export const MIGRATIONS: Migration[] = [
       );
     `,
   },
+  {
+    // §5's EVENTS (from the chain, rebuildable, D62) and the markets they name, plus the chain reader's place in the history.
+    name: '0002_events_markets_reader_state',
+    sql: `
+      CREATE TABLE events (
+        signature TEXT NOT NULL,
+        ix_index INTEGER NOT NULL CHECK (ix_index >= 0),
+        event_index INTEGER NOT NULL CHECK (event_index >= 0),
+        slot INTEGER NOT NULL CHECK (slot >= 0),
+        block_time TEXT,
+        kind TEXT NOT NULL,
+        market TEXT,
+        market_key TEXT,
+        trading_day INTEGER,
+        wallet TEXT,
+        counterparty TEXT,
+        price_cents INTEGER CHECK (price_cents IS NULL OR price_cents BETWEEN 1 AND 99),
+        qty INTEGER CHECK (qty IS NULL OR qty > 0),
+        usdc_units INTEGER CHECK (usdc_units IS NULL OR usdc_units >= 0),
+        data TEXT NOT NULL CHECK (json_valid(data)),
+        network_epoch INTEGER NOT NULL DEFAULT 0 CHECK (network_epoch >= 0),
+        PRIMARY KEY (signature, ix_index, event_index)
+      ) WITHOUT ROWID;
+      CREATE INDEX events_by_market_time ON events (market_key, slot);
+      CREATE INDEX events_by_wallet_time ON events (wallet, slot);
+      CREATE INDEX events_by_counterparty_time ON events (counterparty, slot) WHERE counterparty IS NOT NULL;
+      CREATE INDEX events_by_day_kind ON events (trading_day, kind);
+      CREATE INDEX events_by_market_address ON events (market) WHERE market_key IS NULL;
+      CREATE TABLE markets (
+        market TEXT PRIMARY KEY,
+        market_key TEXT NOT NULL,
+        network_epoch INTEGER NOT NULL DEFAULT 0 CHECK (network_epoch >= 0),
+        stock TEXT NOT NULL,
+        trading_day INTEGER NOT NULL,
+        strike_cents INTEGER NOT NULL CHECK (strike_cents > 0),
+        mint_open_at TEXT NOT NULL,
+        open_at TEXT NOT NULL,
+        close_at TEXT NOT NULL
+      );
+      CREATE INDEX markets_by_key ON markets (market_key);
+      CREATE TABLE reader_state (
+        key TEXT PRIMARY KEY,
+        value TEXT NOT NULL
+      );
+    `,
+  },
 ];
 
 export function openDatabase(path: string): Db {
