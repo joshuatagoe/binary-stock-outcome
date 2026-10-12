@@ -12,6 +12,7 @@
     "clients/ts"
   ],
   "scripts": {
+    "dev": "node scripts/dev/up.mjs",
     "verify": "node scripts/verify/index.mjs",
     "push": "node scripts/push.mjs",
     "client": "node scripts/client/generate.mjs"

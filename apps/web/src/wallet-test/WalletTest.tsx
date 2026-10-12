@@ -20,12 +20,13 @@ import { walletWithoutSigner } from '@solana/kit-plugin-wallet';
 import { useConnect, useConnectedWallet, useDisconnect, useWallets } from '@solana/kit-plugin-wallet/react';
 import { useCallback, useEffect, useState, type ReactNode } from 'react';
 import test from '../../../../config/m0-wallet-test.json';
-import { RPC_URL } from '../network.ts';
+import { DEVNET_RPC_URL } from '../network.ts';
 import { batchOfThree, sendOneToken, v1Transfer, type Lifetime } from './transactions.ts';
 
 const client = createClient().use(walletWithoutSigner({ chain: 'solana:devnet' }));
-const rpc = createSolanaRpc(RPC_URL);
-const sendAndConfirm = sendAndConfirmTransactionFactory({ rpc, rpcSubscriptions: createSolanaRpcSubscriptions(RPC_URL.replace(/^http/, 'ws')) });
+// Devnet even under make dev, whose local chain doesn't have these tokens.
+const rpc = createSolanaRpc(DEVNET_RPC_URL);
+const sendAndConfirm = sendAndConfirmTransactionFactory({ rpc, rpcSubscriptions: createSolanaRpcSubscriptions(DEVNET_RPC_URL.replace(/^http/, 'ws')) });
 const authority = address(test.authority);
 const [yesMint, noMint] = test.mints.map((m) => address(m.address));
 

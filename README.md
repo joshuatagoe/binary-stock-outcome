@@ -14,6 +14,37 @@ Each market asks one question about one trading day, for example "Will META clos
 - [Decisions](docs/DECISIONS.md): every decision, why it was made, and what it cost
 - [AI usage](docs/AI_USAGE.md): how AI was used, and where it was corrected
 
+## Run it locally
+
+One command runs the whole system on your computer, on a local chain. It needs no wallet, no faucet, no price source and no SOL (D74).
+
+```sh
+make dev          # or npm run dev; Ctrl+C stops everything
+make dev-check    # or npm run dev -- --check: starts everything, checks that each part answers, then stops
+```
+
+It needs `npm ci` and the Solana tools from [Build tools](#build-tools). On Linux, or in Ubuntu on WSL with the repository cloned there, run `make dev`. In a checkout on the Windows drive, run `npm run dev` from Windows: Anchor, `solana-keygen` and Surfpool run inside WSL, and the rest runs on Windows, where npm installed it (P29).
+
+In order, it:
+
+1. builds the program, if its code changed since the last run;
+2. makes local keys, on the first run;
+3. starts a new local chain (Surfpool);
+4. loads the program at its devnet address;
+5. creates Config with the local keys;
+6. starts the backend;
+7. starts the website.
+
+When every part answers, it prints how long each step took. With the program already built, it is ready in about 3 seconds (M0.14). The website shows the "Local demo · fake prices and a fake clock" banner and the local Config. Later milestones add the fake prices and the demo clock (D89).
+
+| | |
+|---|---|
+| Website | http://127.0.0.1:5173 |
+| Backend | http://127.0.0.1:8080/api/health |
+| Chain | http://127.0.0.1:8899 |
+
+What it makes goes in `.local/`, which git ignores: the local keys (worth nothing outside that chain), the chain's logs, the backend's store, and a copy of the program. The program's build output goes where `scripts/program/build.sh` puts it, in Rust's build folder. If one of its ports is taken, it stops before starting anything and names the port.
+
 ## Check
 
 Needs Node 24.21.0 (`.nvmrc`).
@@ -25,7 +56,7 @@ npm run verify
 
 `npm run verify` is the same command locally and in CI. It runs:
 
-- the commit guard's tests (<!-- count:hooks -->9<!-- /count --> tests), verify's own tests (<!-- count:verify -->46<!-- /count --> tests), the toolchain check's tests (<!-- count:toolchain -->10<!-- /count --> tests), the key export's tests (<!-- count:keys -->2<!-- /count --> tests), the smoke test's tests (<!-- count:smoke -->9<!-- /count --> tests), the backend's tests (<!-- count:backend -->29<!-- /count --> tests, Vitest), the website's unit tests (<!-- count:web -->8<!-- /count --> tests, Vitest) and its browser tests (<!-- count:web-e2e -->10<!-- /count --> tests, Playwright, after `npx playwright install chromium` once)
+- the commit guard's tests (<!-- count:hooks -->9<!-- /count --> tests), verify's own tests (<!-- count:verify -->46<!-- /count --> tests), the toolchain check's tests (<!-- count:toolchain -->10<!-- /count --> tests), the key export's tests (<!-- count:keys -->2<!-- /count --> tests), the smoke test's tests (<!-- count:smoke -->9<!-- /count --> tests), make dev's tests (<!-- count:dev -->3<!-- /count --> tests), the backend's tests (<!-- count:backend -->29<!-- /count --> tests, Vitest), the website's unit tests (<!-- count:web -->10<!-- /count --> tests, Vitest) and its browser tests (<!-- count:web-e2e -->10<!-- /count --> tests, Playwright, after `npx playwright install chromium` once)
 - a check that `rust-toolchain.toml`, `.nvmrc`, `Cargo.toml`, `Anchor.toml`, the build image and the backend's Node image agree with the pins in `scripts/toolchain/pins.sh`
 - a check that every decision and finding cited in the docs exists
 - a check that each skill's `.cursor` and `.claude` copies match
@@ -112,7 +143,7 @@ npx playwright install chromium          # once, for the browser tests
 npm run e2e -w apps/web                  # browser tests, with devnet replaced by a recorded Config and public/_headers served
 ```
 
-On the dev server only, `/wallet-test` runs M0's wallet test with Phantom and Solflare (P28); the deployed site has no such page.
+On the dev server only, `/wallet-test` runs M0's wallet test with Phantom and Solflare (P28); the deployed site has no such page. It uses devnet even under `make dev`, since its test tokens are devnet's.
 
 After each deploy, CI runs the smoke test against all three deployed parts: `scripts/smoke/program.mjs` (Config on devnet), `scripts/smoke/backend.mjs` (health at the deployed commit) and `scripts/smoke/website.mjs` (the page in a real browser, at the deployed commit, with its headers and no errors).
 
