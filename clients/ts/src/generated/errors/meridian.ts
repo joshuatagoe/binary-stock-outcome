@@ -44,10 +44,37 @@ export const MERIDIAN_ERROR__PAUSED = 0x177c; // 6012
 export const MERIDIAN_ERROR__BOOK_SHORT = 0x177d; // 6013
 /** DuplicateAccount: An account is passed twice */
 export const MERIDIAN_ERROR__DUPLICATE_ACCOUNT = 0x177e; // 6014
+/** NotImplemented: Not built yet */
+export const MERIDIAN_ERROR__NOT_IMPLEMENTED = 0x177f; // 6015
+/** NotOperator: Not the operator */
+export const MERIDIAN_ERROR__NOT_OPERATOR = 0x1780; // 6016
+/** TickerNotEnabled: This stock isn't enabled in the config */
+export const MERIDIAN_ERROR__TICKER_NOT_ENABLED = 0x1781; // 6017
+/** InvalidStrike: The strike must be above zero and a multiple of the stock's step */
+export const MERIDIAN_ERROR__INVALID_STRIKE = 0x1782; // 6018
+/** InvalidTimes: Minting must open no later than the open, and the open come before orders close */
+export const MERIDIAN_ERROR__INVALID_TIMES = 0x1783; // 6019
+/** CreateAfterOpen: A market must be created before it opens */
+export const MERIDIAN_ERROR__CREATE_AFTER_OPEN = 0x1784; // 6020
+/** NotOpenYet: Not open yet */
+export const MERIDIAN_ERROR__NOT_OPEN_YET = 0x1785; // 6021
+/** OrdersClosed: Trading ended before your order reached the network. Nothing was bought; only the network fee was charged. */
+export const MERIDIAN_ERROR__ORDERS_CLOSED = 0x1786; // 6022
+/** MarketSettled: Pairs can be closed only before the result is final */
+export const MERIDIAN_ERROR__MARKET_SETTLED = 0x1787; // 6023
+/** NotFinal: Redeem opens when the result is final. */
+export const MERIDIAN_ERROR__NOT_FINAL = 0x1788; // 6024
+/** VaultShort: The vault holds less than the market owes */
+export const MERIDIAN_ERROR__VAULT_SHORT = 0x1789; // 6025
+/** SupplyOverOwed: A token's supply is above what the market owes */
+export const MERIDIAN_ERROR__SUPPLY_OVER_OWED = 0x178a; // 6026
+/** NotYourAccount: A token account belongs to someone else */
+export const MERIDIAN_ERROR__NOT_YOUR_ACCOUNT = 0x178b; // 6027
 
 export type MeridianError =
   | typeof MERIDIAN_ERROR__BOOK_FULL
   | typeof MERIDIAN_ERROR__BOOK_SHORT
+  | typeof MERIDIAN_ERROR__CREATE_AFTER_OPEN
   | typeof MERIDIAN_ERROR__DUPLICATE_ACCOUNT
   | typeof MERIDIAN_ERROR__DUPLICATE_ORDER_ID
   | typeof MERIDIAN_ERROR__FILL_LIMIT_NOT_SET
@@ -55,18 +82,31 @@ export type MeridianError =
   | typeof MERIDIAN_ERROR__INVALID_PRICE
   | typeof MERIDIAN_ERROR__INVALID_QUANTITY
   | typeof MERIDIAN_ERROR__INVALID_RECEIVERS
+  | typeof MERIDIAN_ERROR__INVALID_STRIKE
   | typeof MERIDIAN_ERROR__INVALID_THRESHOLDS
   | typeof MERIDIAN_ERROR__INVALID_TICKERS
+  | typeof MERIDIAN_ERROR__INVALID_TIMES
   | typeof MERIDIAN_ERROR__MAINNET_USDC_ON_DEVNET
+  | typeof MERIDIAN_ERROR__MARKET_SETTLED
   | typeof MERIDIAN_ERROR__MISSING_KEY
+  | typeof MERIDIAN_ERROR__NOT_FINAL
+  | typeof MERIDIAN_ERROR__NOT_IMPLEMENTED
+  | typeof MERIDIAN_ERROR__NOT_OPEN_YET
+  | typeof MERIDIAN_ERROR__NOT_OPERATOR
   | typeof MERIDIAN_ERROR__NOT_UPGRADE_AUTHORITY
-  | typeof MERIDIAN_ERROR__PAUSED;
+  | typeof MERIDIAN_ERROR__NOT_YOUR_ACCOUNT
+  | typeof MERIDIAN_ERROR__ORDERS_CLOSED
+  | typeof MERIDIAN_ERROR__PAUSED
+  | typeof MERIDIAN_ERROR__SUPPLY_OVER_OWED
+  | typeof MERIDIAN_ERROR__TICKER_NOT_ENABLED
+  | typeof MERIDIAN_ERROR__VAULT_SHORT;
 
 let meridianErrorMessages: Record<MeridianError, string> | undefined;
 if (process.env["NODE_ENV"] !== "production") {
   meridianErrorMessages = {
     [MERIDIAN_ERROR__BOOK_FULL]: `This market's order book is full.`,
     [MERIDIAN_ERROR__BOOK_SHORT]: `The book's token accounts hold less than its orders and balances`,
+    [MERIDIAN_ERROR__CREATE_AFTER_OPEN]: `A market must be created before it opens`,
     [MERIDIAN_ERROR__DUPLICATE_ACCOUNT]: `An account is passed twice`,
     [MERIDIAN_ERROR__DUPLICATE_ORDER_ID]: `An order with this ID is already resting`,
     [MERIDIAN_ERROR__FILL_LIMIT_NOT_SET]: `The fill limit is not set`,
@@ -74,12 +114,24 @@ if (process.env["NODE_ENV"] !== "production") {
     [MERIDIAN_ERROR__INVALID_PRICE]: `Prices are 1 to 99 cents`,
     [MERIDIAN_ERROR__INVALID_QUANTITY]: `Quantities must be above 0`,
     [MERIDIAN_ERROR__INVALID_RECEIVERS]: `Accepted price programs: one or two, distinct, none missing`,
+    [MERIDIAN_ERROR__INVALID_STRIKE]: `The strike must be above zero and a multiple of the stock's step`,
     [MERIDIAN_ERROR__INVALID_THRESHOLDS]: `A threshold is out of range`,
     [MERIDIAN_ERROR__INVALID_TICKERS]: `Tickers: one to eight, distinct, 1 to 8 capital letters, a feed ID and a strike step each`,
+    [MERIDIAN_ERROR__INVALID_TIMES]: `Minting must open no later than the open, and the open come before orders close`,
     [MERIDIAN_ERROR__MAINNET_USDC_ON_DEVNET]: `The devnet build refuses mainnet USDC`,
+    [MERIDIAN_ERROR__MARKET_SETTLED]: `Pairs can be closed only before the result is final`,
     [MERIDIAN_ERROR__MISSING_KEY]: `A key in the config is missing`,
+    [MERIDIAN_ERROR__NOT_FINAL]: `Redeem opens when the result is final.`,
+    [MERIDIAN_ERROR__NOT_IMPLEMENTED]: `Not built yet`,
+    [MERIDIAN_ERROR__NOT_OPEN_YET]: `Not open yet`,
+    [MERIDIAN_ERROR__NOT_OPERATOR]: `Not the operator`,
     [MERIDIAN_ERROR__NOT_UPGRADE_AUTHORITY]: `Only the program's upgrade key may initialize the config`,
+    [MERIDIAN_ERROR__NOT_YOUR_ACCOUNT]: `A token account belongs to someone else`,
+    [MERIDIAN_ERROR__ORDERS_CLOSED]: `Trading ended before your order reached the network. Nothing was bought; only the network fee was charged.`,
     [MERIDIAN_ERROR__PAUSED]: `Trading is paused by the admin. You can still cancel orders, close pairs and redeem.`,
+    [MERIDIAN_ERROR__SUPPLY_OVER_OWED]: `A token's supply is above what the market owes`,
+    [MERIDIAN_ERROR__TICKER_NOT_ENABLED]: `This stock isn't enabled in the config`,
+    [MERIDIAN_ERROR__VAULT_SHORT]: `The vault holds less than the market owes`,
   };
 }
 

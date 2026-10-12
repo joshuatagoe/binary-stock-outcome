@@ -8,5 +8,8 @@
 
 export * from "./configInitialized.ts";
 export * from "./fill.ts";
+export * from "./marketCreated.ts";
 export * from "./orderCancelled.ts";
 export * from "./orderPlaced.ts";
+export * from "./pairsMinted.ts";
+export * from "./redeemed.ts";

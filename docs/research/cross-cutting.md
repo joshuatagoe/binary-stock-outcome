@@ -714,3 +714,26 @@ The user ran `/wallet-test` on the dev server with a new Phantom account (`8RMY2
 - **Self-trades and events, in LiteSVM.** A taker offering 2 Yes at 35¢ who buys 1 at up to 36¢ gets its 2 Yes back in the same transaction and buys a maker's 1 (D90). The transaction's event calls, decoded with the program's own types, read "cancel order 9 (2x35¢, SelfTrade)" and then "fill 1x1 at 36¢": the order reached. A Limit buy of 5 at 37¢ against offers at 36¢ to 39¢ records two fills, then "placed order 1 (3x37¢)".
 - **A donation.** A test that gave the book's USDC account one unit more than it owes kept trading. With the check set to "equal", as §5 said, the same test failed (D137).
 - **Each check seen failing.** With the pause check removed, the duplicate-account check removed, the book check removed, or "equal" in place of "at least", exactly the matching test failed. Trading at the taker's price failed four matching tests; a 64-byte trader entry failed the layout test; an extra header byte failed to compile ("derive(Pod) was applied to a type with padding"); an event without Anchor's tag failed the byte comparison.
+
+## 2026-10-12 M1 the money core (main session)
+
+### M1.02 [D50] [D53] [D56] [D64] [D94] [D108] [D139] [D140] [P30] CONFIRMED (measured)
+
+- **What a market costs,** from `cargo test -p meridian --test market_costs -- --nocapture`, with Mollusk's rent set to devnet's 5,080 lamports a byte (Mollusk starts at the older 6,960). The test pins each size:
+
+  | Account | Bytes | Deposit (lamports) | |
+  |---|---|---|---|
+  | Market | 258 | 1,960,880 | kept |
+  | Yes mint, named | 412 | 2,743,200 | kept |
+  | No mint, named | 410 | 2,733,040 | kept |
+  | Vault | 165 | 1,488,440 | kept |
+  | Book | 6,728 | 34,828,480 | returned |
+  | Book USDC, Book Yes | 165 each | 1,488,440 each | returned |
+
+  So 8,925,560 lamports (0.0089 SOL) are kept for good per market and 37,805,360 (0.0378 SOL) go out and come back; §5 had estimated 0.0130 and 0.0518. Each account holds exactly its deposit. Token-2022 accepted a 165-byte account for the book's Yes: these mints need no account extension.
+- **Compute:** Create market 126,200 units; Mint pairs 30,283; Redeem pairs 31,877, or 37,679 when it also closes the holder's two emptied accounts. The test asserts each fits the 200,000 an instruction gets without asking for more, so the 8:30 job needs no larger budget. A standalone Mint pairs is the spike's per-instruction base (about 18,000, M1.01) plus about 12,300, in line with M1.01's estimate of 12,508 for what Mint pairs adds to Buy No.
+- **The mints,** read back with spl-token-2022-interface: decimals 0, the market's address as mint authority and as Permissioned Burn authority, no freeze authority, a close authority held by the market (D140), a metadata pointer to the mint itself, and the names "META 680+ Yes 10/08" and "META 680+ No 10/08", symbols YES and NO, no link. Each deposit covers the size after the name is written. A holder's plain burn of a Yes token is refused by Token-2022.
+- **A pre-funded address.** With 1 lamport sent first to the future Yes mint, vault and book Yes addresses, Create market still succeeded and the accounts belong to the right programs. With the plain create path forced instead, it failed with `Custom(0)`, the system program's "already in use" (D139).
+- **Wrong signers and accounts.** Eve can't pay with Dave's USDC (the token program refuses), mint into another wallet's account or redeem Dave's tokens (NotYourAccount), swap Yes and No (the token program refuses), use META 690's vault or mints (ConstraintSeeds), a USDC mint other than Config's (ConstraintAddress), or pass one account twice (DuplicateAccount). A Yes account whose close authority is another key stays open, empty, after its last pair is redeemed, while the No account closes.
+- **Events, in LiteSVM:** three transactions recorded "created META 20261008 68000", "minted 10" and "redeemed Pairs 4 for 4000000".
+- **Each check seen failing.** Nineteen breaks, one at a time, each failed exactly its own test: a stock turned off accepted, no strike check, no order of times, creation after the open, no vault check, no supply check, minting before 9:00, minting after orders close, minting while paused, pairs closed once settled, emptied accounts left open, closing pairs stopped by the pause, the plain create path on a pre-funded address, minted tokens to anyone's accounts, redeeming from or to anyone's accounts, closing every emptied account, the creator not recorded, the holder's Yes passed as its No, and the mints without a close authority. In one batch run, creation after the open and the pre-funded address were reported as passing; run alone, each failed as expected, so that batch had tested an older build. Later batches touch the test files after each build so they recompile against it.

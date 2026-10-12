@@ -36,26 +36,44 @@ import {
 import {
   getBookCodec,
   getConfigCodec,
+  getMarketCodec,
   type Book,
   type BookArgs,
   type Config,
   type ConfigArgs,
+  type Market,
+  type MarketArgs,
 } from "../accounts/index.ts";
 import {
+  getCreateMarketInstructionAsync,
   getInitializeConfigInstructionAsync,
+  getMintPairsInstructionAsync,
   getPlaceOrderInstructionAsync,
+  getRedeemInstructionAsync,
+  parseCreateMarketInstruction,
   parseInitializeConfigInstruction,
+  parseMintPairsInstruction,
   parsePlaceOrderInstruction,
+  parseRedeemInstruction,
+  type CreateMarketAsyncInput,
   type InitializeConfigAsyncInput,
+  type MintPairsAsyncInput,
+  type ParsedCreateMarketInstruction,
   type ParsedInitializeConfigInstruction,
+  type ParsedMintPairsInstruction,
   type ParsedPlaceOrderInstruction,
+  type ParsedRedeemInstruction,
   type PlaceOrderAsyncInput,
+  type RedeemAsyncInput,
 } from "../instructions/index.ts";
 import {
   findBookPda,
   findBookUsdcPda,
   findBookYesPda,
   findConfigPda,
+  findNoMintPda,
+  findVaultPda,
+  findYesMintPda,
 } from "../pdas/index.ts";
 
 export const MERIDIAN_PROGRAM_ADDRESS =
@@ -64,8 +82,10 @@ export const MERIDIAN_PROGRAM_ADDRESS =
 export const MeridianAccount = {
   0: "Book",
   1: "Config",
+  2: "Market",
   Book: 0,
   Config: 1,
+  Market: 2,
 } as const;
 
 export type MeridianAccount = (typeof MeridianAccount)[Exclude<
@@ -99,6 +119,17 @@ export function identifyMeridianAccount(
   ) {
     return MeridianAccount.Config;
   }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([219, 190, 213, 55, 0, 227, 198, 154]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianAccount.Market;
+  }
   throw new SolanaError(
     SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_ACCOUNT,
     { accountData: data, programName: "meridian" },
@@ -108,12 +139,18 @@ export function identifyMeridianAccount(
 export const MeridianEvent = {
   0: "ConfigInitialized",
   1: "Fill",
-  2: "OrderCancelled",
-  3: "OrderPlaced",
+  2: "MarketCreated",
+  3: "OrderCancelled",
+  4: "OrderPlaced",
+  5: "PairsMinted",
+  6: "Redeemed",
   ConfigInitialized: 0,
   Fill: 1,
-  OrderCancelled: 2,
-  OrderPlaced: 3,
+  MarketCreated: 2,
+  OrderCancelled: 3,
+  OrderPlaced: 4,
+  PairsMinted: 5,
+  Redeemed: 6,
 } as const;
 
 export type MeridianEvent = (typeof MeridianEvent)[Exclude<
@@ -151,6 +188,17 @@ export function identifyMeridianEvent(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([88, 184, 130, 231, 226, 84, 6, 58]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianEvent.MarketCreated;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([108, 56, 128, 68, 168, 113, 168, 239]),
       ),
       0,
@@ -169,16 +217,44 @@ export function identifyMeridianEvent(
   ) {
     return MeridianEvent.OrderPlaced;
   }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([108, 154, 184, 215, 50, 138, 35, 141]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianEvent.PairsMinted;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([14, 29, 183, 71, 31, 165, 107, 38]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianEvent.Redeemed;
+  }
   throw new Error(
     "The provided event could not be identified as a meridian event.",
   );
 }
 
 export const MeridianInstruction = {
-  0: "InitializeConfig",
-  1: "PlaceOrder",
-  InitializeConfig: 0,
-  PlaceOrder: 1,
+  0: "CreateMarket",
+  1: "InitializeConfig",
+  2: "MintPairs",
+  3: "PlaceOrder",
+  4: "Redeem",
+  CreateMarket: 0,
+  InitializeConfig: 1,
+  MintPairs: 2,
+  PlaceOrder: 3,
+  Redeem: 4,
 } as const;
 
 export type MeridianInstruction = (typeof MeridianInstruction)[Exclude<
@@ -194,12 +270,34 @@ export function identifyMeridianInstruction(
     containsBytes(
       data,
       fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([103, 226, 97, 235, 200, 188, 251, 254]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.CreateMarket;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
         new Uint8Array([208, 127, 21, 1, 194, 190, 196, 70]),
       ),
       0,
     )
   ) {
     return MeridianInstruction.InitializeConfig;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([63, 216, 104, 77, 215, 189, 83, 81]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.MintPairs;
   }
   if (
     containsBytes(
@@ -212,6 +310,17 @@ export function identifyMeridianInstruction(
   ) {
     return MeridianInstruction.PlaceOrder;
   }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([184, 12, 86, 149, 70, 196, 97, 225]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.Redeem;
+  }
   throw new SolanaError(
     SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_INSTRUCTION,
     { instructionData: data, programName: "meridian" },
@@ -222,17 +331,33 @@ export type ParsedMeridianInstruction<
   TProgram extends string = "kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQX3Ly",
 > =
   | ({
+      instructionType: typeof MeridianInstruction.CreateMarket;
+    } & ParsedCreateMarketInstruction<TProgram>)
+  | ({
       instructionType: typeof MeridianInstruction.InitializeConfig;
     } & ParsedInitializeConfigInstruction<TProgram>)
   | ({
+      instructionType: typeof MeridianInstruction.MintPairs;
+    } & ParsedMintPairsInstruction<TProgram>)
+  | ({
       instructionType: typeof MeridianInstruction.PlaceOrder;
-    } & ParsedPlaceOrderInstruction<TProgram>);
+    } & ParsedPlaceOrderInstruction<TProgram>)
+  | ({
+      instructionType: typeof MeridianInstruction.Redeem;
+    } & ParsedRedeemInstruction<TProgram>);
 
 export function parseMeridianInstruction<TProgram extends string>(
   instruction: Instruction<TProgram> & InstructionWithData<ReadonlyUint8Array>,
 ): ParsedMeridianInstruction<TProgram> {
   const instructionType = identifyMeridianInstruction(instruction);
   switch (instructionType) {
+    case MeridianInstruction.CreateMarket: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.CreateMarket,
+        ...parseCreateMarketInstruction(instruction),
+      };
+    }
     case MeridianInstruction.InitializeConfig: {
       assertIsInstructionWithAccounts(instruction);
       return {
@@ -240,11 +365,25 @@ export function parseMeridianInstruction<TProgram extends string>(
         ...parseInitializeConfigInstruction(instruction),
       };
     }
+    case MeridianInstruction.MintPairs: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.MintPairs,
+        ...parseMintPairsInstruction(instruction),
+      };
+    }
     case MeridianInstruction.PlaceOrder: {
       assertIsInstructionWithAccounts(instruction);
       return {
         instructionType: MeridianInstruction.PlaceOrder,
         ...parsePlaceOrderInstruction(instruction),
+      };
+    }
+    case MeridianInstruction.Redeem: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.Redeem,
+        ...parseRedeemInstruction(instruction),
       };
     }
     default:
@@ -268,21 +407,37 @@ export type MeridianPluginAccounts = {
   book: ReturnType<typeof getBookCodec> & SelfFetchFunctions<BookArgs, Book>;
   config: ReturnType<typeof getConfigCodec> &
     SelfFetchFunctions<ConfigArgs, Config>;
+  market: ReturnType<typeof getMarketCodec> &
+    SelfFetchFunctions<MarketArgs, Market>;
 };
 
 export type MeridianPluginInstructions = {
+  createMarket: (
+    input: CreateMarketAsyncInput,
+  ) => ReturnType<typeof getCreateMarketInstructionAsync> &
+    SelfPlanAndSendFunctions;
   initializeConfig: (
     input: InitializeConfigAsyncInput,
   ) => ReturnType<typeof getInitializeConfigInstructionAsync> &
+    SelfPlanAndSendFunctions;
+  mintPairs: (
+    input: MintPairsAsyncInput,
+  ) => ReturnType<typeof getMintPairsInstructionAsync> &
     SelfPlanAndSendFunctions;
   placeOrder: (
     input: PlaceOrderAsyncInput,
   ) => ReturnType<typeof getPlaceOrderInstructionAsync> &
     SelfPlanAndSendFunctions;
+  redeem: (
+    input: RedeemAsyncInput,
+  ) => ReturnType<typeof getRedeemInstructionAsync> & SelfPlanAndSendFunctions;
 };
 
 export type MeridianPluginPdas = {
   config: typeof findConfigPda;
+  yesMint: typeof findYesMintPda;
+  noMint: typeof findNoMintPda;
+  vault: typeof findVaultPda;
   book: typeof findBookPda;
   bookUsdc: typeof findBookUsdcPda;
   bookYes: typeof findBookYesPda;
@@ -303,21 +458,40 @@ export function meridianProgram() {
         accounts: {
           book: addSelfFetchFunctions(client, getBookCodec()),
           config: addSelfFetchFunctions(client, getConfigCodec()),
+          market: addSelfFetchFunctions(client, getMarketCodec()),
         },
         instructions: {
+          createMarket: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getCreateMarketInstructionAsync(input),
+            ),
           initializeConfig: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getInitializeConfigInstructionAsync(input),
+            ),
+          mintPairs: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getMintPairsInstructionAsync(input),
             ),
           placeOrder: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getPlaceOrderInstructionAsync(input),
             ),
+          redeem: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getRedeemInstructionAsync(input),
+            ),
         },
         pdas: {
           config: findConfigPda,
+          yesMint: findYesMintPda,
+          noMint: findNoMintPda,
+          vault: findVaultPda,
           book: findBookPda,
           bookUsdc: findBookUsdcPda,
           bookYes: findBookYesPda,

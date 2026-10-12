@@ -4,12 +4,12 @@
 mod common;
 
 use {
-    common::{full_book, refused_with, token_amount, Market, Order},
+    common::{full_book, refused_with, token_amount, Order, OrderSetup},
     meridian::{errors::MeridianError, Book, OrderKind, PlaceOrderArgs, Side},
 };
 
 /// The taker's and the book's balances: taker USDC, taker Yes, book USDC, book Yes.
-fn balances(mk: &mut Market) -> [u64; 4] {
+fn balances(mk: &mut OrderSetup) -> [u64; 4] {
     [mk.taker_usdc, mk.taker_yes, mk.book_usdc, mk.book_yes].map(|k| token_amount(mk.account_mut(k)))
 }
 

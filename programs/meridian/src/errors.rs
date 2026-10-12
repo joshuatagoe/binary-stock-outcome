@@ -33,4 +33,30 @@ pub enum MeridianError {
     BookShort,
     #[msg("An account is passed twice")]
     DuplicateAccount,
+    #[msg("Not built yet")]
+    NotImplemented,
+    #[msg("Not the operator")]
+    NotOperator,
+    #[msg("This stock isn't enabled in the config")]
+    TickerNotEnabled,
+    #[msg("The strike must be above zero and a multiple of the stock's step")]
+    InvalidStrike,
+    #[msg("Minting must open no later than the open, and the open come before orders close")]
+    InvalidTimes,
+    #[msg("A market must be created before it opens")]
+    CreateAfterOpen,
+    #[msg("Not open yet")]
+    NotOpenYet,
+    #[msg("Trading ended before your order reached the network. Nothing was bought; only the network fee was charged.")]
+    OrdersClosed,
+    #[msg("Pairs can be closed only before the result is final")]
+    MarketSettled,
+    #[msg("Redeem opens when the result is final.")]
+    NotFinal,
+    #[msg("The vault holds less than the market owes")]
+    VaultShort,
+    #[msg("A token's supply is above what the market owes")]
+    SupplyOverOwed,
+    #[msg("A token account belongs to someone else")]
+    NotYourAccount,
 }

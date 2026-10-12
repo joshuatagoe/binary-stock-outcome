@@ -10,7 +10,7 @@ mod common;
 
 use {
     anchor_lang::prelude::Pubkey,
-    common::{full_book, mollusk, program_account, token_account, usdc_mint, yes_mint, Market, Order, TOKEN, TOKEN_2022},
+    common::{full_book, mollusk, program_account, token_account, usdc_mint, yes_mint, OrderSetup, Order, TOKEN, TOKEN_2022},
     meridian::{Book, Side, SIDE_CAPACITY},
     solana_account::Account,
 };
@@ -25,7 +25,7 @@ const FILL_LIMIT: u32 = 32;
 /// Compute for a Market order that reaches `fills` resting orders, after checking it filled exactly that many, or
 /// the program's failure.
 fn try_measure(side: Side, fills: u32) -> Result<u64, String> {
-    let Market { m, ix, accounts, book, .. } = full_book(Order::reaching(side, fills));
+    let OrderSetup { m, ix, accounts, book, .. } = full_book(Order::reaching(side, fills));
     let r = m.process_instruction(&ix, &accounts);
     if !r.program_result.is_ok() {
         return Err(format!("{:?}", r.program_result));

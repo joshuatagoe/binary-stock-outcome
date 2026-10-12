@@ -57,7 +57,7 @@ The chain doesn't bind even at L2: the busiest market needs 5.6 transactions a s
 1. **Devnet's per-address request limit** (100 per 10 seconds, 40 for any one method; AR.08). In L1's busiest hour, with the send queue at its D56 cap, our backend uses 5.0 of its 10 a second (`rpc-budget.mjs`). L2 needs a paid provider.
 2. **The live stream's fan-out.** At L1 the stream sends 6 messages a second in all. At L2 it would send 157,000 a second if every tab got every change, or 22,000 if each tab got only its own stock (assuming 5,000 tabs and 10 order changes per trade; `rpc-budget.mjs`).
 3. **Job bursts at D56's pace of 4 sends a second.** Creating the markets takes at least 23 s, inside the 1,800 s from 8:30 to 9:00. The close sweep takes at least 11.5 s, and recording the close plus settling takes 3.5 s (`scale-demo.mjs`).
-4. **Devnet SOL.** About 0.445 SOL a day stays locked for good: D50's 0.008 per market plus D94's 0.0017. (§5 refines this to about 0.61 SOL a day with the recorded closes and token names.) That is about 9.3 SOL over 21 trading days, a regular top-up for the operator (`scale-demo.mjs`).
+4. **Devnet SOL.** About 0.445 SOL a day stays locked for good: D50's 0.008 per market plus D94's 0.0017. (§5 refines this with the measured accounts to about 0.42 SOL a day, with the recorded closes and token names, M1.02.) That is about 8.8 SOL over 21 trading days, a regular top-up for the operator.
 
 ### Built for L1, with the path to L2 written down
 
@@ -566,20 +566,20 @@ flowchart LR
 
 ### Accounts, sizes and deposits
 
-All of these are estimates from `accounts.mjs`; D50 measures the real sizes at M0.
+These began as estimates from `accounts.mjs`. Rent is 5,080 lamports a byte (M0.12), and the sizes marked measured come from the built program (M0.03, M1.02).
 
 | Account | Address from | Holds | Size | Deposit | Kept or returned |
 |---|---|---|---|---|---|
 | Config | "config" | The admin key, a pending admin key (rotation in two steps), the operator key, the USDC mint, the accepted Pyth receivers (D80), up to 8 tickers with pinned feed IDs, the pause flag, and the thresholds the program enforces (D102 to D106) | 647 B, measured (M0.03) | 0.0039 SOL | Once |
-| Recorded close | "close", ticker, day | Price, band, exponent, publish time, the price account it came from, who recorded it, frozen or not (D105) | 154 B | 0.0020 SOL per stock per day | Kept: the next morning's job and the market's evidence read it |
-| Market | "market", ticker, day, strike | Identity, mint-open, open and close times, the linked accounts, the owed counter (D64), state and hold reason, the result with its price, band and publish time, any proposal | 353 B | 0.0034 SOL | Kept for good: redeem stays open (D66) |
-| Yes mint, No mint | "yes" / "no", market | Token-2022 with Permissioned Burn (D94) and a name wallets show, such as "META 680+ Yes 10/08" (D108). Decimals 0. The mint and burn authority is the market's address; no freeze authority | 422 B each | 0.0038 SOL each | Kept for good (standard mints can't be closed, F3.13) |
-| Vault | "vault", market | USDC, exactly 1.00 per pair outstanding | 165 B | 0.0020 SOL | Kept for good |
-| Book | "book", market | 64 orders a side and 64 traders (D107) | 6,728 B | 0.0477 SOL | Returned after settlement and the returns (D50, D99) |
-| Book USDC, Book Yes | "book_usdc" / "book_yes", market | USDC locked by bids, Yes locked by offers, and owners' free balances | 165 B, 170 B | 0.0041 SOL together | Returned with the book |
-| A trader's Yes and No accounts | The wallet's associated accounts | Their tokens | 170 B each | 0.0041 SOL per market | Returned when closed, which Redeem does (D94) |
+| Recorded close | "close", ticker, day | Price, band, exponent, publish time, the price account it came from, who recorded it, frozen or not (D105) | 154 B | 0.0014 SOL per stock per day | Kept: the next morning's job and the market's evidence read it |
+| Market | "market", ticker, day, strike | Identity, mint-open, open and close times, the bumps of its linked accounts, the owed counter (D64), state and hold reason, the result with its price, band and publish time, any proposal, who created it (D139) | 258 B, measured (M1.02) | 0.0020 SOL | Kept for good: redeem stays open (D66) |
+| Yes mint, No mint | "yes" / "no", market | Token-2022 with Permissioned Burn (D94) and a name wallets show, such as "META 680+ Yes 10/08" (D108). Decimals 0. The mint, burn and close authority is the market's address (D140); no freeze authority | 412 B and 410 B, measured (M1.02) | 0.0028 SOL each | Kept for good, unless removed before minting (D140) |
+| Vault | "vault", market | USDC, at least 1.00 per pair outstanding (D64) | 165 B, measured | 0.0015 SOL | Kept for good |
+| Book | "book", market | 64 orders a side and 64 traders (D107) | 6,728 B, measured | 0.0348 SOL | Returned after settlement and the returns (D50, D99) |
+| Book USDC, Book Yes | "book_usdc" / "book_yes", market | USDC locked by bids, Yes locked by offers, and owners' free balances | 165 B each, measured | 0.0030 SOL together | Returned with the book |
+| A trader's Yes and No accounts | The wallet's associated accounts | Their tokens | 170 B each | 0.0030 SOL per market | Returned when closed, which Redeem does (D94) |
 
-Per market, 0.0130 SOL is kept for good (about 0.0100 plus 0.0031 for token names; `accounts.mjs`), and 0.0518 SOL goes out and comes back. At 46 markets a day, with the 7 recorded closes, that is about **0.61 SOL a day kept for good** and **2.38 SOL a day out and back**.
+Per market, as built (M1.02): 0.0089 SOL is kept for good (the market, its two named mints and the vault), and 0.0378 SOL goes out and comes back (the book and its two token accounts). At 46 markets a day, with the 7 recorded closes, that is about **0.42 SOL a day kept for good** and **1.74 SOL a day out and back**. The plan's estimates were 0.61 and 2.38.
 
 The vault and the book's USDC are separate accounts, so anyone can check "vault = pairs outstanding × 1.00" by reading one balance. At 6,728 bytes the book is under the 10,240 bytes a program can create in one call (AR.11), so Create Market creates it. D22's client-created book is needed only for books above that size.
 
@@ -758,6 +758,8 @@ A contract is the exact shape of a request: what it sends, who must sign it, whe
 | (market already exists) | A duplicate create | "META $790 or above already exists today." |
 | RemoveTooLate | After 9:00 | "Strikes can be removed only before 9:00 AM ET, before anyone can trade." |
 | NotFinal | Redeeming winning or losing tokens before a result | "Redeem opens when the result is final." |
+| MarketSettled | Closing pairs once the result is final | "Pairs can be closed only before the result is final." Winning tokens are redeemed instead |
+| NotYourAccount | Minting into, or redeeming from or into, another wallet's token account (D139) | Not shown; the website always uses the trader's own accounts |
 | WaitNotOver | Finalizing early | "Proposed: No wins, final at 5:20 PM ET" |
 | DuplicateOrderId | A re-sent order | Not shown; the tracker treats the order as already placed |
 | PriceNotGenuine, WrongFeed, OutsideWindow, BandTooWide, BeforeClose | Record close | Timeline only, for example "META close not recorded: published 27 s before the close" |
@@ -998,6 +1000,7 @@ The technology is chosen only now, after the design, so each choice serves somet
 | Rust | 1.98.0 (2026-08-20) | Above anchor-lang's minimum of 1.89, and builds the pinned LiteSVM and Mollusk |
 | `spl-token-2022-interface` | 3.1.2 | Permissioned Burn's instruction builders. Anchor has none (D94) |
 | `bytemuck` | 1.25.2 | Anchor's zero-copy accounts, such as the book, need it by name. It is the version Anchor already locks (M1.01) |
+| `spl-token-metadata-interface` | 1.0.1 | The builder for the Yes and No names (D108). It is the version `spl-token-2022-interface` already locks (M1.02) |
 | `pyth-solana-receiver-sdk` | 2.0.0 | Built against Anchor 1.x |
 | Codama | `codama` 1.11.0, `@codama/nodes-from-anchor` 1.5.6, `@codama/renderers-js` 2.5.0 | Generates the TypeScript client from the program's IDL for Kit 8.3 (D22). Anchor 1.x IDL support is checked at M0 |
 
