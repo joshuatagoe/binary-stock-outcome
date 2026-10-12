@@ -248,7 +248,7 @@ A Buy No limit order is pending, not a position (D39, S27). Bob places **Buy No 
 
 - The pending row: "Buying 10 No: selling 10 Yes at 67¢. If all fill, you hold 10 No at 33¢."
 - 4 fill at 67¢: Positions shows "4 No at 33¢"; the pending row shows 6 left.
-- **Cancel order** returns the 6 unsold Yes, closes them with their 6 No and returns the money in the same transaction: "Order cancelled · 6 pairs closed · 6.00 USDC returned". Bob has spent 10.00 − 2.68 − 6.00 = 1.32 for 4 No, 33¢ each (D38, D39).
+- **Cancel order** closes the 6 unsold pairs (their Yes from the offer, their No from the book) in the same transaction and credits the money to Bob's balance in the book, which Return to owner pays to his wallet (D99, D142): "Order cancelled · 6 pairs closed · 6.00 USDC returned". Bob has spent 10.00 − 2.68 − 6.00 = 1.32 for 4 No, 33¢ each (D38, D39).
 
 Edge cases:
 

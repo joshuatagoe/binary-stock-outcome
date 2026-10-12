@@ -470,6 +470,74 @@ impl Chain {
         Instruction { program_id: meridian::ID, accounts: metas, data: meridian::instruction::PlaceOrder { args }.data() }
     }
 
+    /// Buy No and Sell No's accounts (§6, instructions 11 and 12), with the trader's own three token accounts.
+    pub fn no_trade_metas(&self, market: &Pubkey, t: &Trader) -> Vec<anchor_lang::solana_program::instruction::AccountMeta> {
+        meridian::accounts::NoTrade {
+            config: self.config,
+            market: *market,
+            book: pda(BOOK_SEED, market),
+            book_usdc: pda(BOOK_USDC_SEED, market),
+            book_yes: pda(BOOK_YES_SEED, market),
+            book_no: pda(meridian::BOOK_NO_SEED, market),
+            vault: pda(VAULT_SEED, market),
+            yes_mint: pda(YES_SEED, market),
+            no_mint: pda(NO_SEED, market),
+            taker: t.owner,
+            taker_usdc: t.usdc,
+            taker_yes: t.yes,
+            taker_no: t.no,
+            usdc_mint: self.usdc_mint,
+            token_program: TOKEN,
+            token_2022_program: TOKEN_2022,
+            event_authority: self.event_authority,
+            program: meridian::ID,
+        }
+        .to_account_metas(None)
+    }
+
+    pub fn buy_no_ix(&self, market: &Pubkey, t: &Trader, args: meridian::BuyNoArgs) -> Instruction {
+        let data = meridian::instruction::BuyNo { args }.data();
+        Instruction { program_id: meridian::ID, accounts: self.no_trade_metas(market, t), data }
+    }
+
+    pub fn sell_no_ix(&self, market: &Pubkey, t: &Trader, args: meridian::SellNoArgs) -> Instruction {
+        let data = meridian::instruction::SellNo { args }.data();
+        Instruction { program_id: meridian::ID, accounts: self.no_trade_metas(market, t), data }
+    }
+
+    pub fn cancel_order_ix(&self, market: &Pubkey, owner: Pubkey, order_id: u64) -> Instruction {
+        let metas = meridian::accounts::CancelOrder {
+            config: self.config,
+            market: *market,
+            book: pda(BOOK_SEED, market),
+            owner,
+            book_usdc: pda(BOOK_USDC_SEED, market),
+            book_yes: pda(BOOK_YES_SEED, market),
+            book_no: pda(meridian::BOOK_NO_SEED, market),
+            vault: pda(VAULT_SEED, market),
+            yes_mint: pda(YES_SEED, market),
+            no_mint: pda(NO_SEED, market),
+            usdc_mint: self.usdc_mint,
+            token_program: TOKEN,
+            token_2022_program: TOKEN_2022,
+            event_authority: self.event_authority,
+            program: meridian::ID,
+        }
+        .to_account_metas(None);
+        Instruction { program_id: meridian::ID, accounts: metas, data: meridian::instruction::CancelOrder { order_id }.data() }
+    }
+
+    /// Rewrites Config with this fill limit and pause flag, keeping the chain's operator, admin and USDC mint.
+    pub fn set_config(&mut self, fill_limit: u16, paused: bool) {
+        let config = config_for(&self.m, self.usdc_mint, self.operator, self.admin, fill_limit, paused);
+        self.set(self.config, config);
+    }
+
+    /// A copy of the market's book.
+    pub fn book(&self, market: &Pubkey) -> Box<Book> {
+        Box::new(bytemuck::pod_read_unaligned(&self.account(&pda(BOOK_SEED, market)).unwrap().data[8..]))
+    }
+
     pub fn amount(&self, key: &Pubkey) -> u64 {
         token_amount(self.account(key).unwrap())
     }

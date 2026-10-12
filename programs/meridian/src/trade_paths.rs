@@ -1,12 +1,16 @@
 //! Buy No, Sell No and Replace quotes (ARCHITECTURE.md §6, instructions 11, 12 and 14), declared at M1's freeze
-//! (P12): their accounts and arguments are the contract; the program lane builds the bodies in M2.
+//! (P12): their accounts and arguments are the contract. Buy No and Sell No are built (M2-a); Replace quotes returns
+//! NotImplemented until its slice.
 use anchor_lang::prelude::*;
 
 use crate::{
-    book::{Book, OrderKind, Side, BOOK_NO_SEED, BOOK_SEED, BOOK_USDC_SEED, BOOK_YES_SEED},
+    book::{Book, OrderKind, PlaceOrderArgs, Side, BOOK_NO_SEED, BOOK_SEED, BOOK_USDC_SEED, BOOK_YES_SEED},
     errors::MeridianError,
-    market::{Market, MARKET_SEED, NO_SEED, VAULT_SEED, YES_SEED},
-    token::{TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID},
+    events::{EventWriter, OrderPlaced, PairsMinted, Redeemed},
+    market::{check_vault, Market, MARKET_SEED, NO_SEED, USDC_PER_PAIR, VAULT_SEED, YES_SEED},
+    pairs::RedeemMode,
+    place_order::{check_book, check_book_no, check_order_window, emit_matches},
+    token::{self, OUTCOME_DECIMALS, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID, USDC_DECIMALS},
     Config, CONFIG_SEED,
 };
 
@@ -81,12 +85,110 @@ pub struct NoTrade<'info> {
     pub token_2022_program: UncheckedAccount<'info>,
 }
 
-pub fn handle_buy_no(_ctx: Context<NoTrade>, _args: BuyNoArgs) -> Result<()> {
-    err!(MeridianError::NotImplemented)
+/// Within the order window and not paused, as Place order (D37, D68, D102). The taker's new pairs' Yes are sold into
+/// the bids at no less than 100 minus its No price; it mints only the pairs it sells, plus a Limit order's unsold
+/// pairs, which rest as a paired offer (D5, D142). Each pair puts 1.00 into the vault. The Yes go to the book, for the
+/// bidders and the paired offer; the No go to the taker, and a paired offer's to the book's No account. The bids' USDC
+/// comes to the taker first, with its own cancelled bids' (D90), so it needs only the net price of its No. Events: the
+/// pairs minted, then each resting order reached, in order, then the paired offer placed.
+pub fn handle_buy_no(ctx: Context<NoTrade>, args: BuyNoArgs) -> Result<()> {
+    let a = &ctx.accounts;
+    require!(!a.config.paused, MeridianError::Paused);
+    check_order_window(&a.market, &a.config)?;
+    require!((1..=99).contains(&args.price), MeridianError::InvalidPrice);
+    let taker = a.taker.key();
+    for account in [&a.taker_usdc, &a.taker_no] {
+        require_keys_eq!(token::owner(account)?, taker, MeridianError::NotYourAccount);
+    }
+    let yes = PlaceOrderArgs { side: Side::Sell, kind: args.kind, price: 100 - args.price, quantity: args.quantity, order_id: args.order_id };
+    let (p, book_bump) = {
+        let mut book = a.book.load_mut()?;
+        (book.place_paired(&taker, &yes, a.config.fill_limit)?, book.bump)
+    };
+    let (sold, rested) = (p.filled as u64, p.rested as u64);
+    let pairs = sold + rested;
+
+    let market = a.market.key();
+    let (day, strike, market_bump) = (a.market.day.to_le_bytes(), a.market.strike_cents.to_le_bytes(), [a.market.bump]);
+    let market_seeds = a.market.signer_seeds(&day, &strike, &market_bump);
+    let market_signer: &[&[u8]] = &market_seeds;
+    let book_bump = [book_bump];
+    let book_signer: &[&[u8]] = &[BOOK_SEED, market.as_ref(), &book_bump];
+    let (classic, t22) = (a.token_program.to_account_info(), a.token_2022_program.to_account_info());
+    let (market_info, book_info) = (a.market.to_account_info(), a.book.to_account_info());
+    token::transfer(&classic, &a.book_usdc, &a.usdc_mint, &a.taker_usdc, &book_info, p.fill_usdc + p.returned, USDC_DECIMALS, &[book_signer])?;
+    token::transfer(&classic, &a.taker_usdc, &a.usdc_mint, &a.vault, &a.taker, pairs * USDC_PER_PAIR, USDC_DECIMALS, &[])?;
+    token::mint_to(&t22, &a.yes_mint, &a.book_yes, &market_info, pairs, &[market_signer])?;
+    token::mint_to(&t22, &a.no_mint, &a.taker_no, &market_info, sold, &[market_signer])?;
+    token::mint_to(&t22, &a.no_mint, &a.book_no, &market_info, rested, &[market_signer])?;
+    let m = &mut ctx.accounts.market;
+    m.owed = m.owed.checked_add(pairs).ok_or(MeridianError::InvalidQuantity)?;
+
+    let mut events = EventWriter::new(ctx.accounts.event_authority.to_account_info());
+    if pairs > 0 {
+        events.emit(&PairsMinted { market, owner: taker, quantity: pairs })?;
+    }
+    emit_matches(&mut events, market, taker, args.order_id, Side::Sell, &p.matches)?;
+    if p.rested > 0 {
+        events.emit(&OrderPlaced { market, owner: taker, order_id: args.order_id, side: Side::Sell, price: yes.price, quantity: p.rested })?;
+    }
+    check_trade(ctx.accounts)
 }
 
-pub fn handle_sell_no(_ctx: Context<NoTrade>, _args: SellNoArgs) -> Result<()> {
-    err!(MeridianError::NotImplemented)
+/// Within the order window and not paused, as Place order. Buys Yes from offers at no more than `args.price` and
+/// closes each with one of the taker's No for 1.00 (D38); it never rests. The Yes bought never leave the book: they are
+/// burned there. The vault's 1.00s come to the taker first, so a taker holding only No can pay for the Yes. The
+/// taker's own offers it reaches are cancelled (D90): a plain offer's Yes go back to the taker's Yes account, which is
+/// used only then, and a paired offer's Yes and No to its balance in the book (D142). Events: each resting order
+/// reached, in order, then the pairs closed. Sell No has no order ID, so its fills name 0 as the taker's.
+pub fn handle_sell_no(ctx: Context<NoTrade>, args: SellNoArgs) -> Result<()> {
+    let a = &ctx.accounts;
+    require!(!a.config.paused, MeridianError::Paused);
+    check_order_window(&a.market, &a.config)?;
+    let taker = a.taker.key();
+    for account in [&a.taker_usdc, &a.taker_no] {
+        require_keys_eq!(token::owner(account)?, taker, MeridianError::NotYourAccount);
+    }
+    let (p, book_bump) = {
+        let mut book = a.book.load_mut()?;
+        (book.take(&taker, Side::Buy, args.price, args.quantity, a.config.fill_limit)?, book.bump)
+    };
+    if p.returned > 0 {
+        require_keys_eq!(token::owner(&a.taker_yes)?, taker, MeridianError::NotYourAccount);
+    }
+    let pairs = p.filled as u64;
+    let usdc = pairs * USDC_PER_PAIR;
+
+    let market = a.market.key();
+    let (day, strike, market_bump) = (a.market.day.to_le_bytes(), a.market.strike_cents.to_le_bytes(), [a.market.bump]);
+    let market_seeds = a.market.signer_seeds(&day, &strike, &market_bump);
+    let market_signer: &[&[u8]] = &market_seeds;
+    let book_bump = [book_bump];
+    let book_signer: &[&[u8]] = &[BOOK_SEED, market.as_ref(), &book_bump];
+    let (classic, t22) = (a.token_program.to_account_info(), a.token_2022_program.to_account_info());
+    let (market_info, book_info) = (a.market.to_account_info(), a.book.to_account_info());
+    token::transfer(&classic, &a.vault, &a.usdc_mint, &a.taker_usdc, &market_info, usdc, USDC_DECIMALS, &[market_signer])?;
+    token::transfer(&classic, &a.taker_usdc, &a.usdc_mint, &a.book_usdc, &a.taker, p.fill_usdc, USDC_DECIMALS, &[])?;
+    token::transfer(&t22, &a.book_yes, &a.yes_mint, &a.taker_yes, &book_info, p.returned, OUTCOME_DECIMALS, &[book_signer])?;
+    token::permissioned_burn(&t22, &a.book_yes, &a.yes_mint, &market_info, &book_info, pairs, &[market_signer, book_signer])?;
+    token::permissioned_burn(&t22, &a.taker_no, &a.no_mint, &market_info, &a.taker, pairs, &[market_signer])?;
+    let m = &mut ctx.accounts.market;
+    m.owed = m.owed.checked_sub(pairs).ok_or(MeridianError::SupplyOverOwed)?;
+
+    let mut events = EventWriter::new(ctx.accounts.event_authority.to_account_info());
+    emit_matches(&mut events, market, taker, 0, Side::Buy, &p.matches)?;
+    if pairs > 0 {
+        events.emit(&Redeemed { market, owner: taker, mode: RedeemMode::Pairs, quantity: pairs, usdc })?;
+    }
+    check_trade(ctx.accounts)
+}
+
+/// After Buy No and Sell No: the vault holds what is owed and no supply exceeds it (D64), and the book's three token
+/// accounts hold what it locks and owes (D137, D142).
+fn check_trade(a: &NoTrade) -> Result<()> {
+    check_vault(&a.market, &a.vault, &a.yes_mint, &a.no_mint)?;
+    check_book(&a.book, &a.book_usdc, &a.book_yes)?;
+    check_book_no(&a.book, &a.book_no)
 }
 
 /// One order in a maker's batch.

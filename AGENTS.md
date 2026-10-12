@@ -99,6 +99,8 @@ Until the end of M1, one session builds M0 and M1 in order. After that, three la
 
 M6 and M7 are split when M5 merges, under the same rule: one owner per file.
 
+**Agents and WSL (AI_USAGE 35).** Claude Code refuses every `wsl` call from an agent in an isolated worktree, and the `implementer` agent always runs isolated, so it can't build or test the program or start a local chain. A lane that needs WSL runs a general agent without isolation, in a worktree the coordinator creates, and only with the user's OK for that session. Otherwise the coordinator runs the WSL builds and tests itself.
+
 **A slice, start to finish.**
 1. The coordinator runs `grill` with the user and seeds the card: owned files, branch, test command.
 2. It starts the lane's agent with a `parallel-delivery` brief, including the model in the table.

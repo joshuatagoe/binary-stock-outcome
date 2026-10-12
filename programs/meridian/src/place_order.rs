@@ -4,10 +4,11 @@
 use anchor_lang::prelude::*;
 
 use crate::{
-    book::{Book, Match, PlaceOrderArgs, BOOK_NO_SEED, BOOK_SEED, BOOK_USDC_SEED, BOOK_YES_SEED},
+    book::{Book, Match, PlaceOrderArgs, Side, BOOK_NO_SEED, BOOK_SEED, BOOK_USDC_SEED, BOOK_YES_SEED},
     errors::MeridianError,
-    events::{CancelReason, EventWriter, Fill, OrderCancelled, OrderPlaced},
-    market::{Market, MarketStatus, MARKET_SEED, NO_SEED, VAULT_SEED, YES_SEED},
+    events::{CancelReason, EventWriter, Fill, OrderCancelled, OrderPlaced, Redeemed},
+    market::{check_vault, Market, MarketStatus, MARKET_SEED, NO_SEED, USDC_PER_PAIR, VAULT_SEED, YES_SEED},
+    pairs::RedeemMode,
     token::{self, OUTCOME_DECIMALS, TOKEN_2022_PROGRAM_ID, TOKEN_PROGRAM_ID, USDC_DECIMALS},
     Config, CONFIG_SEED,
 };
@@ -77,15 +78,25 @@ pub fn handle_place_order(ctx: Context<PlaceOrder>, args: PlaceOrderArgs) -> Res
     token::transfer(&t22, &a.book_yes, &a.yes_mint, &a.taker_yes, &book, placement.yes_out(&args), OUTCOME_DECIMALS, &[book_seeds])?;
 
     let mut events = EventWriter::new(ctx.accounts.event_authority.to_account_info());
-    for m in &placement.matches {
+    emit_matches(&mut events, market, taker, args.order_id, args.side, &placement.matches)?;
+    if placement.rested > 0 {
+        events.emit(&OrderPlaced { market, owner: taker, order_id: args.order_id, side: args.side, price: args.price, quantity: placement.rested })?;
+    }
+    check_book(&ctx.accounts.book, &ctx.accounts.book_usdc, &ctx.accounts.book_yes)
+}
+
+/// One event per resting order the taker's order reached, in the order reached (D90): a fill, or the cancel of the
+/// taker's own order. `side` is what the taker did with Yes.
+pub fn emit_matches(events: &mut EventWriter<'_>, market: Pubkey, taker: Pubkey, taker_order_id: u64, side: Side, matches: &[Match]) -> Result<()> {
+    for m in matches {
         match m {
             Match::Fill(f) => events.emit(&Fill {
                 market,
                 maker: f.maker,
                 maker_order_id: f.maker_order_id,
                 taker,
-                taker_order_id: args.order_id,
-                side: args.side,
+                taker_order_id,
+                side,
                 price: f.price,
                 quantity: f.quantity,
             })?,
@@ -93,17 +104,14 @@ pub fn handle_place_order(ctx: Context<PlaceOrder>, args: PlaceOrderArgs) -> Res
                 market,
                 owner: taker,
                 order_id: s.order_id,
-                side: args.side.opposite(),
+                side: side.opposite(),
                 price: s.price,
                 quantity: s.quantity,
                 reason: CancelReason::SelfTrade,
             })?,
         }
     }
-    if placement.rested > 0 {
-        events.emit(&OrderPlaced { market, owner: taker, order_id: args.order_id, side: args.side, price: args.price, quantity: placement.rested })?;
-    }
-    check_book(&ctx.accounts.book, &ctx.accounts.book_usdc, &ctx.accounts.book_yes)
+    Ok(())
 }
 
 /// The book's token accounts hold at least what its orders lock plus its owners' free balances (§5, D64). At least,
@@ -112,6 +120,13 @@ pub fn check_book(book: &AccountLoader<Book>, book_usdc: &AccountInfo, book_yes:
     let b = book.load()?;
     require!(token::amount(book_usdc)? >= b.locked_usdc() + b.free_usdc(), MeridianError::BookShort);
     require!(token::amount(book_yes)? >= b.locked_yes() + b.free_yes(), MeridianError::BookShort);
+    Ok(())
+}
+
+/// Likewise for the book's No account: its paired offers' No plus the No released to their owners (D137, D142).
+pub fn check_book_no(book: &AccountLoader<Book>, book_no: &AccountInfo) -> Result<()> {
+    let b = book.load()?;
+    require!(token::amount(book_no)? >= b.locked_no() + b.free_no(), MeridianError::BookShort);
     Ok(())
 }
 
@@ -170,18 +185,43 @@ pub struct CancelOrder<'info> {
 }
 
 /// Any time while the order rests, never paused (D68): what it locked moves to the owner's balance in the book, which
-/// Return to owner then pays out (D99). No tokens move, so the book's balance holds as it was.
+/// Return to owner then pays out (D99). For a plain order no tokens move, so the book's balance holds as it was. A
+/// paired offer's unsold pairs close instead (D39, D142): their Yes and No are burned in the book, and 1.00 each moves
+/// from the vault to the owner's balance there, so the vault and the book are checked after. That holds after the
+/// close and after settlement too, since a pair is worth 1.00 whichever side wins. Events: the cancel, then for a
+/// paired offer the pairs closed (Redeemed, pairs), so the events alone account for the vault and the supplies (D62).
 pub fn handle_cancel_order(ctx: Context<CancelOrder>, order_id: u64) -> Result<()> {
     let owner = ctx.accounts.owner.key();
-    let cancelled = ctx.accounts.book.load_mut()?.cancel(&owner, order_id)?;
-    EventWriter::new(ctx.accounts.event_authority.to_account_info()).emit(&OrderCancelled {
-        market: ctx.accounts.market.key(),
-        owner,
-        order_id,
-        side: cancelled.0,
-        price: cancelled.1,
-        quantity: cancelled.2,
-        reason: CancelReason::Owner,
-    })
+    let ((side, price, quantity, paired), book_bump) = {
+        let mut book = ctx.accounts.book.load_mut()?;
+        (book.cancel(&owner, order_id)?, book.bump)
+    };
+    let market = ctx.accounts.market.key();
+    let pairs = quantity as u64;
+    if paired {
+        let a = &ctx.accounts;
+        let (day, strike, market_bump) = (a.market.day.to_le_bytes(), a.market.strike_cents.to_le_bytes(), [a.market.bump]);
+        let market_seeds = a.market.signer_seeds(&day, &strike, &market_bump);
+        let market_signer: &[&[u8]] = &market_seeds;
+        let book_bump = [book_bump];
+        let book_signer: &[&[u8]] = &[BOOK_SEED, market.as_ref(), &book_bump];
+        let (classic, t22) = (a.token_program.to_account_info(), a.token_2022_program.to_account_info());
+        let (market_info, book_info) = (a.market.to_account_info(), a.book.to_account_info());
+        token::permissioned_burn(&t22, &a.book_yes, &a.yes_mint, &market_info, &book_info, pairs, &[market_signer, book_signer])?;
+        token::permissioned_burn(&t22, &a.book_no, &a.no_mint, &market_info, &book_info, pairs, &[market_signer, book_signer])?;
+        token::transfer(&classic, &a.vault, &a.usdc_mint, &a.book_usdc, &market_info, pairs * USDC_PER_PAIR, USDC_DECIMALS, &[market_signer])?;
+        let m = &mut ctx.accounts.market;
+        m.owed = m.owed.checked_sub(pairs).ok_or(MeridianError::SupplyOverOwed)?;
+    }
+    let mut events = EventWriter::new(ctx.accounts.event_authority.to_account_info());
+    events.emit(&OrderCancelled { market, owner, order_id, side, price, quantity, reason: CancelReason::Owner })?;
+    if paired {
+        events.emit(&Redeemed { market, owner, mode: RedeemMode::Pairs, quantity: pairs, usdc: pairs * USDC_PER_PAIR })?;
+        let a = &ctx.accounts;
+        check_vault(&a.market, &a.vault, &a.yes_mint, &a.no_mint)?;
+        check_book(&a.book, &a.book_usdc, &a.book_yes)?;
+        check_book_no(&a.book, &a.book_no)?;
+    }
+    Ok(())
 }
 
