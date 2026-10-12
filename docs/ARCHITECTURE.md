@@ -369,7 +369,7 @@ sequenceDiagram
 - **Trade price.** A trade happens at the resting order's price (D42), and never beyond the taker's worst price (D15).
 - **Self-trade.** A self-trade cancels the resting order and matching continues (D90).
 - **Order types.** A Market order fills what it can now, and the rest is not placed. A Limit order fills what it can, and the rest rests at its price.
-- **Fills per instruction.** There is a maximum, set from the compute measured in the M1 spike (D21, D30). When it is reached, the order stops as a partial fill.
+- **Fills per instruction.** There is a maximum, set from the compute measured in the M1 spike (D21, D30): 32 (M1.01). When it is reached, the order stops as a partial fill.
 
 **The default worst price on a Market order (D15)** is the price of the last book level needed to fill the whole quantity, moved 1¢ against the trader. The order then still fills at the prices on screen if the book moves by a cent. A Limit order uses the trader's own price. Computed by `cap.mjs` on USERS.md's books:
 
@@ -388,7 +388,7 @@ On Solana a transaction must list every account it touches before it runs. So a 
 
 Meridian credits a balance inside the book, which needs no listing, and then returns it:
 
-1. **Fills, cancels and the 4:00 sweep credit the owner's balance in that market's book.** The taker's own side moves straight to and from the taker's wallet, since the taker's accounts are in the transaction anyway. This means any number of makers per transaction, up to the fill limit, and a sweep of one transaction per market.
+1. **Fills, cancels and the 4:00 sweep credit the owner's balance in that market's book.** The taker's own side moves straight to and from the taker's wallet, since the taker's accounts are in the transaction anyway. A self-trade's cancel is the taker's own side, so its tokens go straight back too (D90). This means any number of makers per transaction, up to the fill limit. The sweep needs more than one transaction for a full book, since each cancel's event is one of a transaction's 64 instructions (M1.01).
 2. **"Return to owner" moves a balance to the owner's own wallet accounts.** Anyone may send it, and it can pay no one else. The repeatable check (D97) sends it for every balance on its next pass, about 30 seconds later. The bot collects its own balances inside its quote batches.
 3. **The owner can always send "return to owner" themselves**, so a backend outage delays a return but never traps money (D23).
 4. **After the sweep, everything is returned, and then the book account is closed** to recover its deposit (D50).
@@ -420,7 +420,7 @@ Rejected:
 
 - **One landing per transaction.** A signed transaction can land at most once.
 - **One live attempt per order.** The tracker re-signs only after the old transaction has expired (D13, D56).
-- **Order IDs.** Each order carries an ID chosen by its sender. A second order with the same ID from the same owner in the same market is refused, which covers a double click and the bot re-sending after expiry.
+- **Order IDs.** Each order carries an ID chosen by its sender. A second order with the same ID from the same owner in the same market is refused while the first rests. A filled order's ID isn't kept, so the tracker's rule above, one live attempt that is re-signed only after it expired without landing, covers a double click and the bot re-sending after expiry (D138).
 - **Market creation.** Market addresses are fixed (D56), so a repeated create fails as "already exists".
 - **Settle.** An outcome is written once, so a second settle fails with "already settled".
 - **Redeem.** Redeeming burns the tokens, so a repeat finds nothing.
@@ -611,7 +611,7 @@ After Alice's buy, Dave's offer is gone and his entry holds 6.50 USDC free until
 | Minting and orders happen only inside their windows | Stored times compared with the chain's clock | Trading after the close (D37, D102) |
 | Strike and times are written only at creation | No instruction changes them | Changing the bet (D53) |
 | The recorded close passes D28 and D103, is replaced only by a later price, and freezes at the first settle | The record step (D105) | Forged or cherry-picked prices |
-| After every money instruction: the vault holds at least what is owed, supply never exceeds the counter, and the book's token accounts equal locked plus free balances | Asserts at the end of each instruction | Any bug that would leave money short (D64) |
+| After every money instruction: the vault holds at least what is owed, supply never exceeds the counter, and the book's token accounts hold at least locked plus free balances (D137) | Asserts at the end of each instruction | Any bug that would leave money short (D64) |
 | A result is written once | A state check | Changing a result (D2) |
 | Burning needs the program's co-signature | Permissioned Burn (D94) | Holders burning their own tokens |
 | Pause is checked only in Mint Pair and Place Order | Where the check sits | Freezing people's exits (D68) |
@@ -997,6 +997,7 @@ The technology is chosen only now, after the design, so each choice serves somet
 | Solana CLI (Agave) | 4.3.0 (2026-09-18), the stable line | solana-verify ships a build image for it (D69). Anchor's docs recommend 4.1.2 |
 | Rust | 1.98.0 (2026-08-20) | Above anchor-lang's minimum of 1.89, and builds the pinned LiteSVM and Mollusk |
 | `spl-token-2022-interface` | 3.1.2 | Permissioned Burn's instruction builders. Anchor has none (D94) |
+| `bytemuck` | 1.25.2 | Anchor's zero-copy accounts, such as the book, need it by name. It is the version Anchor already locks (M1.01) |
 | `pyth-solana-receiver-sdk` | 2.0.0 | Built against Anchor 1.x |
 | Codama | `codama` 1.11.0, `@codama/nodes-from-anchor` 1.5.6, `@codama/renderers-js` 2.5.0 | Generates the TypeScript client from the program's IDL for Kit 8.3 (D22). Anchor 1.x IDL support is checked at M0 |
 
@@ -1039,7 +1040,7 @@ The Pyth SDK compiles in one receiver address, and its account type checks the o
 | Surfpool | 1.6.0 | The local chain for `make dev`, and Anchor 1.x's default. Its clock only moves forward, which suits the demo clock (D89). WSL support is checked when `make dev` is timed at M0 (D74) |
 | solana-verify | 0.5.2, with Solana's build image for Agave 4.3.0 (pushed 2026-09-21), pinned by digest | The verified build (D69, P24) |
 
-The local chain and the tests load the Token-2022 v11 program dumped from devnet, because the bundled copies may predate Permissioned Burn (AR.14). The fuzzer is chosen in §10.
+The tests load devnet's own token programs, saved by `scripts/program/dump-token-programs.mjs` (M1.01), and the local chain is to load them too once it creates markets, because the bundled copies may predate Permissioned Burn (AR.14). The fuzzer is chosen in §10.
 
 **Verified build (D69).** OtterSec's verification service covers mainnet only (AR.14). On devnet we publish three things: the reproducible build command (`solana-verify build`), the build's hash, and the command that reads the deployed program's hash from devnet. Anyone can then compare the two hashes.
 
@@ -1085,7 +1086,7 @@ A test counts only once it has been seen failing before it passes, and the money
 | Layer | What it covers | Tools |
 |---|---|---|
 | **Frozen worked examples** | JSON "golden" files that both the Rust and the TypeScript tests read. Changing one is a logged decision. They cover:<br>- D52's strike cases: a $500 close, $499.995, META $680, AAPL $230<br>- the running example's day: Alice +3.50, Bob −3.50, Dave −1.75 (`money-flow.mjs`)<br>- the default worst prices: 66¢ for 6.60 in all, 36¢ for 3.60 (`cap.mjs`)<br>- the payoff lines, and the P&L examples of USERS F13<br>- the settle comparison at every cent price<br>- the self-trade case, and refund and return amounts | Golden JSON files |
-| **Program, one instruction at a time** | Every instruction's checks and errors (§6).<br>Compute per instruction, which sets the fill limit (D21).<br>Security cases:<br>- swapped and duplicate accounts (D30)<br>- a forged price account, and a wrong owner under each accepted receiver (D125)<br>- the wrong feed, GOOG and GOOGL 24/7 (D55)<br>- exponent conversion (A4) | Mollusk 0.15.1 |
+| **Program, one instruction at a time** | Every instruction's checks and errors (§6).<br>Compute per instruction, and the 64-instruction limit, which set the fill limit (D21, M1.01).<br>Security cases:<br>- swapped and duplicate accounts (D30)<br>- a forged price account, and a wrong owner under each accepted receiver (D125)<br>- the wrong feed, GOOG and GOOGL 24/7 (D55)<br>- exponent conversion (A4) | Mollusk 0.15.1 |
 | **Program, whole lifecycle** | Create, mint, trade, close pairs, record, settle or hold, override, redeem, all with the fake clock.<br>Also early-close days and the backstops (D68).<br>After every step: the vault holds at least what it owes, and supply stays at or below the counter (D64). | LiteSVM 0.16.0 |
 | **Property tests** | Random sequences of instructions, with the vault and book checks after each one (D64) | proptest 1.11.0 |
 | **Fuzzing** | Coverage-guided search for crashes and broken checks, run nightly (D126) | Crucible v0.2.1 |
@@ -1146,7 +1147,7 @@ Every setting has one home. Settings the program enforces live in the on-chain C
 | Operator-only settling | 24 h | 24 h | 24 h | D58 |
 | Backstops | 24 h for an admin hold, 7 days for a band on the strike | The same | The same | D68 |
 | Hold with no price | close + 15 min | close + 15 min | The same | D83 |
-| Book capacity, fill limit | 64 orders a side and 64 traders; the fill limit from the M1 spike | The same | Measured at L2 | D107, D21 |
+| Book capacity, fill limit | 64 orders a side and 64 traders; a fill limit of 32 from the M1 spike (M1.01) | The same | Measured at L2 | D107, D21 |
 
 **Backend (`config/<network>.json`)**
 

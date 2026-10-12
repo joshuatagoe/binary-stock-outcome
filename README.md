@@ -79,13 +79,15 @@ On Windows, keep Rust's build output on WSL's disk (`CARGO_TARGET_DIR`): a clean
 
 ## Program
 
-The Solana program is in [`programs/meridian`](programs/meridian), at `kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQX3Ly`. So far it has one instruction, Initialize Config (ARCHITECTURE.md §6). Build and test it in WSL, then regenerate the TypeScript client on Windows:
+The Solana program is in [`programs/meridian`](programs/meridian), at `kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQX3Ly`. So far it has Initialize Config and the first form of Place order, with the order book (ARCHITECTURE.md §6, M1). Build and test it in WSL, then regenerate the TypeScript client on Windows:
 
 ```sh
 bash scripts/program/build.sh          # in WSL: builds and refreshes clients/idl/meridian.json
-cargo test -p meridian                 # in WSL, after `source scripts/program/env.sh`: the LiteSVM tests
+cargo test -p meridian                 # in WSL, after `source scripts/program/env.sh`: the unit, Mollusk and LiteSVM tests
 npm run client                         # on Windows: regenerates clients/ts from the IDL
 ```
+
+The tests run devnet's own token programs, saved in `programs/meridian/tests/fixtures` by `node scripts/program/dump-token-programs.mjs`. `cargo test -p meridian --test book_compute -- --nocapture` prints the order book's compute per fill (M1.01).
 
 ### On devnet
 

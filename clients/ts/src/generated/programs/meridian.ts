@@ -34,22 +34,39 @@ import {
   type SelfPlanAndSendFunctions,
 } from "@solana/program-client-core";
 import {
+  getBookCodec,
   getConfigCodec,
+  type Book,
+  type BookArgs,
   type Config,
   type ConfigArgs,
 } from "../accounts/index.ts";
 import {
   getInitializeConfigInstructionAsync,
+  getPlaceOrderInstructionAsync,
   parseInitializeConfigInstruction,
+  parsePlaceOrderInstruction,
   type InitializeConfigAsyncInput,
   type ParsedInitializeConfigInstruction,
+  type ParsedPlaceOrderInstruction,
+  type PlaceOrderAsyncInput,
 } from "../instructions/index.ts";
-import { findConfigPda } from "../pdas/index.ts";
+import {
+  findBookPda,
+  findBookUsdcPda,
+  findBookYesPda,
+  findConfigPda,
+} from "../pdas/index.ts";
 
 export const MERIDIAN_PROGRAM_ADDRESS =
   "kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQX3Ly" as Address<"kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQX3Ly">;
 
-export const MeridianAccount = { 0: "Config", Config: 0 } as const;
+export const MeridianAccount = {
+  0: "Book",
+  1: "Config",
+  Book: 0,
+  Config: 1,
+} as const;
 
 export type MeridianAccount = (typeof MeridianAccount)[Exclude<
   keyof typeof MeridianAccount,
@@ -60,6 +77,17 @@ export function identifyMeridianAccount(
   account: { data: ReadonlyUint8Array } | ReadonlyUint8Array,
 ): MeridianAccount {
   const data = "data" in account ? account.data : account;
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([121, 34, 121, 35, 91, 62, 85, 222]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianAccount.Book;
+  }
   if (
     containsBytes(
       data,
@@ -79,7 +107,13 @@ export function identifyMeridianAccount(
 
 export const MeridianEvent = {
   0: "ConfigInitialized",
+  1: "Fill",
+  2: "OrderCancelled",
+  3: "OrderPlaced",
   ConfigInitialized: 0,
+  Fill: 1,
+  OrderCancelled: 2,
+  OrderPlaced: 3,
 } as const;
 
 export type MeridianEvent = (typeof MeridianEvent)[Exclude<
@@ -102,6 +136,39 @@ export function identifyMeridianEvent(
   ) {
     return MeridianEvent.ConfigInitialized;
   }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([78, 225, 199, 154, 86, 219, 224, 169]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianEvent.Fill;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([108, 56, 128, 68, 168, 113, 168, 239]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianEvent.OrderCancelled;
+  }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([96, 130, 204, 234, 169, 219, 216, 227]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianEvent.OrderPlaced;
+  }
   throw new Error(
     "The provided event could not be identified as a meridian event.",
   );
@@ -109,7 +176,9 @@ export function identifyMeridianEvent(
 
 export const MeridianInstruction = {
   0: "InitializeConfig",
+  1: "PlaceOrder",
   InitializeConfig: 0,
+  PlaceOrder: 1,
 } as const;
 
 export type MeridianInstruction = (typeof MeridianInstruction)[Exclude<
@@ -132,6 +201,17 @@ export function identifyMeridianInstruction(
   ) {
     return MeridianInstruction.InitializeConfig;
   }
+  if (
+    containsBytes(
+      data,
+      fixEncoderSize(getBytesEncoder(), 8).encode(
+        new Uint8Array([51, 194, 155, 175, 109, 130, 96, 106]),
+      ),
+      0,
+    )
+  ) {
+    return MeridianInstruction.PlaceOrder;
+  }
   throw new SolanaError(
     SOLANA_ERROR__PROGRAM_CLIENTS__FAILED_TO_IDENTIFY_INSTRUCTION,
     { instructionData: data, programName: "meridian" },
@@ -140,9 +220,13 @@ export function identifyMeridianInstruction(
 
 export type ParsedMeridianInstruction<
   TProgram extends string = "kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQX3Ly",
-> = {
-  instructionType: typeof MeridianInstruction.InitializeConfig;
-} & ParsedInitializeConfigInstruction<TProgram>;
+> =
+  | ({
+      instructionType: typeof MeridianInstruction.InitializeConfig;
+    } & ParsedInitializeConfigInstruction<TProgram>)
+  | ({
+      instructionType: typeof MeridianInstruction.PlaceOrder;
+    } & ParsedPlaceOrderInstruction<TProgram>);
 
 export function parseMeridianInstruction<TProgram extends string>(
   instruction: Instruction<TProgram> & InstructionWithData<ReadonlyUint8Array>,
@@ -154,6 +238,13 @@ export function parseMeridianInstruction<TProgram extends string>(
       return {
         instructionType: MeridianInstruction.InitializeConfig,
         ...parseInitializeConfigInstruction(instruction),
+      };
+    }
+    case MeridianInstruction.PlaceOrder: {
+      assertIsInstructionWithAccounts(instruction);
+      return {
+        instructionType: MeridianInstruction.PlaceOrder,
+        ...parsePlaceOrderInstruction(instruction),
       };
     }
     default:
@@ -174,6 +265,7 @@ export type MeridianPlugin = {
 };
 
 export type MeridianPluginAccounts = {
+  book: ReturnType<typeof getBookCodec> & SelfFetchFunctions<BookArgs, Book>;
   config: ReturnType<typeof getConfigCodec> &
     SelfFetchFunctions<ConfigArgs, Config>;
 };
@@ -183,9 +275,18 @@ export type MeridianPluginInstructions = {
     input: InitializeConfigAsyncInput,
   ) => ReturnType<typeof getInitializeConfigInstructionAsync> &
     SelfPlanAndSendFunctions;
+  placeOrder: (
+    input: PlaceOrderAsyncInput,
+  ) => ReturnType<typeof getPlaceOrderInstructionAsync> &
+    SelfPlanAndSendFunctions;
 };
 
-export type MeridianPluginPdas = { config: typeof findConfigPda };
+export type MeridianPluginPdas = {
+  config: typeof findConfigPda;
+  book: typeof findBookPda;
+  bookUsdc: typeof findBookUsdcPda;
+  bookYes: typeof findBookYesPda;
+};
 
 export type MeridianPluginRequirements = ClientWithRpc<
   GetAccountInfoApi & GetMultipleAccountsApi
@@ -199,15 +300,28 @@ export function meridianProgram() {
   ): ExtendedClient<T, { meridian: MeridianPlugin }> => {
     return extendClient(client, {
       meridian: {
-        accounts: { config: addSelfFetchFunctions(client, getConfigCodec()) },
+        accounts: {
+          book: addSelfFetchFunctions(client, getBookCodec()),
+          config: addSelfFetchFunctions(client, getConfigCodec()),
+        },
         instructions: {
           initializeConfig: (input) =>
             addSelfPlanAndSendFunctions(
               client,
               getInitializeConfigInstructionAsync(input),
             ),
+          placeOrder: (input) =>
+            addSelfPlanAndSendFunctions(
+              client,
+              getPlaceOrderInstructionAsync(input),
+            ),
         },
-        pdas: { config: findConfigPda },
+        pdas: {
+          config: findConfigPda,
+          book: findBookPda,
+          bookUsdc: findBookUsdcPda,
+          bookYes: findBookYesPda,
+        },
         identifyAccount: identifyMeridianAccount,
         identifyInstruction: identifyMeridianInstruction,
         parseInstruction: parseMeridianInstruction,

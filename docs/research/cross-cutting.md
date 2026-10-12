@@ -692,3 +692,25 @@ The user ran `/wallet-test` on the dev server with a new Phantom account (`8RMY2
   - `make dev-check`: "ready in 209.6 s (build 206.5 s, keys 0.1 s, chain 0.5 s, program 0.0 s, config 1.0 s, backend 0.5 s, website 0.8 s)", then "Every part answered". Cargo timed the program's compile at 1 min 07 s and the interface build at 38.8 s.
 - **From nothing to ready:** 327 s, about 5½ minutes, plus 35 s to install the Ubuntu. No step needed anything the README doesn't say, so D74's container isn't needed.
 - The Ubuntu was removed afterwards with `wsl --unregister meridian-fresh`. The main Ubuntu was untouched.
+
+## 2026-10-12 M1 order-book spike (main session)
+
+### M1.01 [D21] [D62] [D90] [D99] [D107] [D137] [D138] [P30] CONFIRMED (measured)
+
+- **Set-up.** Mollusk 0.15.1 ran Place order, in its M1-a form, against a full book: 64 offers at 36¢ to 99¢ and 64 bids at 1¢ to 35¢, one of each from 64 traders, 1 Yes each, so each fill reached a different maker. The taker's Market order reached 0 to 61 resting orders. The tests loaded devnet's own token programs, saved at slots 510160184 (classic, 108,600 bytes) and 510160185 (Token-2022, 711,008 bytes), with their SHA-256 in `programs/meridian/tests/fixtures/token-programs.json`. Devnet's classic token program is now upgradeable, and a USDC transfer costs 105 compute units, the same as the copy bundled with Mollusk.
+- **Compute,** from `cargo test -p meridian --test book_compute -- --nocapture`. The worst case adds what Mint pairs will (P30):
+
+  | Fills | Buy | Sell | Worst case with Mint pairs | Share of 1,400,000 |
+  |---|---|---|---|---|
+  | 0 | 18,012 | 18,002 | 30,520 | 2.2% |
+  | 1 | 26,265 | 26,252 | 38,773 | 2.8% |
+  | 10 | 42,282 | 42,242 | 54,790 | 3.9% |
+  | 32 | 80,898 | 80,792 | 93,406 | 6.7% |
+  | 61 | 131,757 | 131,564 | 144,265 | 10.3% |
+
+  A fill costs about 1,754 units, its Fill event included. A call into a token program costs about 2,137, a Token-2022 mint 2,119, and Mint pairs adds about 12,508 in all. Not in the table, and small against the margin: a taker already in the trader table (its ID check scans the resting orders) and a resting remainder with its OrderPlaced event.
+- **What caps the fills.** With Anchor's `emit_cpi!`, an order ran out of memory at its 43rd fill: "memory allocation failed, out of memory". Each event allocated new buffers in the program's 32 KB heap, which is never freed during an instruction, and a fill then cost 2,882 units. A writer that reuses one buffer and sends the same bytes (a unit test compares them with what `emit_cpi!` builds) cut a fill to about 1,750 units and moved the ceiling to 61 fills. There the order fails with `MaxInstructionTraceLengthExceeded`: a transaction holds at most 64 instructions, and 61 events, two token transfers and the order itself make 64. So a full book's 4:00 sweep, 128 cancel events, can't be one transaction (D99), and a bot batch across several books (D111) shares the same 64.
+- **The gate: pass.** At 10 fills the worst case is 3.9% of a transaction's compute, under the 75% pass mark. The fill limit is 32: its worst case, 93,406 units, stays under the 200,000 an instruction gets without asking for more, so no wallet needs to raise its budget, and it uses about half of the 64 instructions, leaving room for Buy No's extra calls (M2).
+- **Self-trades and events, in LiteSVM.** A taker offering 2 Yes at 35¢ who buys 1 at up to 36¢ gets its 2 Yes back in the same transaction and buys a maker's 1 (D90). The transaction's event calls, decoded with the program's own types, read "cancel order 9 (2x35¢, SelfTrade)" and then "fill 1x1 at 36¢": the order reached. A Limit buy of 5 at 37¢ against offers at 36¢ to 39¢ records two fills, then "placed order 1 (3x37¢)".
+- **A donation.** A test that gave the book's USDC account one unit more than it owes kept trading. With the check set to "equal", as §5 said, the same test failed (D137).
+- **Each check seen failing.** With the pause check removed, the duplicate-account check removed, the book check removed, or "equal" in place of "at least", exactly the matching test failed. Trading at the taker's price failed four matching tests; a 64-byte trader entry failed the layout test; an extra header byte failed to compile ("derive(Pod) was applied to a type with padding"); an event without Anchor's tag failed the byte comparison.

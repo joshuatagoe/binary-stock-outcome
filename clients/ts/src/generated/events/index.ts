@@ -7,3 +7,6 @@
  */
 
 export * from "./configInitialized.ts";
+export * from "./fill.ts";
+export * from "./orderCancelled.ts";
+export * from "./orderPlaced.ts";

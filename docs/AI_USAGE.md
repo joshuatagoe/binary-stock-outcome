@@ -103,3 +103,16 @@ How AI was used on this project: tools, what worked, where it misled us, and how
     - in a new build folder, `anchor build` left a random program key, which would have stopped `build.sh` from putting the real one there (D92).
 
     The README also listed four steps where there are seven and overstated what `.local/` holds. And P29 said the Explorer showed the local chain, which the AI had never tried; opened, the Explorer never finished loading, so the local page no longer links it. Each was fixed, and the Linux path was run from a copy in WSL's home folder. Running the review's SIGTERM case found one more: Surfpool ignores a SIGTERM in about its first 0.3 s, so `make dev` now forces any part that hasn't stopped after 5 s (M0.14). Lesson, as in 23: review against the design before calling a slice done, and run each claim before writing it down.
+
+## 2026-10-12 — M1 slice a (the order-book spike)
+
+### Where AI misled us or we course-corrected
+
+27. **The AI's architecture let anyone freeze a market with a one-cent donation.** §5 said the book's token accounts must equal what its orders lock plus its owners' free balances, checked after every instruction. Anyone can send tokens to any account, so one extra unit would have made every later order, cancel and return fail. D64 had already made the vault's check "at least" for this reason; the AI didn't carry it over to the book. A donation test caught it: with "equal" it failed, with "at least" it passed (D137, M1.01). Lesson: when a rule is fixed in one place, look for the same rule elsewhere.
+28. **A fresh-context review of the spike found the AI had named the wrong limit, and three gaps.**
+    - The AI wrote that the heap capped an order at 61 fills. The review asked whether that failure was really out of memory; checking it showed `MaxInstructionTraceLengthExceeded`, Solana's 64-instruction limit, which also rules out a one-transaction sweep (M1.01).
+    - Self-trade cancels left the tokens in the book, as D99's general rule says, though D90 says they go back to the wallet in the same transaction.
+    - Events came out grouped by kind, not in the order the book was reached.
+    - No test showed that events reach the chain, and the sell side of a self-trade was untested. Both now are, in LiteSVM and in the book's tests.
+
+    Lesson: check what a failure actually is before naming a limit, and when a specific decision and a general one meet, build the specific one.
