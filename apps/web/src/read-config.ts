@@ -4,14 +4,15 @@
 import { fetchMaybeConfig, findConfigPda } from '@meridian/client';
 import { createSolanaRpc } from '@solana/kit';
 import { describeConfig, type ConfigPanel } from './describe-config.ts';
-import { RPC_URL } from './network.ts';
+import { CHAIN, RPC_URL } from './network.ts';
 
 export const READ_TIMEOUT_MS = 10_000;
 
-// Devnet answered, but Config isn't there: after a devnet reset (D19), until the program is set up again.
+// The chain answered, but Config isn't there: after a devnet reset (D19), until the program is set up again, or
+// on a local chain that make dev hasn't finished setting up.
 export class ConfigMissing extends Error {}
 
-export const devnetRpc = createSolanaRpc(RPC_URL);
+export const chainRpc = createSolanaRpc(RPC_URL);
 
 type Rpc = Parameters<typeof fetchMaybeConfig>[0];
 
@@ -19,6 +20,6 @@ export async function readConfig(rpc: Rpc, signal: AbortSignal, timeoutMs = READ
   const abortSignal = AbortSignal.any([signal, AbortSignal.timeout(timeoutMs)]);
   const [address] = await findConfigPda();
   const account = await fetchMaybeConfig(rpc, address, { abortSignal, commitment: 'confirmed' });
-  if (!account.exists) throw new ConfigMissing(`Config ${address} is not on devnet`);
+  if (!account.exists) throw new ConfigMissing(`Config ${address} is not on ${CHAIN.name}`);
   return describeConfig(account.data, address);
 }

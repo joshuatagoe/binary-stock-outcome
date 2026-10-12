@@ -1,7 +1,11 @@
-// The landing page at M0: what Meridian is, and the live settings read from devnet (M0 slice e).
+// The landing page at M0: what Meridian is, and the live settings read from devnet, or from the local chain under
+// make dev (M0 slice e, D74).
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { ConfigPanel, Link } from '../describe-config.ts';
-import { ConfigMissing, devnetRpc, readConfig } from '../read-config.ts';
+import { CHAIN } from '../network.ts';
+import { ConfigMissing, chainRpc, readConfig } from '../read-config.ts';
+
+const Chain = CHAIN.name[0].toUpperCase() + CHAIN.name.slice(1);
 
 type State = { kind: 'loading' } | { kind: 'error' } | { kind: 'missing' } | { kind: 'ready'; panel: ConfigPanel };
 
@@ -18,11 +22,11 @@ export function Home() {
   useEffect(() => {
     const controller = new AbortController();
     setState({ kind: 'loading' });
-    readConfig(devnetRpc, controller.signal).then(
+    readConfig(chainRpc, controller.signal).then(
       (panel) => setState({ kind: 'ready', panel }),
       (error) => {
         if (controller.signal.aborted) return;
-        console.error('Reading Config from devnet failed:', error);
+        console.error(`Reading Config from ${CHAIN.name} failed:`, error);
         setState({ kind: error instanceof ConfigMissing ? 'missing' : 'error' });
       },
     );
@@ -39,21 +43,18 @@ export function Home() {
       </p>
       <section className="card" aria-labelledby="live-heading">
         <h2 id="live-heading" ref={heading} tabIndex={-1}>
-          Live on devnet
+          {CHAIN.heading}
         </h2>
         {/* Always on the page, so screen readers announce each change (§7, Accessibility). */}
         <p role="status" className={state.kind === 'loading' ? undefined : 'sr-only'}>
-          {state.kind === 'loading' && 'Reading the settings from Solana devnet…'}
-          {state.kind === 'ready' && 'Read the settings from Solana devnet.'}
+          {state.kind === 'loading' && `Reading the settings from ${CHAIN.name}…`}
+          {state.kind === 'ready' && `Read the settings from ${CHAIN.name}.`}
         </p>
         {state.kind === 'error' && (
-          <Problem retry={retry}>Solana devnet didn't answer, so the live settings can't be shown right now. This page only reads.</Problem>
+          <Problem retry={retry}>{`${Chain} didn't answer, so the live settings can't be shown right now. This page only reads.`}</Problem>
         )}
         {state.kind === 'missing' && (
-          <Problem retry={retry}>
-            Devnet answered, but Meridian's settings aren't there. Devnet may have been reset; the program is set up again
-            after a reset.
-          </Problem>
+          <Problem retry={retry}>{`${Chain} answered, but Meridian's settings aren't there. ${CHAIN.missing}`}</Problem>
         )}
         {state.kind === 'ready' && <Settings panel={state.panel} />}
       </section>
@@ -90,7 +91,7 @@ function Settings({ panel }: { panel: ConfigPanel }) {
       <dl className="addresses">
         <Address term="Program" link={panel.program} />
         <Address term="Settings account (Config)" link={panel.config} />
-        <Address term="USDC (Circle's test token)" link={panel.usdcMint} />
+        <Address term={CHAIN.usdc} link={panel.usdcMint} />
       </dl>
     </>
   );
@@ -101,9 +102,13 @@ function Address({ term, link }: { term: string; link: Link }) {
     <>
       <dt>{term}</dt>
       <dd>
-        <a className="mono" href={link.url}>
-          {link.address}
-        </a>
+        {link.url ? (
+          <a className="mono" href={link.url}>
+            {link.address}
+          </a>
+        ) : (
+          <span className="mono">{link.address}</span>
+        )}
       </dd>
     </>
   );

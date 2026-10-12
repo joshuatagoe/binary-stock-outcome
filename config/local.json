@@ -1,0 +1,9 @@
+{
+  "_about": "The backend's settings for make dev's local chain (ARCHITECTURE.md §11's local column, D74). No secrets.",
+  "network": "local",
+  "rpc": {
+    "public": "http://127.0.0.1:8899"
+  },
+  "checkEverySecs": 30,
+  "heartbeatEverySecs": 60
+}

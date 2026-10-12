@@ -1,8 +1,9 @@
 // Initializes Config on devnet, once, signed by the upgrade key (ARCHITECTURE.md §6, D133), then reads it back.
 // Run in WSL, where the key files are (D92):
 //   wsl -e bash -lc "cd /mnt/c/dev/binary-stock-outcome && node scripts/devnet/init-config.ts"
-// If Config already exists, it only reads it back. Values: config/program-devnet.json.
-// SOLANA_RPC_URL overrides the public devnet endpoint.
+// If Config already exists, it only reads it back. Values: config/program-<network>.json.
+// MERIDIAN_NETWORK=local initializes make dev's local chain instead (D74), with MERIDIAN_KEYS naming the folder of
+// its local key files. SOLANA_RPC_URL and SOLANA_WS_URL override the network's endpoints.
 import { readFileSync } from 'node:fs';
 import { homedir } from 'node:os';
 import { join } from 'node:path';
@@ -42,19 +43,22 @@ type ProgramConfig = {
   };
 };
 
-const RPC = process.env.SOLANA_RPC_URL ?? 'https://api.devnet.solana.com';
+const NETWORK = process.env.MERIDIAN_NETWORK ?? 'devnet';
+if (NETWORK !== 'devnet' && NETWORK !== 'local') throw new Error(`MERIDIAN_NETWORK must be devnet or local; it is "${NETWORK}"`);
+const RPC = process.env.SOLANA_RPC_URL ?? (NETWORK === 'local' ? 'http://127.0.0.1:8899' : 'https://api.devnet.solana.com');
+// Devnet serves its websocket on the same port as its RPC; a local chain serves it on the next port.
+const WS = process.env.SOLANA_WS_URL ?? (NETWORK === 'local' ? 'ws://127.0.0.1:8900' : RPC.replace(/^http/, 'ws'));
+const KEYS = process.env.MERIDIAN_KEYS ?? join(homedir(), '.config', 'solana');
 const LOADER = address('BPFLoaderUpgradeab1e11111111111111111111111');
 const repo = join(import.meta.dirname, '..', '..');
-const values: ProgramConfig = JSON.parse(readFileSync(join(repo, 'config', 'program-devnet.json'), 'utf8'));
+const values: ProgramConfig = JSON.parse(readFileSync(join(repo, 'config', `program-${NETWORK}.json`), 'utf8'));
 
 // A key file holds the 64-byte key pair; only its public half is printed.
 const signer = (name: string) =>
-  createKeyPairSignerFromBytes(
-    new Uint8Array(JSON.parse(readFileSync(join(homedir(), '.config', 'solana', `meridian-${name}.json`), 'utf8'))),
-  );
+  createKeyPairSignerFromBytes(new Uint8Array(JSON.parse(readFileSync(join(KEYS, `meridian-${name}.json`), 'utf8'))));
 
 const rpc = createSolanaRpc(RPC);
-const rpcSubscriptions = createSolanaRpcSubscriptions(RPC.replace(/^http/, 'ws'));
+const rpcSubscriptions = createSolanaRpcSubscriptions(WS);
 const [configAddress] = await findConfigPda();
 
 function show(config: Awaited<ReturnType<typeof fetchMaybeConfig>>) {
@@ -110,5 +114,5 @@ const transaction = await signTransactionMessageWithSigners(message);
 assertIsTransactionWithBlockhashLifetime(transaction);
 await sendAndConfirmTransactionFactory({ rpc, rpcSubscriptions })(transaction, { commitment: 'confirmed' });
 const signature = getSignatureFromTransaction(transaction);
-console.log(`Initialized: https://explorer.solana.com/tx/${signature}?cluster=devnet`);
+console.log(NETWORK === 'local' ? `Initialized on the local chain: ${signature}` : `Initialized: https://explorer.solana.com/tx/${signature}?cluster=devnet`);
 show(await fetchMaybeConfig(rpc, configAddress));

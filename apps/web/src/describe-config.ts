@@ -1,9 +1,10 @@
-// Turns Config, as stored on devnet, into the status panel's words and links (ARCHITECTURE.md §5, §7).
+// Turns Config, as stored on devnet or make dev's local chain, into the status panel's words and links
+// (ARCHITECTURE.md §5, §7).
 // Every state has a word, so colour is never the only signal (USERS.md, Accessibility).
 import { MERIDIAN_PROGRAM_ADDRESS, type Config } from '@meridian/client';
-import { EXPLORER_CLUSTER } from './network.ts';
+import { explorerAddress } from './network.ts';
 
-export type Link = { address: string; url: string };
+export type Link = { address: string; url: string | null };
 
 export type ConfigPanel = {
   stocks: { symbol: string; status: 'Open for new markets' | 'Turned off' }[];
@@ -13,10 +14,7 @@ export type ConfigPanel = {
   config: Link;
 };
 
-const link = (address: string): Link => ({
-  address,
-  url: `https://explorer.solana.com/address/${address}?cluster=${EXPLORER_CLUSTER}`,
-});
+const link = (address: string): Link => ({ address, url: explorerAddress(address) });
 
 export function describeConfig(config: Config, configAddress: string): ConfigPanel {
   return {
