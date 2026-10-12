@@ -25,7 +25,7 @@ npm run verify
 
 `npm run verify` is the same command locally and in CI. It runs:
 
-- the commit guard's tests (<!-- count:hooks -->9<!-- /count --> tests), verify's own tests (<!-- count:verify -->46<!-- /count --> tests), the toolchain check's tests (<!-- count:toolchain -->10<!-- /count --> tests), the key export's tests (<!-- count:keys -->2<!-- /count --> tests), the smoke test's tests (<!-- count:smoke -->9<!-- /count --> tests), the backend's tests (<!-- count:backend -->29<!-- /count --> tests, Vitest), the website's unit tests (<!-- count:web -->5<!-- /count --> tests, Vitest) and its browser tests (<!-- count:web-e2e -->8<!-- /count --> tests, Playwright, after `npx playwright install chromium` once)
+- the commit guard's tests (<!-- count:hooks -->9<!-- /count --> tests), verify's own tests (<!-- count:verify -->46<!-- /count --> tests), the toolchain check's tests (<!-- count:toolchain -->10<!-- /count --> tests), the key export's tests (<!-- count:keys -->2<!-- /count --> tests), the smoke test's tests (<!-- count:smoke -->9<!-- /count --> tests), the backend's tests (<!-- count:backend -->29<!-- /count --> tests, Vitest), the website's unit tests (<!-- count:web -->8<!-- /count --> tests, Vitest) and its browser tests (<!-- count:web-e2e -->10<!-- /count --> tests, Playwright, after `npx playwright install chromium` once)
 - a check that `rust-toolchain.toml`, `.nvmrc`, `Cargo.toml`, `Anchor.toml`, the build image and the backend's Node image agree with the pins in `scripts/toolchain/pins.sh`
 - a check that every decision and finding cited in the docs exists
 - a check that each skill's `.cursor` and `.claude` copies match
@@ -111,6 +111,8 @@ npm run test -w apps/web                 # unit tests
 npx playwright install chromium          # once, for the browser tests
 npm run e2e -w apps/web                  # browser tests, with devnet replaced by a recorded Config and public/_headers served
 ```
+
+On the dev server only, `/wallet-test` runs M0's wallet test with Phantom and Solflare (P28); the deployed site has no such page.
 
 After each deploy, CI runs the smoke test against all three deployed parts: `scripts/smoke/program.mjs` (Config on devnet), `scripts/smoke/backend.mjs` (health at the deployed commit) and `scripts/smoke/website.mjs` (the page in a real browser, at the deployed commit, with its headers and no errors).
 

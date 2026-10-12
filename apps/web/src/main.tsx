@@ -7,13 +7,15 @@ import { NotFound } from './pages/NotFound.tsx';
 import { Shell } from './Shell.tsx';
 import './theme.css';
 
+// M0's wallet test is local only (the user's choice): the build drops it, so the deployed site has no such page.
+const devOnly = import.meta.env.DEV
+  ? [{ path: '/wallet-test', lazy: async () => ({ Component: (await import('./wallet-test/WalletTest.tsx')).WalletTest }) }]
+  : [];
+
 const router = createBrowserRouter([
   {
     element: <Shell />,
-    children: [
-      { path: '/', element: <Home /> },
-      { path: '*', element: <NotFound /> },
-    ],
+    children: [{ path: '/', element: <Home /> }, ...devOnly, { path: '*', element: <NotFound /> }],
   },
 ]);
 

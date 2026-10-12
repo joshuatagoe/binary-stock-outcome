@@ -13,8 +13,8 @@ export default defineConfig({
   fullyParallel: true,
   retries: 0,
   projects: [
-    { name: 'built', use: { ...devices['Desktop Chrome'], baseURL: BUILT } },
-    { name: 'dev', use: { ...devices['Desktop Chrome'], baseURL: DEV }, grep: /stocks read from Config/ },
+    { name: 'built', use: { ...devices['Desktop Chrome'], baseURL: BUILT }, grepInvert: /on the dev server/ },
+    { name: 'dev', use: { ...devices['Desktop Chrome'], baseURL: DEV }, grep: /stocks read from Config|on the dev server/ },
   ],
   webServer: [
     {

@@ -100,6 +100,19 @@ test('an unknown address says so and links home', async ({ page }) => {
   await expect(page).toHaveURL('/');
 });
 
+test('the wallet test is local only: the built site has no such page', async ({ page }) => {
+  await fakeNetwork(page);
+  await page.goto('/wallet-test');
+  await expect(page.getByRole('heading', { name: 'Page not found' })).toBeVisible();
+});
+
+test('the wallet test page renders on the dev server', async ({ page }) => {
+  await fakeNetwork(page);
+  await page.goto('/wallet-test');
+  await expect(page.getByRole('heading', { name: 'Wallet test (M0)' })).toBeVisible();
+  await expect(page.getByText('No wallet found')).toBeVisible();
+});
+
 test('the build carries its commit (D132) and is served with the headers of public/_headers (P17)', async ({ page }) => {
   await fakeNetwork(page);
   const res = await page.goto('/');
