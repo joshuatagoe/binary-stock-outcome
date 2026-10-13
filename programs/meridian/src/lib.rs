@@ -106,7 +106,7 @@ pub mod meridian {
     }
 
     /// Instruction 14 (§6): a maker's batch across books (D111).
-    pub fn replace_quotes(ctx: Context<ReplaceQuotes>, books: Vec<BookQuotes>) -> Result<()> {
+    pub fn replace_quotes<'info>(ctx: Context<'info, ReplaceQuotes<'info>>, books: Vec<BookQuotes>) -> Result<()> {
         trade_paths::handle_replace_quotes(ctx, books)
     }
 

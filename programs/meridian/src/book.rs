@@ -3,7 +3,9 @@
 //! worst price (D15); a self-trade cancels the resting order and matching continues (D90); an owner's order IDs are
 //! unique among their resting orders (D101). The taker's side never enters the book: Place order, Buy No and Sell No
 //! move it straight to and from the taker's wallet, while makers are credited inside the book until they're returned
-//! (D99). A Buy No limit order's unsold pairs rest as a paired offer, their No held in the book (D142).
+//! (D99). A Buy No limit order's unsold pairs rest as a paired offer, their No held in the book (D142). Cancel order,
+//! Replace quotes and the close sweep take orders off and credit what they locked to their owners' balances, which
+//! Return to owner pays out (D99, D111, D37).
 use anchor_lang::prelude::*;
 
 use crate::{errors::MeridianError, market::USDC_PER_PAIR};
@@ -127,6 +129,36 @@ pub struct SelfTrade {
 pub enum Match {
     Fill(Fill),
     SelfTrade(SelfTrade),
+}
+
+/// A resting order taken off the book by the sweep or by its owner's Replace quotes, with what it locked now in the
+/// owner's balance (D99). `side` is what the order did with Yes: Buy for a bid, Sell for an offer.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct Removed {
+    pub owner: Pubkey,
+    pub side: Side,
+    pub order_id: u64,
+    pub price: u8,
+    pub quantity: u32,
+    /// A paired offer, whose pairs closed at 1.00 each: the caller burns that many Yes and No in the book and moves the
+    /// 1.00s from the vault to the book's USDC (D142).
+    pub paired: bool,
+}
+
+/// Where a new resting order goes: behind every order this one ranks after.
+type RanksAfter = fn(u8, u8) -> bool;
+
+/// Credits what a resting order locked to its owner's balance and takes it off the owner's count (D99): a bid's USDC,
+/// an offer's Yes, or 1.00 per pair for a paired offer, whose pairs close (D39, D142). Returns whether it was paired.
+fn credit_cancelled(owner: &mut Trader, side: Side, o: &Order) -> bool {
+    let paired = side == Side::Sell && o.flags & PAIRED != 0;
+    match side {
+        Side::Buy => owner.free_usdc += o.quantity as u64 * o.price as u64 * USDC_PER_CENT,
+        Side::Sell if paired => owner.free_usdc += o.quantity as u64 * USDC_PER_PAIR,
+        Side::Sell => owner.free_yes += o.quantity as u64,
+    }
+    owner.open_orders -= 1;
+    paired
 }
 
 /// What one order did, and what Place order must move between the taker's wallet and the book.
@@ -360,7 +392,7 @@ impl Book {
             _pad: 0,
         };
         self.next_seq += 1;
-        let (orders, behind): (&mut [Order], fn(u8, u8) -> bool) = match args.side {
+        let (orders, behind): (&mut [Order], RanksAfter) = match args.side {
             Side::Buy => (&mut self.bids[..], |resting, new| resting >= new),
             Side::Sell => (&mut self.asks[..], |resting, new| resting <= new),
         };
@@ -389,27 +421,83 @@ impl Book {
                 continue;
             };
             let o = orders[at];
-            let paired = o.flags & PAIRED != 0;
             orders.copy_within(at + 1..count, at);
-            let entry = &mut self.traders[trader];
             match side {
-                Side::Buy => {
-                    self.bid_count -= 1;
-                    entry.free_usdc += o.quantity as u64 * o.price as u64 * USDC_PER_CENT;
-                }
-                Side::Sell => {
-                    self.ask_count -= 1;
-                    if paired {
-                        entry.free_usdc += o.quantity as u64 * USDC_PER_PAIR;
-                    } else {
-                        entry.free_yes += o.quantity as u64;
-                    }
-                }
+                Side::Buy => self.bid_count -= 1,
+                Side::Sell => self.ask_count -= 1,
             }
-            entry.open_orders -= 1;
+            let paired = credit_cancelled(&mut self.traders[trader], side, &o);
             return Ok((side, o.price, o.quantity, paired));
         }
         err!(MeridianError::OrderNotFound)
+    }
+
+    /// The close sweep (D37): takes up to `max` resting orders off the book, offers first, each side from its back, so
+    /// nothing shifts, and credits what each locked to its owner's balance (D99); a paired offer's pairs close at 1.00
+    /// each (D142). Called again, it continues; on an empty book it takes nothing.
+    pub fn sweep(&mut self, max: usize) -> Vec<Removed> {
+        let mut removed = Vec::with_capacity(max.min(self.ask_count as usize + self.bid_count as usize));
+        while removed.len() < max {
+            let (side, o) = if self.ask_count > 0 {
+                self.ask_count -= 1;
+                (Side::Sell, self.asks[self.ask_count as usize])
+            } else if self.bid_count > 0 {
+                self.bid_count -= 1;
+                (Side::Buy, self.bids[self.bid_count as usize])
+            } else {
+                break;
+            };
+            let owner = &mut self.traders[o.trader as usize];
+            let paired = credit_cancelled(owner, side, &o);
+            removed.push(Removed { owner: owner.owner, side, order_id: o.order_id, price: o.price, quantity: o.quantity, paired });
+        }
+        removed
+    }
+
+    /// Replace quotes (D111): takes every plain order of `owner` off the book, bids then offers, each in book order, and
+    /// credits what each locked to the owner's balance (D99). Paired offers stay (D142).
+    pub fn cancel_plain(&mut self, owner: &Pubkey) -> Vec<Removed> {
+        let Some(t) = self.trader_index(owner) else { return vec![] };
+        let mut removed = vec![];
+        for side in [Side::Buy, Side::Sell] {
+            let (orders, count) = match side {
+                Side::Buy => (&mut self.bids, &mut self.bid_count),
+                Side::Sell => (&mut self.asks, &mut self.ask_count),
+            };
+            let mut kept = 0;
+            for i in 0..*count as usize {
+                let o = orders[i];
+                if o.trader as usize == t && o.flags & PAIRED == 0 {
+                    credit_cancelled(&mut self.traders[t], side, &o);
+                    removed.push(Removed { owner: *owner, side, order_id: o.order_id, price: o.price, quantity: o.quantity, paired: false });
+                } else {
+                    orders[kept] = o;
+                    kept += 1;
+                }
+            }
+            *count = kept as u8;
+        }
+        removed
+    }
+
+    /// Return to owner (D99, D142): the owner's whole balance in the book, USDC, Yes and No, which is then zero there.
+    /// With no orders left, the entry is free for the next trader (D107). Zeros for an owner without an entry.
+    pub fn take_balance(&mut self, owner: &Pubkey) -> (u64, u64, u64) {
+        let Some(t) = self.trader_index(owner) else { return (0, 0, 0) };
+        let entry = &mut self.traders[t];
+        let balance = (entry.free_usdc, entry.free_yes, entry.free_no);
+        (entry.free_usdc, entry.free_yes, entry.free_no) = (0, 0, 0);
+        balance
+    }
+
+    /// Replace quotes collects the owner's free USDC and Yes (D111). It lists no No accounts, so a No balance stays for
+    /// Return to owner, and keeps the entry the owner's (D142).
+    pub fn take_usdc_and_yes(&mut self, owner: &Pubkey) -> (u64, u64) {
+        let Some(t) = self.trader_index(owner) else { return (0, 0) };
+        let entry = &mut self.traders[t];
+        let balance = (entry.free_usdc, entry.free_yes);
+        (entry.free_usdc, entry.free_yes) = (0, 0);
+        balance
     }
 
     fn trader_index(&self, owner: &Pubkey) -> Option<usize> {
@@ -839,6 +927,58 @@ mod tests {
         assert_eq!(book.trader(&dave).unwrap().free_yes, 10);
         assert_eq!(book.cancel(&carol, 1).unwrap_err(), MeridianError::OrderNotFound.into(), "only once");
         assert_eq!(book.cancel(&Pubkey::new_unique(), 1).unwrap_err(), MeridianError::OrderNotFound.into(), "only your own");
+    }
+
+    #[test]
+    fn the_sweep_takes_offers_then_bids_from_the_back_in_batches() {
+        // The 10:16 book with a paired offer of Bob's behind the others: 3 offers and 2 bids, swept 2 at a time.
+        let TenSixteen { mut book, dave, bot, carol } = ten_sixteen();
+        let plain = (book.locked_usdc(), book.locked_yes());
+        let bob = Pubkey::new_unique();
+        book.place_paired(&bob, &sell(OrderKind::Limit, 67, 6, 9), 10).unwrap();
+        let first = book.sweep(2);
+        let taken = |r: &[Removed]| r.iter().map(|r| (r.owner, r.side, r.price, r.quantity, r.paired)).collect::<Vec<_>>();
+        assert_eq!(taken(&first), vec![(bob, Side::Sell, 67, 6, true), (bot, Side::Sell, 66, 5, false)]);
+        assert_eq!(taken(&book.sweep(2)), vec![(dave, Side::Sell, 65, 10, false), (carol, Side::Buy, 60, 10, false)]);
+        assert_eq!(taken(&book.sweep(2)), vec![(bot, Side::Buy, 64, 5, false)]);
+        assert!(book.sweep(2).is_empty(), "an empty book gives nothing");
+        assert_eq!((book.trader(&bob).unwrap().free_usdc, book.trader(&bob).unwrap().free_yes), (6 * USDC_PER_PAIR, 0), "6 pairs closed");
+        assert_eq!((book.trader(&bot).unwrap().free_usdc, book.trader(&bot).unwrap().free_yes), (cents(320), 5));
+        assert_eq!((book.trader(&carol).unwrap().free_usdc, book.trader(&dave).unwrap().free_yes), (cents(600), 10));
+        assert_eq!((book.free_usdc() - 6 * USDC_PER_PAIR, book.free_yes()), plain, "the plain orders' locks, now free");
+        assert_eq!((book.locked_usdc(), book.locked_yes(), book.locked_no()), (0, 0, 0));
+        assert!(book.traders.iter().all(|t| t.open_orders == 0));
+    }
+
+    #[test]
+    fn cancel_plain_takes_only_the_owners_plain_orders_and_keeps_the_rest_in_order() {
+        let TenSixteen { mut book, dave, bot, carol } = ten_sixteen();
+        book.place_paired(&bot, &sell(OrderKind::Limit, 70, 3, 9), 10).unwrap();
+        book.place(&bot, &buy(OrderKind::Limit, 50, 2, 3), 10).unwrap();
+        let removed = book.cancel_plain(&bot);
+        let taken: Vec<_> = removed.iter().map(|r| (r.side, r.order_id, r.price, r.quantity, r.paired)).collect();
+        assert_eq!(taken, vec![(Side::Buy, 2, 64, 5, false), (Side::Buy, 3, 50, 2, false), (Side::Sell, 1, 66, 5, false)]);
+        assert_eq!(levels(book.asks()), vec![(65, 10), (70, 3)], "Dave's offer and the bot's paired offer stay");
+        assert_eq!(levels(book.bids()), vec![(60, 10)], "Carol's bid stays");
+        let entry = *book.trader(&bot).unwrap();
+        assert_eq!((entry.free_usdc, entry.free_yes, entry.open_orders), (cents(320 + 100), 5, 1));
+        assert_eq!(book.trader(&dave).unwrap().open_orders, 1);
+        assert_eq!(book.trader(&carol).unwrap().open_orders, 1);
+        assert!(book.cancel_plain(&Pubkey::new_unique()).is_empty(), "nothing of a stranger's");
+    }
+
+    #[test]
+    fn taking_a_balance_empties_it_and_frees_an_entry_with_no_orders() {
+        let mut b = book();
+        let bob = Pubkey::new_unique();
+        b.place_paired(&bob, &sell(OrderKind::Limit, 67, 2, 1), 10).unwrap();
+        b.place(&Pubkey::new_unique(), &buy(OrderKind::Market, 67, 2, 1), 10).unwrap();
+        assert_eq!(b.take_usdc_and_yes(&bob), (cents(134), 0));
+        assert_eq!(b.free_trader_index(), Some(1), "Bob's No keeps his entry");
+        assert_eq!(b.take_balance(&bob), (0, 0, 2));
+        assert_eq!(b.free_trader_index(), Some(0), "nothing left and no orders: free (D107)");
+        assert_eq!(b.take_balance(&bob), (0, 0, 0), "a repeat finds nothing");
+        assert_eq!(b.take_balance(&Pubkey::new_unique()), (0, 0, 0));
     }
 
     #[test]

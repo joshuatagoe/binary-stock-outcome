@@ -616,7 +616,7 @@ After Alice's buy, Dave's offer is gone and his entry holds 6.50 USDC free until
 | After every money instruction: the vault holds at least what is owed, supply never exceeds the counter, and the book's token accounts hold at least locked plus free balances (D137) | Asserts at the end of each instruction | Any bug that would leave money short (D64) |
 | A result is written once | A state check | Changing a result (D2) |
 | Burning needs the program's co-signature | Permissioned Burn (D94) | Holders burning their own tokens |
-| Pause is checked only in Mint Pair, Place Order, Buy No and Sell No (D143) | Where the check sits | Freezing people's exits (D68) |
+| Pause is checked only in Mint Pair, Place Order, Buy No, Sell No and Replace quotes (D143, D146) | Where the check sits | Freezing people's exits (D68) |
 | A sender's order ID is unique per owner per market | A scan of that owner's orders | Double orders (D101) |
 | A full book refuses new resting orders | A capacity check (D107) | Unbounded growth |
 
@@ -736,8 +736,8 @@ A contract is the exact shape of a request: what it sends, who must sign it, whe
 | 11 | Buy No (market or limit; worst No price; quantity; order ID) | Anyone | The same | Mints pairs and sells their Yes (D5). A limit order's unsold Yes rests as an offer; cancelling it closes those pairs (D39) | PairsMinted, then a Fill or a self-trade OrderCancelled per resting order reached, then OrderPlaced if pairs rest (D143) |
 | 12 | Sell No (worst Yes price; quantity) | Anyone | The same | Buys Yes and closes pairs; it never rests (D38) | A Fill or a self-trade OrderCancelled per offer reached, then Redeemed (pairs). Its fills name taker order 0 (D143) |
 | 13 | Cancel order (order ID) | The order's owner | Any time while it rests; never paused (D68) | Moves what it locked into the owner's book balance (D99). A Buy No offer closes its pairs instead, at 1.00 each into the owner's book balance, even after settlement (D142, D143) | OrderCancelled (owner); for a Buy No offer, then Redeemed (pairs) |
-| 14 | Replace quotes (a list of books, each with new orders) | Any maker; the bot uses it (D111) | Order window, not paused | Cancels the signer's orders on each listed book, places the new ones, and collects the signer's free balances | OrderCancelled, OrderPlaced |
-| 15 | Sweep (market) | Operator | After orders close (D37) | Cancels every resting order into book balances | OrderCancelled (sweep) |
+| 14 | Replace quotes (a list of books, each with new orders) | Any maker; the bot uses it (D111) | Order window, not paused | Cancels the signer's plain orders on each listed book, places each new one as a Limit order under Place order's rules, collects the signer's free USDC and Yes, and moves only the net difference. Leaves paired offers alone (D142, D146) | OrderCancelled; each quote's Fill or self-trade OrderCancelled, and OrderPlaced; then BalanceReturned for what it collected (D146) |
+| 15 | Sweep (market) | Operator | After orders close (D37) | Cancels up to 28 resting orders a call into book balances, offers first; a paired offer's pairs close at 1.00 (D142). The backend calls it until the book is empty, 5 calls for a full book; an empty book's sweep does nothing (D146) | OrderCancelled (sweep); Redeemed (pairs) after a paired offer |
 | 16 | Return to owner (market, owner) | Anyone | While the owner's book balance is above zero | Pays it to the owner's own token accounts: USDC, Yes, and No released from paired offers (D99, D142) | BalanceReturned (USDC, Yes and No, D144) |
 | 17 | Close book (market) | Anyone | Settled, with no orders and no balances | Closes the book and its token accounts; deposits go back to whoever paid them (D50) | BookClosed |
 | 18 | Record close (ticker, day, Pyth price account) | Anyone | After the close, passing D28's and D103's checks | Creates or improves that stock's record (D105) | CloseRecorded |
@@ -776,6 +776,8 @@ A contract is the exact shape of a request: what it sends, who must sign it, whe
 | WaitNotOver | Finalizing early | "Proposed: No wins, final at 5:20 PM ET" |
 | DuplicateOrderId | A re-sent order | Not shown; the tracker treats the order as already placed |
 | PriceNotGenuine, WrongFeed, OutsideWindow, BandTooWide, BeforeClose | Record close | Timeline only, for example "META close not recorded: published 27 s before the close" |
+| BeforeClose | A sweep before orders close (D146) | Not shown; the backend sweeps after the close |
+| InvalidQuantity | A quantity of 0, or a return with nothing to return (D146) | Not shown; the backend treats an empty return as done |
 | (not enough USDC) | — | Caught before sending: "You need up to 6.60 USDC; you have 4.00." (F4) |
 
 ### The backend's API

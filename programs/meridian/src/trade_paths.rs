@@ -1,12 +1,11 @@
 //! Buy No, Sell No and Replace quotes (ARCHITECTURE.md §6, instructions 11, 12 and 14), declared at M1's freeze
-//! (P12): their accounts and arguments are the contract. Buy No and Sell No are built (M2-a); Replace quotes returns
-//! NotImplemented until its slice.
-use anchor_lang::prelude::*;
+//! (P12): their accounts and arguments are the contract. Buy No and Sell No are built in M2-a, Replace quotes in M2-b.
+use anchor_lang::{error::ErrorCode, prelude::*};
 
 use crate::{
     book::{Book, OrderKind, PlaceOrderArgs, Side, BOOK_NO_SEED, BOOK_SEED, BOOK_USDC_SEED, BOOK_YES_SEED},
     errors::MeridianError,
-    events::{EventWriter, OrderPlaced, PairsMinted, Redeemed},
+    events::{BalanceReturned, CancelReason, EventWriter, OrderCancelled, OrderPlaced, PairsMinted, Redeemed},
     market::{check_vault, Market, MARKET_SEED, NO_SEED, USDC_PER_PAIR, VAULT_SEED, YES_SEED},
     pairs::RedeemMode,
     place_order::{check_book, check_book_no, check_order_window, emit_matches},
@@ -230,6 +229,114 @@ pub struct ReplaceQuotes<'info> {
     pub token_2022_program: UncheckedAccount<'info>,
 }
 
-pub fn handle_replace_quotes(_ctx: Context<ReplaceQuotes>, _books: Vec<BookQuotes>) -> Result<()> {
-    err!(MeridianError::NotImplemented)
+/// The accounts each listed book adds to the remaining accounts, in BookQuotes' order.
+pub const ACCOUNTS_PER_BOOK: usize = 6;
+
+/// Not paused, and every listed market within its order window, as Place order (D37, D68, D102); one market outside it
+/// refuses the whole batch. On each book, in the order listed: the maker's plain orders are cancelled into its balance
+/// there, its new quotes are placed as Limit orders under Place order's rules (§3, D111), so a quote that crosses the
+/// book trades first, and its free USDC and Yes are collected. Its paired offers stay, and so does a free No balance,
+/// for Return to owner (D142). Only the difference between what the new quotes lock and buy and what comes back moves
+/// between the maker's accounts and the book. Every account of a listed book is checked to be that market's, and the
+/// maker's to be its own (D30, D139). Events per book: each cancel (reason Owner), each quote's fills and self-trade
+/// cancels and its OrderPlaced, then BalanceReturned for what was collected, so the events alone give every balance in
+/// the book (D62).
+pub fn handle_replace_quotes<'info>(ctx: Context<'info, ReplaceQuotes<'info>>, books: Vec<BookQuotes>) -> Result<()> {
+    let a = &ctx.accounts;
+    require!(!a.config.paused, MeridianError::Paused);
+    let remaining = ctx.remaining_accounts;
+    require!(remaining.len() >= books.len() * ACCOUNTS_PER_BOOK, ErrorCode::AccountNotEnoughKeys);
+    let markets: Vec<Pubkey> = (0..books.len()).map(|i| remaining[i * ACCOUNTS_PER_BOOK].key()).collect();
+    for (i, market) in markets.iter().enumerate() {
+        require!(!markets[i + 1..].contains(market), MeridianError::DuplicateAccount);
+    }
+    let mut events = EventWriter::new(a.event_authority.to_account_info());
+    for (i, book_quotes) in books.iter().enumerate() {
+        let accounts = &remaining[i * ACCOUNTS_PER_BOOK..(i + 1) * ACCOUNTS_PER_BOOK];
+        replace_on_book(a, accounts, &book_quotes.quotes, &mut events)?;
+    }
+    Ok(())
+}
+
+/// One book of Replace quotes: `accounts` are the market, its book, the book's USDC and Yes accounts, the Yes mint and
+/// the maker's own Yes account.
+fn replace_on_book<'info>(a: &ReplaceQuotes<'info>, accounts: &'info [AccountInfo<'info>], quotes: &[Quote], events: &mut EventWriter<'info>) -> Result<()> {
+    let [market_info, book_info, book_usdc, book_yes, yes_mint, maker_yes] = accounts else {
+        return err!(ErrorCode::AccountNotEnoughKeys);
+    };
+    let market = Account::<Market>::try_from(market_info)?;
+    check_order_window(&market, &a.config)?;
+    let (maker, market_key) = (a.maker.key(), market_info.key());
+    let (maker_info, maker_usdc) = (a.maker.to_account_info(), a.maker_usdc.to_account_info());
+    require!(maker_usdc.key() != book_usdc.key() && maker_yes.key() != book_yes.key(), MeridianError::DuplicateAccount);
+    for account in [&maker_usdc, maker_yes] {
+        require_keys_eq!(token::owner(account)?, maker, MeridianError::NotYourAccount);
+    }
+
+    // The book is this market's, and its token accounts and the Yes mint sit at their addresses (§5).
+    let book = AccountLoader::<Book>::try_from(book_info)?;
+    let (book_bump, usdc_bump, yes_bump) = {
+        let b = book.load()?;
+        require_keys_eq!(b.market, market_key, ErrorCode::ConstraintSeeds);
+        (b.bump, b.book_usdc_bump, b.book_yes_bump)
+    };
+    for (account, seed, bump) in [(book_usdc, BOOK_USDC_SEED, usdc_bump), (book_yes, BOOK_YES_SEED, yes_bump), (yes_mint, YES_SEED, market.yes_bump)] {
+        let address = Pubkey::create_program_address(&[seed, market_key.as_ref(), &[bump]], &crate::ID).map_err(|_| ErrorCode::ConstraintSeeds)?;
+        require_keys_eq!(account.key(), address, ErrorCode::ConstraintSeeds);
+    }
+
+    let (cancelled, placed, (free_usdc, free_yes)) = {
+        let mut b = book.load_mut()?;
+        let cancelled = b.cancel_plain(&maker);
+        let mut placed = Vec::with_capacity(quotes.len());
+        for q in quotes {
+            let args = PlaceOrderArgs { side: q.side, kind: OrderKind::Limit, price: q.price, quantity: q.quantity, order_id: q.order_id };
+            let placement = b.place(&maker, &args, a.config.fill_limit)?;
+            placed.push((args, placement));
+        }
+        (cancelled, placed, b.take_usdc_and_yes(&maker))
+    };
+
+    // The maker's side, netted: what its quotes lock and buy goes in; what they sell, what its own cancelled orders
+    // return (D90) and its collected balance come out.
+    let usdc_in: u64 = placed.iter().map(|(args, p)| p.usdc_in(args)).sum();
+    let usdc_out: u64 = placed.iter().map(|(args, p)| p.usdc_out(args)).sum::<u64>() + free_usdc;
+    let yes_in: u64 = placed.iter().map(|(args, p)| p.yes_in(args)).sum();
+    let yes_out: u64 = placed.iter().map(|(args, p)| p.yes_out(args)).sum::<u64>() + free_yes;
+    let book_bump = [book_bump];
+    let book_signer: &[&[u8]] = &[BOOK_SEED, market_key.as_ref(), &book_bump];
+    let (classic, t22) = (a.token_program.to_account_info(), a.token_2022_program.to_account_info());
+    let usdc_mint = a.usdc_mint.to_account_info();
+    if usdc_in > usdc_out {
+        token::transfer(&classic, &maker_usdc, &usdc_mint, book_usdc, &maker_info, usdc_in - usdc_out, USDC_DECIMALS, &[])?;
+    } else {
+        token::transfer(&classic, book_usdc, &usdc_mint, &maker_usdc, book_info, usdc_out - usdc_in, USDC_DECIMALS, &[book_signer])?;
+    }
+    if yes_in > yes_out {
+        token::transfer(&t22, maker_yes, yes_mint, book_yes, &maker_info, yes_in - yes_out, OUTCOME_DECIMALS, &[])?;
+    } else {
+        token::transfer(&t22, book_yes, yes_mint, maker_yes, book_info, yes_out - yes_in, OUTCOME_DECIMALS, &[book_signer])?;
+    }
+
+    for c in &cancelled {
+        events.emit(&OrderCancelled {
+            market: market_key,
+            owner: maker,
+            order_id: c.order_id,
+            side: c.side,
+            price: c.price,
+            quantity: c.quantity,
+            reason: CancelReason::Owner,
+        })?;
+    }
+    for (args, p) in &placed {
+        emit_matches(events, market_key, maker, args.order_id, args.side, &p.matches)?;
+        if p.rested > 0 {
+            events.emit(&OrderPlaced { market: market_key, owner: maker, order_id: args.order_id, side: args.side, price: args.price, quantity: p.rested })?;
+        }
+    }
+    if free_usdc > 0 || free_yes > 0 {
+        events.emit(&BalanceReturned { market: market_key, owner: maker, usdc: free_usdc, yes: free_yes, no: 0 })?;
+    }
+    check_book(&book, book_usdc, book_yes)
 }
