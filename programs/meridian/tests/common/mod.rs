@@ -527,6 +527,85 @@ impl Chain {
         Instruction { program_id: meridian::ID, accounts: metas, data: meridian::instruction::CancelOrder { order_id }.data() }
     }
 
+    /// Return to owner (§6, instruction 16) for `owner`'s balance, paid to the three accounts named in `owner`. No
+    /// account signs: anyone may send it, and the transaction's fee payer is not one of its accounts.
+    pub fn return_to_owner_ix(&self, market: &Pubkey, owner: &Trader) -> Instruction {
+        let metas = meridian::accounts::ReturnToOwner {
+            config: self.config,
+            market: *market,
+            book: pda(BOOK_SEED, market),
+            book_usdc: pda(BOOK_USDC_SEED, market),
+            book_yes: pda(BOOK_YES_SEED, market),
+            book_no: pda(meridian::BOOK_NO_SEED, market),
+            owner: owner.owner,
+            owner_usdc: owner.usdc,
+            owner_yes: owner.yes,
+            owner_no: owner.no,
+            no_mint: pda(NO_SEED, market),
+            yes_mint: pda(YES_SEED, market),
+            usdc_mint: self.usdc_mint,
+            token_program: TOKEN,
+            token_2022_program: TOKEN_2022,
+            event_authority: self.event_authority,
+            program: meridian::ID,
+        }
+        .to_account_metas(None);
+        Instruction { program_id: meridian::ID, accounts: metas, data: meridian::instruction::ReturnToOwner {}.data() }
+    }
+
+    /// The close sweep (§6, instruction 15), signed by `operator`.
+    pub fn sweep_ix(&self, market: &Pubkey, operator: Pubkey) -> Instruction {
+        let metas = meridian::accounts::Sweep {
+            config: self.config,
+            operator,
+            market: *market,
+            book: pda(BOOK_SEED, market),
+            book_usdc: pda(BOOK_USDC_SEED, market),
+            book_yes: pda(BOOK_YES_SEED, market),
+            book_no: pda(meridian::BOOK_NO_SEED, market),
+            vault: pda(VAULT_SEED, market),
+            yes_mint: pda(YES_SEED, market),
+            no_mint: pda(NO_SEED, market),
+            usdc_mint: self.usdc_mint,
+            token_program: TOKEN,
+            token_2022_program: TOKEN_2022,
+            event_authority: self.event_authority,
+            program: meridian::ID,
+        }
+        .to_account_metas(None);
+        Instruction { program_id: meridian::ID, accounts: metas, data: meridian::instruction::Sweep {}.data() }
+    }
+
+    /// Replace quotes (§6, instruction 14) from `maker`, paying from and to `maker_usdc`. Each book is (market, the
+    /// maker's own Yes account on that market, the new quotes); its six accounts follow in the remaining accounts as
+    /// BookQuotes says: the market, its book, the book's USDC and Yes accounts, the Yes mint, the maker's Yes account.
+    pub fn replace_quotes_ix(&self, maker: Pubkey, maker_usdc: Pubkey, books: &[(Pubkey, Pubkey, Vec<meridian::Quote>)]) -> Instruction {
+        use anchor_lang::solana_program::instruction::AccountMeta;
+        let mut metas = meridian::accounts::ReplaceQuotes {
+            config: self.config,
+            maker,
+            maker_usdc,
+            usdc_mint: self.usdc_mint,
+            token_program: TOKEN,
+            token_2022_program: TOKEN_2022,
+            event_authority: self.event_authority,
+            program: meridian::ID,
+        }
+        .to_account_metas(None);
+        for (market, maker_yes, _) in books {
+            metas.extend([
+                AccountMeta::new_readonly(*market, false),
+                AccountMeta::new(pda(BOOK_SEED, market), false),
+                AccountMeta::new(pda(BOOK_USDC_SEED, market), false),
+                AccountMeta::new(pda(BOOK_YES_SEED, market), false),
+                AccountMeta::new_readonly(pda(YES_SEED, market), false),
+                AccountMeta::new(*maker_yes, false),
+            ]);
+        }
+        let books = books.iter().map(|(_, _, quotes)| meridian::BookQuotes { quotes: quotes.clone() }).collect();
+        Instruction { program_id: meridian::ID, accounts: metas, data: meridian::instruction::ReplaceQuotes { books }.data() }
+    }
+
     /// Rewrites Config with this fill limit and pause flag, keeping the chain's operator, admin and USDC mint.
     pub fn set_config(&mut self, fill_limit: u16, paused: bool) {
         let config = config_for(&self.m, self.usdc_mint, self.operator, self.admin, fill_limit, paused);
@@ -564,6 +643,18 @@ impl Chain {
         let mut account = self.account(key).unwrap().clone();
         account.data[64..72].copy_from_slice(&amount.to_le_bytes());
         self.set(*key, account);
+    }
+
+    /// The market's status, as a later step such as a hold or settlement (M3) would write it.
+    pub fn set_status(&mut self, market: &Pubkey, status: meridian::MarketStatus) {
+        let mut m = self.market(market);
+        m.status = status;
+        self.set_market(market, &m);
+    }
+
+    /// The owner's balance in the book: USDC, Yes and No, or zeros without an entry.
+    pub fn free(&self, market: &Pubkey, owner: &Pubkey) -> (u64, u64, u64) {
+        self.book(market).trader(owner).map(|t| (t.free_usdc, t.free_yes, t.free_no)).unwrap_or_default()
     }
 }
 

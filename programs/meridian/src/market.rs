@@ -192,7 +192,7 @@ pub fn handle_create_market(ctx: Context<CreateMarket>, args: CreateMarketArgs) 
         .map(|t| (t.strike_step_cents as u64, t.feed_id))
         .ok_or(MeridianError::TickerNotEnabled)?;
     let (step, feed_id) = step;
-    require!(args.strike_cents > 0 && step > 0 && args.strike_cents % step == 0, MeridianError::InvalidStrike);
+    require!(args.strike_cents > 0 && args.strike_cents.checked_rem(step) == Some(0), MeridianError::InvalidStrike);
     let orders_close = args.close - config.thresholds.orders_close_before_secs as i64;
     require!(args.mint_open <= args.open && args.open < orders_close, MeridianError::InvalidTimes);
     require!(Clock::get()?.unix_timestamp < args.open, MeridianError::CreateAfterOpen);

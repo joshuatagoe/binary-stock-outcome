@@ -152,3 +152,15 @@ How AI was used on this project: tools, what worked, where it misled us, and how
 ### Where AI misled us or we course-corrected
 
 38. **The backend agent expected the live chain to expose bugs in M4-a's reader; every live test passed first time.** "Seen failing first" then couldn't come from the tests alone, so it broke the code on purpose for each negative case (a frontier written on the first page, an unknown event skipped, the failed flag dropped, the reader unwired) and saw the right test fail with the right error before restoring it. Two smaller slips: a Python text-mode write turned LF into CRLF on Windows, caught by git's warning; and `pkill -f 'surfpool …'` killed its own shell, because the pattern was in its own command line (`[s]urfpool` fixes it). Lesson: when a test can't be red before the code exists, a deliberate mutation is the honest way to show it can fail.
+
+## 2026-10-13 — M2-b (returns, quotes and the sweep)
+
+### Where AI misled us or we course-corrected
+
+39. **The design's lists for M2-b's instructions were incomplete, and the coordinator's brief asked for a check that didn't exist.**
+    - §6 gave Replace quotes only OrderCancelled and OrderPlaced. But a quote that crosses the book fills, and the balance it collects needs an event, or the events can't rebuild the book's balances (D62). It now also writes Fill and BalanceReturned (D146).
+    - §5 said pause is checked only in Mint pairs, Place order, Buy No and Sell No, while §6 pauses Replace quotes too. The program follows §6, and §5 is corrected.
+    - The brief asked for clippy to be clean "as the anchor-program skill says", but the skill gives no clippy command, and `cargo clippy --all-targets -- -D warnings` already failed at the start: 2 library lints, now fixed, and 4 in older test files, left alone.
+    - A deliberate break showed why Replace quotes' extra accounts need explicit address checks: without them another market's book USDC account was accepted, because Anchor checks only the accounts it declares.
+
+    Lesson: when the design lists what an instruction writes or where a check sits, check that list against every path the instruction can take; and a brief should cite only checks that exist.
