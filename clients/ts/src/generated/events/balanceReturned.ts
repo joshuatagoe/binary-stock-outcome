@@ -42,6 +42,7 @@ export type BalanceReturnedEvent = {
   owner: Address;
   usdc: bigint;
   yes: bigint;
+  no: bigint;
 };
 
 export type BalanceReturnedEventArgs = {
@@ -49,6 +50,7 @@ export type BalanceReturnedEventArgs = {
   owner: Address;
   usdc: number | bigint;
   yes: number | bigint;
+  no: number | bigint;
 };
 
 /** Gets the encoder for {@link BalanceReturnedEventArgs} event data. */
@@ -59,6 +61,7 @@ export function getBalanceReturnedEventEncoder(): FixedSizeEncoder<BalanceReturn
       ["owner", getAddressEncoder()],
       ["usdc", getU64Encoder()],
       ["yes", getU64Encoder()],
+      ["no", getU64Encoder()],
     ]),
     [getConstantEncoder(BALANCE_RETURNED_EVENT_DISCRIMINATOR)],
   );
@@ -72,6 +75,7 @@ export function getBalanceReturnedEventDecoder(): FixedSizeDecoder<BalanceReturn
       ["owner", getAddressDecoder()],
       ["usdc", getU64Decoder()],
       ["yes", getU64Decoder()],
+      ["no", getU64Decoder()],
     ]),
     [getConstantDecoder(BALANCE_RETURNED_EVENT_DISCRIMINATOR)],
   );

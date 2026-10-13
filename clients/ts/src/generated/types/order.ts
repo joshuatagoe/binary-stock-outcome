@@ -21,7 +21,10 @@ import {
   type FixedSizeEncoder,
 } from "@solana/kit";
 
-/** A resting order (24 bytes): a bid locks price × quantity in USDC, an offer locks quantity in Yes. */
+/**
+ * A resting order (24 bytes): a bid locks price × quantity in USDC, an offer locks quantity in Yes, and a paired
+ * offer's No wait in the book's No account (D142).
+ */
 export type Order = {
   seq: bigint;
   /** The ID its sender chose (D101). */

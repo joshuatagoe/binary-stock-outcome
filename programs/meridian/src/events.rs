@@ -16,6 +16,7 @@ pub struct Fill {
     pub maker: Pubkey,
     pub maker_order_id: u64,
     pub taker: Pubkey,
+    /// The taker's order ID; 0 for Sell No, whose arguments have none (D143).
     pub taker_order_id: u64,
     /// What the taker did with Yes.
     pub side: crate::book::Side,
@@ -23,7 +24,8 @@ pub struct Fill {
     pub quantity: u32,
 }
 
-/// A Limit order's remainder now rests on the book.
+/// A Limit order's remainder now rests on the book. For Buy No, the unsold pairs' Yes rest as a paired offer and
+/// their No wait in the book (D142).
 #[event]
 pub struct OrderPlaced {
     pub market: Pubkey,
@@ -43,7 +45,9 @@ pub enum CancelReason {
     Sweep,
 }
 
-/// A resting order left the book; what it locked waits in its owner's book balance (D99).
+/// A resting order left the book. What it locked waits in its owner's book balance (D99), except after a self-trade,
+/// when it goes back to the wallet (D90). A paired offer's cancel is followed by Redeemed (pairs) for the pairs it
+/// closed (D142, D143).
 #[event]
 pub struct OrderCancelled {
     pub market: Pubkey,
@@ -145,7 +149,8 @@ pub struct PairsMinted {
     pub quantity: u64,
 }
 
-/// Tokens redeemed or burned, and the USDC paid (§6, instruction 9).
+/// Tokens redeemed or burned, and the USDC paid: Redeem (§6, instruction 9), Sell No's pair close (12), and a paired
+/// offer's cancel (13), whose USDC goes to the owner's book balance (D143).
 #[event]
 pub struct Redeemed {
     pub market: Pubkey,
@@ -199,13 +204,15 @@ pub struct MarketRemoved {
     pub market: Pubkey,
 }
 
-/// An owner's balance in the book paid to its own accounts (D99).
+/// An owner's balance in the book paid to its own accounts: USDC, Yes, and No released from paired offers (D99, D142,
+/// D144).
 #[event]
 pub struct BalanceReturned {
     pub market: Pubkey,
     pub owner: Pubkey,
     pub usdc: u64,
     pub yes: u64,
+    pub no: u64,
 }
 
 #[event]

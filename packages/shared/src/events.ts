@@ -124,8 +124,8 @@ export interface OperatorChanged { previous: Address; operator: Address }
 export interface Paused { admin: Address }
 export interface Unpaused { admin: Address }
 export interface MarketRemoved { market: Address }
-/** An owner's book balance paid to its own accounts (D99); Yes and No as whole tokens (D142). */
-export interface BalanceReturned { market: Address; owner: Address; usdc: bigint; yes: bigint }
+/** An owner's balance in the book paid out: USDC, Yes, and No released from paired offers (D99, D142, D144). */
+export interface BalanceReturned { market: Address; owner: Address; usdc: bigint; yes: bigint; no: bigint }
 export interface BookClosed { market: Address }
 /** A stock's close recorded or improved (D105), in Pyth's units. */
 export interface CloseRecorded {
@@ -181,7 +181,7 @@ export type EventKind = keyof EventsByKind;
 /** An event with its name, as the store's `kind` column holds it (section 5). */
 export type MeridianEvent = { [K in EventKind]: { kind: K } & EventsByKind[K] }[EventKind];
 
-type FieldType =
+export type FieldType =
   | 'address' | 'addresses' | 'u8' | 'u16' | 'u32' | 'u64' | 'i32' | 'i64' | 'string' | 'side' | 'reason' | 'mode'
   | 'outcome' | 'settledBy' | 'holdReason' | 'tickers' | 'ladder' | 'thresholds';
 
@@ -200,7 +200,7 @@ const FIELDS: { [K in EventKind]: { [F in keyof EventsByKind[K]]-?: FieldType } 
   Paused: { admin: 'address' },
   Unpaused: { admin: 'address' },
   MarketRemoved: { market: 'address' },
-  BalanceReturned: { market: 'address', owner: 'address', usdc: 'u64', yes: 'u64' },
+  BalanceReturned: { market: 'address', owner: 'address', usdc: 'u64', yes: 'u64', no: 'u64' },
   BookClosed: { market: 'address' },
   CloseRecorded: { ticker: 'string', day: 'u32', price: 'i64', conf: 'u64', expo: 'i32', publishTime: 'i64', priceAccount: 'address', recorder: 'address' },
   MarketSettled: { market: 'address', outcome: 'outcome', settledBy: 'settledBy', price: 'i64', conf: 'u64', expo: 'i32', publishTime: 'i64' },
@@ -208,6 +208,9 @@ const FIELDS: { [K in EventKind]: { [F in keyof EventsByKind[K]]-?: FieldType } 
   ResultProposed: { market: 'address', outcome: 'outcome', officialCloseCents: 'u64', source: 'string', finalAt: 'i64' },
   ProposalWithdrawn: { market: 'address' },
 };
+
+/** Each event's fields as the generated client names them; a test checks them against the program's events.rs. */
+export const EVENT_FIELDS: { readonly [K in EventKind]: Readonly<Record<string, FieldType>> } = FIELDS;
 
 const BASE58 = /^[1-9A-HJ-NP-Za-km-z]{32,44}$/;
 const intIn = (v: unknown, max: number) => typeof v === 'number' && Number.isInteger(v) && v >= 0 && v <= max;

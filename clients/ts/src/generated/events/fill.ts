@@ -51,6 +51,7 @@ export type FillEvent = {
   maker: Address;
   makerOrderId: bigint;
   taker: Address;
+  /** The taker's order ID; 0 for Sell No, whose arguments have none (D143). */
   takerOrderId: bigint;
   /** What the taker did with Yes. */
   side: Side;
@@ -63,6 +64,7 @@ export type FillEventArgs = {
   maker: Address;
   makerOrderId: number | bigint;
   taker: Address;
+  /** The taker's order ID; 0 for Sell No, whose arguments have none (D143). */
   takerOrderId: number | bigint;
   /** What the taker did with Yes. */
   side: SideArgs;
