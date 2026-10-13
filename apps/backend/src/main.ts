@@ -1,9 +1,12 @@
 // Starts the backend: opens and migrates the store, runs the check every 30 seconds, and serves the API
 // (ARCHITECTURE.md §2, §6). On Fly.io, Litestream starts this and replicates the store to R2 (P17).
 // Locally: node --env-file=.env apps/backend/src/main.ts
+import { PROGRAM_ADDRESS } from '@meridian/shared';
 import { createSolanaRpc } from '@solana/kit';
 import pino from 'pino';
 import { createApp, type Role } from './app.ts';
+import { createChainReader } from './chainReader.ts';
+import { rpcChainSource, type RpcLike } from './chainSource.ts';
 import { createChecker } from './checker.ts';
 import { databasePath, loadConfig } from './config.ts';
 import { migrate, openDatabase } from './db.ts';
@@ -19,14 +22,31 @@ const config = loadConfig(env.MERIDIAN_NETWORK ?? 'devnet');
 const db = openDatabase(databasePath(env));
 log.info({ step: 'migrate', applied: migrate(db) }, 'store ready');
 
-const rpc = createSolanaRpc(config.rpc.public);
+// SOLANA_RPC_URL points the backend at another node, such as a local chain on its own ports.
+const rpc = createSolanaRpc(env.SOLANA_RPC_URL || config.rpc.public);
+
+// The chain reader (D62) runs as a job of every pass. It stores the program's events and keeps its place in the store.
+const reader = createChainReader({
+  db,
+  source: rpcChainSource(rpc as unknown as RpcLike, PROGRAM_ADDRESS),
+  program: PROGRAM_ADDRESS,
+  onProgress: (p) => log.info({ step: 'reader', outcome: 'page', ...p }, 'chain reader stored a page'),
+});
 const checker = createChecker({
   db,
   getSlot: (abortSignal) => rpc.getSlot({ commitment: 'confirmed' }).send({ abortSignal }),
   getGenesisHash: (abortSignal) => rpc.getGenesisHash().send({ abortSignal }),
   provider: 'public',
   heartbeatEverySecs: config.heartbeatEverySecs,
-  onError: (error) => log.warn({ step: 'check', outcome: 'rpc error', err: error }, 'chain read failed'),
+  readChain: async () => {
+    const { transactions, events } = await reader.catchUp();
+    if (transactions > 0) log.info({ step: 'reader', outcome: 'caught up', transactions, events }, 'chain reader caught up');
+  },
+  // The reader's failures are errors, not warnings: it has stopped at its place and needs a person (an event it cannot read, a reset).
+  onError: (error, job) =>
+    job === 'reader'
+      ? log.error({ step: 'reader', outcome: 'stopped', err: error }, 'chain reader stopped; it keeps its place and tries again next pass')
+      : log.warn({ step: 'check', outcome: 'rpc error', err: error }, 'chain read failed'),
 });
 
 // The API is up before the first pass, so a quiet devnet can't hold the health check that Fly waits for.

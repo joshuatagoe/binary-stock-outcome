@@ -1,5 +1,6 @@
 // The repeatable check (D97), as a skeleton: each pass reads the chain's slot, and once a minute it logs a
-// heartbeat with the genesis hash (D75), which is how a devnet reset shows (D19, §5). The jobs join it in M4.
+// heartbeat with the genesis hash (D75), which is how a devnet reset shows (D19, §5). The jobs join it in M4: the chain
+// reader (D62) is the first (M4-b).
 // `progress()` feeds /api/health, which the standby watches (D98).
 import type { Db } from './db.ts';
 
@@ -18,8 +19,11 @@ type Options = {
   provider: string;
   heartbeatEverySecs: number;
   readTimeoutMs?: number;
+  /** The chain reader's catch-up (chainReader.ts). It has its own retries and timeouts, so it is not cut off here. */
+  readChain?: () => Promise<unknown>;
   now?: () => Date;
-  onError?: (error: unknown) => void;
+  /** `job` says which read failed. */
+  onError?: (error: unknown, job: 'slot' | 'reader') => void;
 };
 
 // Ends a read after `ms`, even one that ignores its signal, so a server that never answers can't hold a pass.
@@ -36,7 +40,7 @@ function within<T>(ms: number, read: Read<T>): Promise<T> {
 }
 
 export function createChecker(options: Options) {
-  const { db, getSlot, getGenesisHash, provider, heartbeatEverySecs, readTimeoutMs = 10_000, now = () => new Date(), onError } = options;
+  const { db, getSlot, getGenesisHash, provider, heartbeatEverySecs, readTimeoutMs = 10_000, readChain, now = () => new Date(), onError } = options;
   let lastPassAt: Date | null = null;
   let chain: Progress['chain'] = null;
   let lastHeartbeat = -Infinity;
@@ -54,9 +58,18 @@ export function createChecker(options: Options) {
         lastHeartbeat = seenAt.getTime();
       }
     } catch (error) {
-      onError?.(error);
+      onError?.(error, 'slot');
     }
     lastPassAt = now();
+    // After the pass is marked, so a long catch-up does not make health look stalled. A reader that stops (an event it
+    // cannot read, a node that lost a signature) keeps its place and is reported on every pass until a person fixes it.
+    if (readChain) {
+      try {
+        await readChain();
+      } catch (error) {
+        onError?.(error, 'reader');
+      }
+    }
   }
 
   return { pass, progress: (): Progress => ({ lastPassAt, chain }) };

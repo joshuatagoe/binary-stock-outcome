@@ -10,7 +10,7 @@ import { migrate, openDatabase } from '../src/db.ts';
 const GENESIS = 'EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG';
 type Answer<T> = T | Error | 'hang';
 
-function setup(slots: Answer<number>[], hashes: Answer<string>[] = [GENESIS, GENESIS, GENESIS]) {
+function setup(slots: Answer<number>[], hashes: Answer<string>[] = [GENESIS, GENESIS, GENESIS], readChain?: () => Promise<void>) {
   const db = openDatabase(join(mkdtempSync(join(tmpdir(), 'meridian-checker-')), 'meridian.db'));
   migrate(db);
   let t = Date.parse('2026-10-12T13:00:00Z');
@@ -30,6 +30,7 @@ function setup(slots: Answer<number>[], hashes: Answer<string>[] = [GENESIS, GEN
     provider: 'public',
     heartbeatEverySecs: 60,
     readTimeoutMs: 50,
+    readChain,
     now: clock.now,
     onError: (e) => errors.push(e),
   });
@@ -94,5 +95,44 @@ describe('the checker', () => {
     expect(checker.progress().chain?.slot).toBe(100);
     expect(heartbeats()).toEqual([]);
     expect(errors).toHaveLength(1);
+  });
+
+  // M4-b: the chain reader is one job of the pass (D97), so its work and its failures are the pass's.
+  describe('with the chain reader', () => {
+    it('runs the reader on every pass', async () => {
+      let runs = 0;
+      const { checker, clock } = setup([100, 130], undefined, async () => void runs++);
+      await checker.pass();
+      clock.advance(30);
+      await checker.pass();
+      expect(runs).toBe(2);
+    });
+
+    it('reports a reader that fails, and still records the pass and the slot', async () => {
+      const { checker, errors } = setup([100], undefined, async () => {
+        throw new Error('unknown event in transaction abc');
+      });
+      await checker.pass();
+      expect(errors.map(String)).toEqual(['Error: unknown event in transaction abc']);
+      expect(checker.progress().lastPassAt).toEqual(new Date('2026-10-12T13:00:00Z'));
+      expect(checker.progress().chain?.slot).toBe(100);
+    });
+
+    it('still reads when the slot cannot be read, since the reader asks the node itself', async () => {
+      let runs = 0;
+      const { checker } = setup([new Error('503')], undefined, async () => void runs++);
+      await checker.pass();
+      expect(runs).toBe(1);
+    });
+
+    it('shows the pass as done before a long catch-up ends, so health does not look stalled', async () => {
+      let release!: () => void;
+      const { checker } = setup([100], undefined, () => new Promise<void>((resolve) => (release = resolve)));
+      const pass = checker.pass();
+      await new Promise((r) => setTimeout(r, 10));
+      expect(checker.progress().lastPassAt).toEqual(new Date('2026-10-12T13:00:00Z'));
+      release();
+      await pass;
+    });
   });
 });

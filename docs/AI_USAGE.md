@@ -146,3 +146,9 @@ How AI was used on this project: tools, what worked, where it misled us, and how
 ### Where AI misled us or we course-corrected
 
 37. **The coordinator told the website agent that the Trade page had no accessibility scans at 320 px and 200% zoom; they existed.** Its search had piped the matches through `head -15`, and the Trade page's scans were further down the list. The agent checked before writing anything, found the scans passing, added no test, and said plainly that it had seen no failure first rather than inventing one. Lesson, as in 15: a search cut short is not evidence that something is missing; read the full result, or search the one file in question, before asking for work.
+
+## 2026-10-13 — M4-b (the reader wired in)
+
+### Where AI misled us or we course-corrected
+
+38. **The backend agent expected the live chain to expose bugs in M4-a's reader; every live test passed first time.** "Seen failing first" then couldn't come from the tests alone, so it broke the code on purpose for each negative case (a frontier written on the first page, an unknown event skipped, the failed flag dropped, the reader unwired) and saw the right test fail with the right error before restoring it. Two smaller slips: a Python text-mode write turned LF into CRLF on Windows, caught by git's warning; and `pkill -f 'surfpool …'` killed its own shell, because the pattern was in its own command line (`[s]urfpool` fixes it). Lesson: when a test can't be red before the code exists, a deliberate mutation is the honest way to show it can fail.
