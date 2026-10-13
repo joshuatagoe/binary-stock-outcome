@@ -118,11 +118,19 @@ a {
 }
 
 .wallet {
-  margin-left: auto;
-  max-width: 100%;
+  /* The wallet's pieces are items of the header's row: the bar sits beside the nav links, and the panel and the notes
+     wrap onto rows of their own, so opening the panel cannot move Connect (found at M5-a's close-out). */
+  display: contents;
+}
+
+.wallet > .wallet-panel,
+.wallet > .notice {
+  flex: 1 0 100%;
 }
 
 .wallet-bar {
+  margin-left: auto;
+  max-width: 100%;
   display: flex;
   flex-wrap: wrap;
   align-items: center;

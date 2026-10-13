@@ -96,6 +96,18 @@ describe("the program's refusals, seen in the devnet simulation before the walle
     expect(describeSimulationFailure('ProgramAccountNotFound', 'buyYes').kind).toBe('refused');
   });
 
+  it('a sell that the wallet cannot cover says which token is short, and that nothing was sent', () => {
+    expect(describeSimulationFailure({ InstructionError: [2, { Custom: 1 }] }, 'sellNo', 2)).toEqual({
+      kind: 'not-enough-usdc',
+      message: "Your wallet doesn't hold enough No to sell. Nothing was sent.",
+    });
+    expect(describeSimulationFailure({ InstructionError: [1, { Custom: 1 }] }, 'sellYes', 1).message).toBe("Your wallet doesn't hold enough Yes to sell. Nothing was sent.");
+  });
+
+  it('a buy that the wallet cannot cover says USDC, and that nothing was sent', () => {
+    expect(describeSimulationFailure({ InstructionError: [2, { Custom: 1 }] }, 'buyNo', 2).message).toBe("Your wallet doesn't hold enough USDC for this order. Nothing was sent.");
+  });
+
   it('too little USDC in the token account (token program error 1)', () => {
     expect(describeSimulationFailure(custom(1), 'buyYes')).toMatchObject({ kind: 'not-enough-usdc' });
   });

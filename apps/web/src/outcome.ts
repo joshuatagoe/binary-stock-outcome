@@ -81,7 +81,7 @@ export function describeLimitOutcome({ action, quantity, priceCents, resting, be
   return `${verb} ${filled} of ${quantity} Yes at ${average} · ${amount}. ${resting} are resting on the book · ${locked}.`;
 }
 
-import type { SelfTrade } from './landed.ts';
+import type { SelfTrade, TakerFill } from './landed.ts';
 
 export type LandedInput = {
   action: TradeAction;
@@ -95,22 +95,51 @@ export type LandedInput = {
   /** The trader's own token movements in the landed transaction, or null when it could not be read. */
   delta: Balances | null;
   selfTrades: SelfTrade[];
+  /** The trader's own fills, pairs minted and pairs closed, from the program's events (D143). Buy No and Sell No need them. */
+  fills?: TakerFill[];
+  pairsMinted?: bigint;
+  pairsClosed?: bigint;
 };
 
 const ZERO: Balances = { usdc: 0n, yes: 0n, no: 0n };
+const COULD_NOT_TELL = 'Your order landed. Your balances and Open orders show what filled and what rests.';
+
+/**
+ * Buy No and Sell No (D143): what was bought or sold, and for how much, from the program's own Fill events. Each Yes that
+ * changed hands at p cents is a No at 100 - p. The wallet's balances must agree with the events, or null: the USDC the
+ * wallet gained includes the refund of its own cancelled bids (Buy No), which would make the No look cheaper than it was.
+ */
+function noMovements(i: LandedInput, delta: Balances): Balances | null {
+  if (!i.fills || i.pairsMinted === undefined || i.pairsClosed === undefined) return null;
+  const buying = i.action === 'buyNo';
+  const filled = i.fills.reduce((n, f) => n + f.quantity, 0);
+  const cents = i.fills.reduce((n, f) => n + f.quantity * (100 - f.priceCents), 0);
+  const money = BigInt(cents) * USDC_UNITS_PER_CENT;
+  const refunded = i.selfTrades.filter((s) => s.side === 'Buy').reduce((n, s) => n + BigInt(s.quantity * s.priceCents), 0n) * USDC_UNITS_PER_CENT;
+  // A market order mints (or closes) exactly the pairs it fills; the No tokens and the USDC must say the same.
+  const pairs = buying ? i.pairsMinted : i.pairsClosed;
+  const other = buying ? i.pairsClosed : i.pairsMinted;
+  if (pairs !== BigInt(filled) || other !== 0n) return null;
+  if (buying ? delta.no !== BigInt(filled) || delta.usdc !== refunded - money : delta.no !== -BigInt(filled) || delta.usdc !== money) return null;
+  return buying ? { usdc: -money, yes: 0n, no: BigInt(filled) } : { usdc: money, yes: 0n, no: -BigInt(filled) };
+}
 
 /** The done words, from the landed transaction's own movements and events (C, D90). */
 export function describeLanded(i: LandedInput): string {
-  if (!i.delta) return 'Your order landed. Your balances and Open orders show what filled and what rests.';
+  if (!i.delta) return COULD_NOT_TELL;
+  const noToken = i.action === 'buyNo' || i.action === 'sellNo';
+  // The No buttons are market orders. Their money comes from the events, never from a balance that includes refunds.
+  const counted = noToken ? noMovements(i, i.delta) : i.delta;
+  if (!counted) return COULD_NOT_TELL;
   const base =
     i.kind === 'Limit'
       ? describeLimitOutcome({ action: i.action as 'buyYes' | 'sellYes', quantity: i.quantity, priceCents: i.priceCents ?? 0, resting: i.resting, before: ZERO, after: i.delta })
-      : describeOutcome({ action: i.action, quantity: i.quantity, worstCents: i.worstCents ?? 0, before: ZERO, after: i.delta });
+      : describeOutcome({ action: i.action, quantity: i.quantity, worstCents: i.worstCents ?? 0, before: ZERO, after: counted });
   if (i.selfTrades.length === 0) return base;
   const own = i.selfTrades
     .map((s) => `Your ${s.side === 'Sell' ? 'offer' : 'bid'} of ${s.quantity} Yes at ${s.priceCents}¢ was cancelled: your own order would have traded with it.`)
     .join(' ');
-  const token = i.action === 'buyYes' || i.action === 'sellYes' ? i.delta.yes : i.delta.no;
+  const token = i.action === 'buyYes' || i.action === 'sellYes' ? i.delta.yes : counted.no;
   const filledNothing = i.kind === 'Limit' ? base.startsWith('Your order was not placed') : token === 0n;
   return filledNothing ? own : `${own} ${base}`;
 }

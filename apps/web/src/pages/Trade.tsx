@@ -1,8 +1,8 @@
 // Trade (F4 to F7): one market's book, and the ticket for the four buttons. The page names its market in its address
-// (D72). Buy Yes and Sell Yes send Place order through the transaction tracker (D13). Buy No and Sell No are built with
-// the generated client too, but the program answers NotImplemented until the M2 program is on devnet (M3, P31); Buy No and Sell No are turned on in M5-b (decided 2026-10-13), so the devnet check refuses
-// them before the wallet opens and the page says so. Attempts live above the page (attempts.ts), so leaving it during
-// "may still land" can't lead to a second order.
+// (D72). All four buttons go through the transaction tracker (D13): Buy Yes and Sell Yes send Place order, Buy No and Sell
+// No their own instructions (D143; market orders only, M5-b). Until the new program is on devnet (M3, P31) devnet's
+// simulation refuses the No buttons before the wallet opens, and the page says so in plain words. Attempts live above the
+// page (attempts.ts), so leaving it during "may still land" can't lead to a second order.
 import { formatCents, formatDollars, formatUsdc, marketAddress, type TradeAction } from '@meridian/shared';
 import type { Address } from '@solana/kit';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
@@ -311,6 +311,9 @@ function TicketPanel({
         resting,
         delta: landed?.delta ?? null,
         selfTrades: landed?.selfTrades ?? [],
+        fills: landed?.fills,
+        pairsMinted: landed?.pairsMinted,
+        pairsClosed: landed?.pairsClosed,
       });
     },
     [owner, usdcMint, readHeld, market.address, wallet, onChanged],
@@ -353,7 +356,15 @@ function TicketPanel({
     setConfirming(false);
   }, [action, quantityText, mode, limitText, key]);
 
-  const marketPlan = planTicket({ action, book: levels, quantity, usdc, ticker: market.ticker, strikeCents: market.strikeCents });
+  const marketPlan = planTicket({
+    action,
+    book: levels,
+    quantity,
+    usdc,
+    held: held ? (action === 'sellYes' ? held.yes : held.no) : null,
+    ticker: market.ticker,
+    strikeCents: market.strikeCents,
+  });
   const limit = planLimit({ action, quantity, priceCents: limitCents, usdc });
   type Plan = { ok: false; message: string } | { ok: true; sendPriceCents: number; payoff: string; limitLine: string; blocked: string | null; worstCents: number; totalCents: number };
   const plan: Plan =
@@ -465,12 +476,6 @@ function TicketPanel({
               <p className="mono">{plan.limitLine}</p>
               <p className="muted">Network fee about 0.00001 SOL, plus a one-time deposit of about 0.002 SOL for each new Yes or No account.</p>
             </>
-          )}
-          {!yesAction && (
-            <p className="notice warn" role="note">
-              {name} isn't switched on in the program yet. Pressing {name} checks the order on devnet and tells you so; nothing is sent until it is
-              switched on.
-            </p>
           )}
         </div>
 

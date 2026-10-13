@@ -164,3 +164,9 @@ How AI was used on this project: tools, what worked, where it misled us, and how
     - A deliberate break showed why Replace quotes' extra accounts need explicit address checks: without them another market's book USDC account was accepted, because Anchor checks only the accounts it declares.
 
     Lesson: when the design lists what an instruction writes or where a check sits, check that list against every path the instruction can take; and a brief should cite only checks that exist.
+
+## 2026-10-13 — M5-b (Buy No and Sell No on the site)
+
+### Where AI misled us or we course-corrected
+
+40. **The website agent's first Buy No words took the amount from the wallet's USDC change.** Reading the program showed that Buy No refunds the trader's own cancelled bids into the same wallet (D143), so a self-trade would have made the No look cheaper, or the amount negative. The words now come from the Fill events, with the balances only as a cross-check, and a mutation that zeroed the refund failed two tests. Its first browser-test expectations also guessed the book and the "at most" price wrongly, which Playwright caught. Chrome's permission prompt went unanswered, so the coordinator checked the wallet panel on the dev server with a headless browser instead. Lesson: word a money result from what the program says happened, and use the wallet's balances to check it, not to compute it.

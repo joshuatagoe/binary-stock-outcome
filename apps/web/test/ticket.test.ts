@@ -92,6 +92,27 @@ describe('negative cases', () => {
     expect(t).toMatchObject({ ok: true, blocked: null });
   });
 
+  it('Sell No without enough No: blocked with what is held, before any wallet window (F7)', () => {
+    const book = { asks: [[80, 10]], bids: [] } as const;
+    expect(planTicket({ action: 'sellNo', book, quantity: 10, usdc: null, held: 4n, ...strike })).toMatchObject({ ok: true, blocked: 'You hold 4 No; you can sell at most 4.' });
+    expect(planTicket({ action: 'sellNo', book, quantity: 10, usdc: null, held: 0n, ...strike })).toMatchObject({ blocked: 'You hold no No to sell.' });
+    expect(planTicket({ action: 'sellNo', book, quantity: 10, usdc: null, held: 10n, ...strike })).toMatchObject({ blocked: null });
+  });
+
+  it('Sell Yes without enough Yes is blocked the same way', () => {
+    expect(planTicket({ action: 'sellYes', book: f4, quantity: 5, usdc: null, held: 3n, ...strike })).toMatchObject({ blocked: 'You hold 3 Yes; you can sell at most 3.' });
+  });
+
+  it('an unknown holding does not block a sell (the devnet simulation decides)', () => {
+    expect(planTicket({ action: 'sellNo', book: { asks: [[80, 10]], bids: [] }, quantity: 10, usdc: null, held: null, ...strike })).toMatchObject({ blocked: null });
+  });
+
+  it('Buy No without enough USDC for the net price: blocked at the most it can cost (F5)', () => {
+    const book = { asks: [[66, 5]], bids: [[65, 10]] } as const;
+    expect(planTicket({ action: 'buyNo', book, quantity: 10, usdc: usdc(3.59), ...strike })).toMatchObject({ blocked: 'You need up to 3.60 USDC; you have 3.59.' });
+    expect(planTicket({ action: 'buyNo', book, quantity: 10, usdc: usdc(3.6), ...strike })).toMatchObject({ blocked: null });
+  });
+
   it('an unknown balance does not block (the devnet simulation decides)', () => {
     expect(planTicket({ action: 'buyYes', book: f4, quantity: 10, usdc: null, ...strike })).toMatchObject({ blocked: null });
   });

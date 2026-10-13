@@ -99,3 +99,31 @@ test('Escape closes the panel and returns focus to its button', async ({ page })
   await expect(page.getByRole('heading', { name: 'Connect wallet', level: 2 })).toBeHidden();
   await expect(opener).toBeFocused();
 });
+
+// Found at M5-a's close-out: the open panel sat inside the header's centred row, so it pushed Connect above the nav links.
+test('the open wallet panel opens below the header row: Connect stays level with the brand and the nav links (desktop)', async ({ page }) => {
+  await open(page);
+  await addFakeWallet(page);
+  await page.setViewportSize({ width: 1280, height: 800 });
+  await page.goto('/markets');
+  const level = async () => {
+    const box = async (locator: ReturnType<typeof page.locator>) => (await locator.boundingBox())!;
+    const nav = await box(page.getByRole('link', { name: 'Markets', exact: true }).first());
+    const brand = await box(page.getByRole('link', { name: 'Meridian', exact: true }));
+    const button = await box(page.locator('.wallet-bar button'));
+    expect(Math.abs(button.y + button.height / 2 - (nav.y + nav.height / 2))).toBeLessThan(8);
+    expect(Math.abs(brand.y + brand.height / 2 - (nav.y + nav.height / 2))).toBeLessThan(8);
+    return button;
+  };
+  const closed = await level();
+  await page.getByRole('button', { name: 'Connect wallet' }).click();
+  await expect(page.locator('#wallet-panel')).toBeVisible();
+  const open_ = await level();
+  expect(Math.abs(open_.y - closed.y)).toBeLessThan(2);
+  expect((await page.locator('#wallet-panel').boundingBox())!.y).toBeGreaterThan(open_.y + open_.height - 1);
+  // Connected, with the devnet guide and the funds notes showing, it is the same.
+  await page.getByRole('button', { name: 'Connect Fake Wallet' }).click();
+  await expect(page.getByRole('heading', { name: 'Connected' })).toBeVisible();
+  const connected = await level();
+  expect(Math.abs(connected.y - closed.y)).toBeLessThan(2);
+});

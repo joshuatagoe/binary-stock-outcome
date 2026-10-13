@@ -1,7 +1,19 @@
 // What a landed transaction itself says (C, D90): the trader's own token movements from its pre and post token balances,
 // and the program's OrderCancelled events (self-trade cancellations) from its event-CPI inner instructions, decoded with the
 // generated client. Unlike two balance reads, nothing else the wallet does in between can disturb it.
-import { CancelReason, getOrderCancelledEventDecoder, ORDER_CANCELLED_EVENT_DISCRIMINATOR, Side } from '@meridian/client';
+import {
+  CancelReason,
+  FILL_EVENT_DISCRIMINATOR,
+  getFillEventDecoder,
+  getOrderCancelledEventDecoder,
+  getPairsMintedEventDecoder,
+  getRedeemedEventDecoder,
+  ORDER_CANCELLED_EVENT_DISCRIMINATOR,
+  PAIRS_MINTED_EVENT_DISCRIMINATOR,
+  REDEEMED_EVENT_DISCRIMINATOR,
+  RedeemMode,
+  Side,
+} from '@meridian/client';
 import { getBase58Encoder, type Address } from '@solana/kit';
 
 /** Anchor's event-CPI marker: the first 8 bytes of the data of the program's call to itself. */
@@ -17,7 +29,17 @@ export type LandedTx = {
 } | null;
 
 export type SelfTrade = { side: 'Buy' | 'Sell'; quantity: number; priceCents: number };
-export type Landed = { delta: { usdc: bigint; yes: bigint; no: bigint }; selfTrades: SelfTrade[] };
+/** One of the trader's own fills as taker: how many Yes changed hands, at the Yes price. */
+export type TakerFill = { quantity: number; priceCents: number };
+export type Landed = {
+  delta: { usdc: bigint; yes: bigint; no: bigint };
+  selfTrades: SelfTrade[];
+  /** The trader's own fills as taker, in the order the program reached them (D143). */
+  fills: TakerFill[];
+  /** Pairs the trader's transaction minted (Buy No), and pairs it closed (Sell No). */
+  pairsMinted: bigint;
+  pairsClosed: bigint;
+};
 
 const sum = (list: readonly TokenBalance[] | null | undefined, owner: string, mint: string) =>
   (list ?? []).filter((b) => b.owner === owner && b.mint === mint).reduce((n, b) => n + BigInt(b.uiTokenAmount.amount), 0n);
@@ -33,6 +55,9 @@ export function parseLanded(
   const move = (mint: string) => sum(meta.postTokenBalances, who.owner, mint) - sum(meta.preTokenBalances, who.owner, mint);
 
   const selfTrades: SelfTrade[] = [];
+  const fills: TakerFill[] = [];
+  let pairsMinted = 0n;
+  let pairsClosed = 0n;
   for (const inner of meta.innerInstructions ?? []) {
     for (const ix of inner.instructions) {
       let bytes: Uint8Array;
@@ -43,16 +68,26 @@ export function parseLanded(
       }
       if (!startsWith(bytes, EVENT_IX_TAG)) continue;
       const event = bytes.slice(EVENT_IX_TAG.length);
-      if (!startsWith(event, ORDER_CANCELLED_EVENT_DISCRIMINATOR)) continue;
       try {
-        const e = getOrderCancelledEventDecoder().decode(event);
-        if (e.owner === who.owner && e.reason === CancelReason.SelfTrade) {
-          selfTrades.push({ side: e.side === Side.Sell ? 'Sell' : 'Buy', quantity: e.quantity, priceCents: e.price });
+        if (startsWith(event, ORDER_CANCELLED_EVENT_DISCRIMINATOR)) {
+          const e = getOrderCancelledEventDecoder().decode(event);
+          if (e.owner === who.owner && e.reason === CancelReason.SelfTrade) {
+            selfTrades.push({ side: e.side === Side.Sell ? 'Sell' : 'Buy', quantity: e.quantity, priceCents: e.price });
+          }
+        } else if (startsWith(event, FILL_EVENT_DISCRIMINATOR)) {
+          const e = getFillEventDecoder().decode(event);
+          if (e.taker === who.owner) fills.push({ quantity: e.quantity, priceCents: e.price });
+        } else if (startsWith(event, PAIRS_MINTED_EVENT_DISCRIMINATOR)) {
+          const e = getPairsMintedEventDecoder().decode(event);
+          if (e.owner === who.owner) pairsMinted += e.quantity;
+        } else if (startsWith(event, REDEEMED_EVENT_DISCRIMINATOR)) {
+          const e = getRedeemedEventDecoder().decode(event);
+          if (e.owner === who.owner && e.mode === RedeemMode.Pairs) pairsClosed += e.quantity;
         }
       } catch {
         /* not an event this page understands */
       }
     }
   }
-  return { delta: { usdc: move(who.usdcMint), yes: move(who.yesMint), no: move(who.noMint) }, selfTrades };
+  return { delta: { usdc: move(who.usdcMint), yes: move(who.yesMint), no: move(who.noMint) }, selfTrades, fills, pairsMinted, pairsClosed };
 }
