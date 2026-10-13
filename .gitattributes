@@ -5,3 +5,4 @@
 
 # Program binaries (test fixtures) are bytes, never text.
 *.so binary
+*.bin binary

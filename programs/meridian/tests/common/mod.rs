@@ -709,3 +709,179 @@ pub fn market_account(m: &Mollusk, bump: u8, yes_bump: u8) -> Account {
     market.try_serialize(&mut data).unwrap();
     Account { lamports: rent(m, data.len()), data, owner: meridian::ID, executable: false, rent_epoch: 0 }
 }
+
+// The recorded close and settlement (M3-a): Pyth's two receivers (D80), the stocks' real feeds, and real Pyth price
+// accounts saved from devnet in tests/fixtures (pyth-prices.json says where each came from).
+
+pub const LEGACY_RECEIVER: Pubkey = anchor_lang::prelude::pubkey!("rec5EKMGg6MxZYaMdyBfgwp4d5rB9T1VQH5pJv5LtFJ");
+pub const UPGRADED_RECEIVER: Pubkey = anchor_lang::prelude::pubkey!("rec2HHDDnjLfj4kE7VyEtFA1HPGQLK33259532cRyHp");
+/// Pyth's regular-session feeds (F4.06; config/program-devnet.json), and GOOG, which is not GOOGL (D55).
+pub const FEEDS: [(&str, &str); 7] = [
+    ("AAPL", "49f6b65cb1de6b10eaf75e7c03ca029c306d0357e91b5311b175084a5ad55688"),
+    ("MSFT", "d0ca23c1cc005e004ccf1db5bf76aeb6a49218f43dac3d4b275e92de12ded4d1"),
+    ("GOOGL", "5a48c03e9b9cb337801073ed9d166817473697efff0d138874e0f6a33d6d5aa6"),
+    ("AMZN", "b5d0e0fa58a1f8b81498ae670ce93c872d14434b72c364885d4fa1b257cbb07a"),
+    ("NVDA", "b1073854ed24cbc755dc527418f52b7d271f6cc967bbf8d8129112b18860a593"),
+    ("META", "78a3e3b8e676a8f73c439f5d749737034b139bbbe899ba5775216fba596607fe"),
+    ("TSLA", "16dad506d7db8da01c87581c87ca897a012a153557d4d578c3b9c9e1bc0632f1"),
+];
+pub const GOOG_FEED: &str = "e65ff435be42630439c96396653a342829e877e2aafaeaf1a10d0ee5fd2cf3f2";
+
+pub fn feed(hex: &str) -> [u8; 32] {
+    let mut out = [0u8; 32];
+    for (i, byte) in out.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&hex[2 * i..2 * i + 2], 16).unwrap();
+    }
+    out
+}
+
+pub fn feed_of(ticker: &str) -> [u8; 32] {
+    feed(FEEDS.iter().find(|(t, _)| *t == ticker).unwrap().1)
+}
+
+const PYTH_PRICES: &str = include_str!("../fixtures/pyth-prices.json");
+
+/// A Pyth price account saved from devnet, at its own address, with its owner and lamports, exactly as read.
+pub fn pyth(name: &str) -> (Pubkey, Account) {
+    use std::str::FromStr;
+    let data: &[u8] = match name {
+        "meta_push_legacy" => include_bytes!("../fixtures/pyth_meta_push_legacy.bin"),
+        "aapl_push_legacy" => include_bytes!("../fixtures/pyth_aapl_push_legacy.bin"),
+        "meta_close_20261008_upgraded" => include_bytes!("../fixtures/pyth_meta_close_20261008_upgraded.bin"),
+        "meta_partial_legacy" => include_bytes!("../fixtures/pyth_meta_partial_legacy.bin"),
+        _ => panic!("no fixture {name}"),
+    };
+    let meta: serde_json::Value = serde_json::from_str(PYTH_PRICES).unwrap();
+    let meta = &meta[name];
+    assert_eq!(meta["bytes"].as_u64().unwrap() as usize, data.len(), "{name}: the saved size");
+    let address = Pubkey::from_str(meta["address"].as_str().unwrap()).unwrap();
+    let owner = Pubkey::from_str(meta["owner"].as_str().unwrap()).unwrap();
+    let lamports = meta["lamports"].as_u64().unwrap();
+    (address, Account { lamports, data: data.to_vec(), owner, executable: false, rent_epoch: 0 })
+}
+
+/// A price account's contents, read with Pyth's own layout (pyth-solana-receiver-sdk 2.0.0).
+pub fn price_update(account: &Account) -> pyth_solana_receiver_sdk::price_update::PriceUpdateV2 {
+    anchor_lang::AccountDeserialize::try_deserialize(&mut &account.data[..]).unwrap()
+}
+
+/// The same account holding `update` instead: a crafted variant of a real one, for a negative or boundary case.
+pub fn with_update(account: &Account, update: &pyth_solana_receiver_sdk::price_update::PriceUpdateV2) -> Account {
+    let mut data = Vec::new();
+    update.try_serialize(&mut data).unwrap();
+    assert!(data.len() <= account.data.len());
+    data.resize(account.data.len(), 0);
+    Account { data, ..account.clone() }
+}
+
+/// A real price account with its price message changed by `change`, at a new address.
+pub fn crafted(
+    name: &str,
+    change: impl FnOnce(&mut pyth_solana_receiver_sdk::price_update::PriceFeedMessage),
+) -> (Pubkey, Account) {
+    let (_, account) = pyth(name);
+    let mut update = price_update(&account);
+    change(&mut update.price_message);
+    (Pubkey::new_unique(), with_update(&account, &update))
+}
+
+pub fn close_pda(ticker: &str, day: u32) -> (Pubkey, u8) {
+    Pubkey::find_program_address(&[meridian::CLOSE_SEED, ticker.as_bytes(), &day.to_le_bytes()], &meridian::ID)
+}
+
+impl Chain {
+    pub fn config_state(&self) -> Config {
+        Config::try_deserialize(&mut &self.account(&self.config).unwrap().data[..]).unwrap()
+    }
+
+    pub fn set_config_state(&mut self, config: &Config) {
+        let mut account = self.account(&self.config).unwrap().clone();
+        let mut data = Vec::new();
+        config.try_serialize(&mut data).unwrap();
+        account.data.fill(0);
+        account.data[..data.len()].copy_from_slice(&data);
+        self.set(self.config, account);
+    }
+
+    /// Config as on devnet for prices: these receivers, and the seven stocks' real feeds with META's strike step in
+    /// cents as given (1 lets a test put a strike at any cent).
+    pub fn use_pyth(&mut self, receivers: Vec<Pubkey>, meta_step_cents: u32) {
+        let mut config = self.config_state();
+        config.pyth_receivers = receivers;
+        for t in config.tickers.iter_mut() {
+            if let Some((_, hex)) = FEEDS.iter().find(|(s, _)| *s == t.symbol) {
+                t.feed_id = feed(hex);
+            }
+            if t.symbol == "META" {
+                t.strike_step_cents = meta_step_cents;
+            }
+        }
+        self.set_config_state(&config);
+    }
+
+    /// Creates a market as the operator, at a chain time before its open, and returns its address.
+    pub fn create(&mut self, args: &CreateMarketArgs) -> Pubkey {
+        let now = self.m.sysvars.clock.unix_timestamp;
+        self.at(args.mint_open - 1800);
+        let ix = self.create_market_ix(self.operator, args);
+        let r = self.run(&ix);
+        assert!(r.program_result.is_ok(), "create {} {}: {:?}", args.ticker, args.strike_cents, r.program_result);
+        self.at(now);
+        market_pda(args).0
+    }
+
+    pub fn record_close_ix(&self, market: &Pubkey, price_account: Pubkey, recorder: Pubkey) -> Instruction {
+        let m = self.market(market);
+        let ticker = core::str::from_utf8(m.ticker_bytes()).unwrap();
+        let metas = meridian::accounts::RecordClose {
+            config: self.config,
+            market: *market,
+            recorded_close: close_pda(ticker, m.day).0,
+            price_account,
+            recorder,
+            system_program: anchor_lang::system_program::ID,
+            event_authority: self.event_authority,
+            program: meridian::ID,
+        }
+        .to_account_metas(None);
+        Instruction { program_id: meridian::ID, accounts: metas, data: meridian::instruction::RecordClose {}.data() }
+    }
+
+    pub fn settle_ix(&self, market: &Pubkey, settler: Pubkey) -> Instruction {
+        let m = self.market(market);
+        let ticker = core::str::from_utf8(m.ticker_bytes()).unwrap();
+        let metas = meridian::accounts::Settle {
+            config: self.config,
+            market: *market,
+            recorded_close: close_pda(ticker, m.day).0,
+            settler,
+            event_authority: self.event_authority,
+            program: meridian::ID,
+        }
+        .to_account_metas(None);
+        Instruction { program_id: meridian::ID, accounts: metas, data: meridian::instruction::Settle {}.data() }
+    }
+
+    /// The stock's recorded close for that day, if there is one.
+    pub fn recorded_close(&self, ticker: &str, day: u32) -> Option<meridian::RecordedClose> {
+        let account = self.account(&close_pda(ticker, day).0)?;
+        if account.owner != meridian::ID || account.data.is_empty() {
+            return None;
+        }
+        Some(meridian::RecordedClose::try_deserialize(&mut &account.data[..]).unwrap())
+    }
+
+    /// The vault's rule after any instruction (D64): it holds at least 1.00 per pair or winning token owed, and no
+    /// token's supply is above what is owed; once settled, only the winning side's.
+    pub fn assert_vault(&self, market: &Pubkey) {
+        let m = self.market(market);
+        let vault = self.amount(&pda(VAULT_SEED, market));
+        let (yes, no) = (self.supply(&pda(YES_SEED, market)), self.supply(&pda(NO_SEED, market)));
+        assert!(vault >= m.owed * meridian::USDC_PER_PAIR, "vault {vault} below owed {}", m.owed);
+        match (m.status, m.outcome) {
+            (meridian::MarketStatus::Settled, meridian::Outcome::Yes) => assert!(yes <= m.owed, "Yes {yes} above owed {}", m.owed),
+            (meridian::MarketStatus::Settled, meridian::Outcome::No) => assert!(no <= m.owed, "No {no} above owed {}", m.owed),
+            _ => assert!(yes <= m.owed && no <= m.owed, "supplies {yes}, {no} above owed {}", m.owed),
+        }
+    }
+}
