@@ -4,6 +4,9 @@
 !package-lock.json
 !scripts/toolchain/pins.sh
 !clients/ts/package.json
+!clients/ts/src
+!packages/shared/package.json
+!packages/shared/src
 !config
 !apps/backend
 apps/backend/test

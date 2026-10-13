@@ -15,13 +15,17 @@ RUN . /tmp/pins.sh \
   && rm /tmp/litestream.tar.gz /tmp/pins.sh \
   && litestream version
 
-# The backend's packages only, from the lockfile.
+# The backend's packages only, from the lockfile. @meridian/shared and @meridian/client are workspaces it depends on (M4-b): npm links
+# them into node_modules, and Node runs their TypeScript sources directly, so their folders go in with the code below.
 COPY package.json package-lock.json ./
 COPY apps/backend/package.json apps/backend/
+COPY packages/shared/package.json packages/shared/
 COPY clients/ts/package.json clients/ts/
 RUN npm ci --omit=dev --workspace apps/backend --no-audit --no-fund
 
 COPY config config
+COPY packages/shared/src packages/shared/src
+COPY clients/ts/src clients/ts/src
 COPY apps/backend apps/backend
 
 # The store's folder. On Fly.io a volume is mounted over it; the standby may run without one (D98).
