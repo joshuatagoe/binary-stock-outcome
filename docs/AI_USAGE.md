@@ -170,3 +170,9 @@ How AI was used on this project: tools, what worked, where it misled us, and how
 ### Where AI misled us or we course-corrected
 
 40. **The website agent's first Buy No words took the amount from the wallet's USDC change.** Reading the program showed that Buy No refunds the trader's own cancelled bids into the same wallet (D143), so a self-trade would have made the No look cheaper, or the amount negative. The words now come from the Fill events, with the balances only as a cross-check, and a mutation that zeroed the refund failed two tests. Its first browser-test expectations also guessed the book and the "at most" price wrongly, which Playwright caught. Chrome's permission prompt went unanswered, so the coordinator checked the wallet panel on the dev server with a headless browser instead. Lesson: word a money result from what the program says happened, and use the wallet's balances to check it, not to compute it.
+
+## 2026-10-13 — M3-a (record the close and settle)
+
+### Where AI misled us or we course-corrected
+
+41. **The coordinator's brief expected the 4:00 PM fixtures to come from Zach's posts; his accounts can't hold one after 4:05.** Push accounts keep only their latest price (PS.03); read at 6:10 PM, they held a 6:06 PM after-hours price. The real 4:00:00 PM close in the tests is a classmate's post through the upgraded receiver (PS.06), found by scanning both receivers for META's feed; Zach's account serves as the legacy-receiver fixture, and a real partly verified post as the unverified case. The card also placed the band check in Settle while §6's error table lists BandTooWide under Record close; both now check it (D147). Lesson: before naming a fixture, check that the account still holds the moment the test needs.

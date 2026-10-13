@@ -79,7 +79,7 @@ On Windows, keep Rust's build output on WSL's disk (`CARGO_TARGET_DIR`): a clean
 
 ## Program
 
-The Solana program is in [`programs/meridian`](programs/meridian), at `kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQX3Ly`. It declares all 23 instructions of ARCHITECTURE.md §6. Built so far: Initialize Config, Update config, the admin rotation, Set operator, Pause and Unpause, Create market, Mint pairs, Redeem (pairs), Place order and Cancel order with the order book, Buy No and Sell No (M2-a), and Return to owner, Replace quotes and the sweep (M2-b, D146); the rest return "not implemented" until their milestone (M1's freeze, P31). Build and test it in WSL, then regenerate the TypeScript client on Windows:
+The Solana program is in [`programs/meridian`](programs/meridian), at `kvQXEAnqr5muN7CKBGWFQ9R5d3L4Yf1bqPgG2BQX3Ly`. It declares all 23 instructions of ARCHITECTURE.md §6. Built so far: Initialize Config, Update config, the admin rotation, Set operator, Pause and Unpause, Create market, Mint pairs, Redeem (pairs), Place order and Cancel order with the order book, Buy No and Sell No (M2-a), Return to owner, Replace quotes and the sweep (M2-b, D146), and Record close and Settle (M3-a, D147); the rest return "not implemented" until their milestone (M1's freeze, P31). Build and test it in WSL, then regenerate the TypeScript client on Windows:
 
 ```sh
 bash scripts/program/build.sh          # in WSL: builds and refreshes clients/idl/meridian.json
@@ -87,7 +87,7 @@ cargo test -p meridian                 # in WSL, after `source scripts/program/e
 npm run client                         # on Windows: regenerates clients/ts from the IDL
 ```
 
-The tests run devnet's own token programs, saved in `programs/meridian/tests/fixtures` by `node scripts/program/dump-token-programs.mjs`. `cargo test -p meridian --test book_compute -- --nocapture` prints the order book's compute per fill (M1.01), and `--test market_costs` what a market's accounts and instructions cost (M1.02), and `--test close_compute` the sweep's, Replace quotes' and Return to owner's (D146).
+The tests run devnet's own token programs, saved in `programs/meridian/tests/fixtures` by `node scripts/program/dump-token-programs.mjs`. `cargo test -p meridian --test book_compute -- --nocapture` prints the order book's compute per fill (M1.01), and `--test market_costs` what a market's accounts and instructions cost (M1.02), `--test close_compute` the sweep's, Replace quotes' and Return to owner's (D146), and `--test settlement_compute` Record close's and Settle's (D147). Record close's and Settle's tests read real Pyth price accounts from devnet, saved in the same folder by `node scripts/program/dump-pyth-prices.mjs programs/meridian/tests/fixtures`.
 
 ### On devnet
 

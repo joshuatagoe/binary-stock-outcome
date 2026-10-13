@@ -740,7 +740,7 @@ A contract is the exact shape of a request: what it sends, who must sign it, whe
 | 15 | Sweep (market) | Operator | After orders close (D37) | Cancels up to 28 resting orders a call into book balances, offers first; a paired offer's pairs close at 1.00 (D142). The backend calls it until the book is empty, 5 calls for a full book; an empty book's sweep does nothing (D146) | OrderCancelled (sweep); Redeemed (pairs) after a paired offer |
 | 16 | Return to owner (market, owner) | Anyone | While the owner's book balance is above zero | Pays it to the owner's own token accounts: USDC, Yes, and No released from paired offers (D99, D142) | BalanceReturned (USDC, Yes and No, D144) |
 | 17 | Close book (market) | Anyone | Settled, with no orders and no balances | Closes the book and its token accounts; deposits go back to whoever paid them (D50) | BookClosed |
-| 18 | Record close (ticker, day, Pyth price account) | Anyone | After the close, passing D28's and D103's checks | Creates or improves that stock's record (D105) | CloseRecorded |
+| 18 | Record close (a market of that stock and day, Pyth price account) | Anyone | Strictly after the market's close, passing D28's and D103's checks and the 25 bps band (D147) | Creates or improves that stock's record: only a price published strictly later replaces it, and it freezes at the first settle (D105, D147) | CloseRecorded |
 | 19 | Settle (market) | Operator for 24 hours after the close, then anyone (D58); backstop rules per D68 | After the close | Settled from the record, or Under review (band on the strike, or no price 15 minutes after the close) | MarketSettled, MarketHeld |
 | 20 | Hold (market, reason) | Admin | Before Settled (D68) | Under review (admin) | MarketHeld |
 | 21 | Propose result (market, official close, source) | Admin | Under review | The program works out the result (close at or above the strike pays Yes, D1) and the wait (D104, D112) | ResultProposed |
@@ -775,7 +775,8 @@ A contract is the exact shape of a request: what it sends, who must sign it, whe
 | NotYourAccount | Minting into, or redeeming from or into, another wallet's token account (D139) | Not shown; the website always uses the trader's own accounts |
 | WaitNotOver | Finalizing early | "Proposed: No wins, final at 5:20 PM ET" |
 | DuplicateOrderId | A re-sent order | Not shown; the tracker treats the order as already placed |
-| PriceNotGenuine, WrongFeed, OutsideWindow, BandTooWide, BeforeClose | Record close | Timeline only, for example "META close not recorded: published 27 s before the close" |
+| PriceNotGenuine, WrongFeed, OutsideWindow, BandTooWide, BeforeClose, RecordFrozen, PriceNotLater | Record close (D147) | Timeline only, for example "META close not recorded: published 27 s before the close" |
+| AlreadySettled, NotOperator, BeforeClose, OutsideWindow, BandTooWide | Settle: already settled; anyone but the operator in the first 24 hours; before the close, or with no record before close + 15 minutes; a record outside this market's window or over today's band limit (D147) | Timeline only; a held market shows "Under review" |
 | BeforeClose | A sweep before orders close (D146) | Not shown; the backend sweeps after the close |
 | InvalidQuantity | A quantity of 0, or a return with nothing to return (D146) | Not shown; the backend treats an empty return as done |
 | (not enough USDC) | — | Caught before sending: "You need up to 6.60 USDC; you have 4.00." (F4) |
