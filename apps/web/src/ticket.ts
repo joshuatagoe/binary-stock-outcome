@@ -32,6 +32,8 @@ export type TicketInput = {
   quantity: number;
   /** The wallet's USDC in base units, or null when not known (the devnet simulation decides then). */
   usdc: bigint | null;
+  /** The Yes (Sell Yes) or No (Sell No) tokens in the wallet, or null when not known (the devnet simulation decides then). */
+  held?: bigint | null;
   ticker: string;
   strikeCents: number;
 };
@@ -112,6 +114,10 @@ export function planTicket(i: TicketInput): Ticket {
   if (isBuy(action) && i.usdc !== null) {
     const need = centsToUsdcUnits(worst.totalCents);
     if (i.usdc < need) blocked = `You need up to ${formatUsdc(need)} USDC; you have ${formatUsdc(i.usdc)}.`;
+  }
+  if (!isBuy(action) && i.held != null && i.held < BigInt(quantity)) {
+    const token = sideOf(action);
+    blocked = i.held === 0n ? `You hold no ${token} to sell.` : `You hold ${i.held} ${token}; you can sell at most ${i.held}.`;
   }
   return {
     ok: true,

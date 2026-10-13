@@ -109,14 +109,14 @@ test.describe('the ticket', () => {
     await expect(page.getByText('Only 5 Yes are wanted right now')).toBeVisible();
   });
 
-  test('Buy No and Sell No say the program does not accept them yet, and refuse after the devnet check, with nothing sent', async ({ page }) => {
+  test('until the new program is on devnet, Buy No and Sell No are refused after the devnet check in plain words, with nothing sent', async ({ page }) => {
     // Devnet answers the program's NotImplemented (6015, P31).
-    const scenario = await f4Scenario({ simulation: { InstructionError: [2, { Custom: 6015 }] } });
+    const scenario = await f4Scenario({ no: 5n, simulation: { InstructionError: [2, { Custom: 6015 }] } });
     await open(page, scenario);
     await connect(page);
     await pick(page, 'Buy No');
     await page.getByLabel('Quantity').fill('5'); // the F4 book wants 5 Yes
-    await expect(page.getByRole('note').filter({ hasText: "Buy No isn't switched on in the program yet." })).toBeVisible();
+    await expect(page.getByRole('note').filter({ hasText: "isn't switched on" })).toHaveCount(0); // M5-b: no standing warning, only the refusal
     await ticketButton(page, 'Buy No').click();
     await expect(page.getByRole('alert')).toContainText("Buy No isn't switched on yet: the program accepts it in a later release. Nothing was sent.");
     expect(scenario.sent).toHaveLength(0);
@@ -235,7 +235,7 @@ test.describe('negative cases', () => {
   });
 
   test('not enough USDC: the button is disabled with the words from F4, before any wallet window', async ({ page }) => {
-    const scenario = await f4Scenario({ usdc: 4_000_000n });
+    const scenario = await f4Scenario({ usdc: 4_000_000n, yes: 5n });
     await open(page, scenario);
     await connect(page);
     await expect(page.getByText('You need up to 6.60 USDC; you have 4.00.')).toBeVisible();

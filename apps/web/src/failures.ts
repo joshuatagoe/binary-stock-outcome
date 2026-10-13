@@ -113,10 +113,9 @@ export function describeSimulationFailure(err: unknown, action: TradeAction, tra
   if (words) return { kind: 'refused', message: words };
   if (custom === 6010) return ALREADY_PLACED;
   if (custom === 1 && (tradeIndex === undefined || index === tradeIndex)) {
-    return {
-      kind: 'not-enough-usdc',
-      message: "Your wallet doesn't hold enough USDC for this order, or not enough of the token you are selling. Nothing was sent.",
-    };
+    // The token program's "insufficient funds": a buy is short of USDC, a sell is short of the token it sells.
+    const short = action === 'buyYes' || action === 'buyNo' ? 'USDC for this order' : `${action === 'sellYes' ? 'Yes' : 'No'} to sell`;
+    return { kind: 'not-enough-usdc', message: `Your wallet doesn't hold enough ${short}. Nothing was sent.` };
   }
   if (err === 'InsufficientFundsForFee' || err === 'AccountNotFound') {
     return {
