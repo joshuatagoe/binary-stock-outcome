@@ -1,6 +1,7 @@
 // The landing page at M0: what Meridian is, and the live settings read from devnet, or from the local chain under
 // make dev (M0 slice e, D74).
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Link as RouterLink } from 'react-router';
 import type { ConfigPanel, Link } from '../describe-config.ts';
 import { CHAIN } from '../network.ts';
 import { ConfigMissing, chainRpc, readConfig } from '../read-config.ts';
@@ -58,7 +59,9 @@ export function Home() {
         )}
         {state.kind === 'ready' && <Settings panel={state.panel} />}
       </section>
-      <p className="muted">Markets, trading and wallets arrive in later milestones.</p>
+      <p>
+        <RouterLink to="/markets">Browse markets</RouterLink>. No wallet is needed to look; connect one to trade.
+      </p>
     </>
   );
 }

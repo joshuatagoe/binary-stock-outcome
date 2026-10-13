@@ -3,7 +3,9 @@ import { StrictMode } from 'react';
 import { createRoot } from 'react-dom/client';
 import { createBrowserRouter, RouterProvider } from 'react-router';
 import { Home } from './pages/Home.tsx';
+import { Markets } from './pages/Markets.tsx';
 import { NotFound } from './pages/NotFound.tsx';
+import { Trade } from './pages/Trade.tsx';
 import { Shell } from './Shell.tsx';
 import './theme.css';
 
@@ -21,7 +23,12 @@ const devOnly = import.meta.env.DEV
 const router = createBrowserRouter([
   {
     element: <Shell />,
-    children: [{ path: '/', element: <Home /> }, ...devOnly, { path: '*', element: <NotFound /> }],
+    children: [
+      { path: '/', element: <Home /> },
+      { path: '/markets', element: <Markets /> },
+      { path: '/trade', element: <Trade /> },
+      ...devOnly, { path: '*', element: <NotFound /> },
+    ],
   },
 ]);
 

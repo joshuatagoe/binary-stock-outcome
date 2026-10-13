@@ -2,7 +2,7 @@
   "name": "@meridian/web",
   "private": true,
   "type": "module",
-  "description": "The website (ARCHITECTURE.md §7, §9): at M0, the shell and a panel that reads Config from devnet.",
+  "description": "The website (ARCHITECTURE.md §7, §9): the shell, Markets, Trade, and wallet connection, reading the chain directly.",
   "scripts": {
     "dev": "vite",
     "build": "tsc -p . && vite build",
