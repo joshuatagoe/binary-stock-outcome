@@ -52,7 +52,7 @@ export const SAMPLES: { [K in EventKind]: EventsByKind[K] } = {
   Fill: { market: A.market, maker: A.bob, makerOrderId: 1n, taker: A.alice, takerOrderId: 7n, side: 'Buy', price: 65, quantity: 10 },
   OrderPlaced: { market: A.market, owner: A.alice, orderId: 7n, side: 'Buy', price: 65, quantity: 4 },
   OrderCancelled: { market: A.market, owner: A.alice, orderId: 7n, side: 'Buy', price: 65, quantity: 4, reason: 'Owner' },
-  BalanceReturned: { market: A.market, owner: A.alice, usdc: 2_600_000n, yes: 0n },
+  BalanceReturned: { market: A.market, owner: A.alice, usdc: 2_600_000n, yes: 0n, no: 4n },
   BookClosed: { market: A.market },
   CloseRecorded: { ticker: 'META', day: 20261012, price: 68_000_000n, conf: 1000n, expo: -5, publishTime: 1_791_835_200n, priceAccount: A.carol, recorder: A.alice },
   MarketSettled: { market: A.market, outcome: 'Yes', settledBy: 'Oracle', price: 68_100_000n, conf: 1000n, expo: -5, publishTime: 1_791_835_200n },

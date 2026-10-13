@@ -16,6 +16,20 @@ describe('program events', () => {
     expect(inProgram).toHaveLength(21);
   });
 
+  it('names every field of every event as the program does (D144)', async () => {
+    const { readFileSync } = await import('node:fs');
+    const { join } = await import('node:path');
+    const rust = readFileSync(join(import.meta.dirname, '..', '..', '..', 'programs', 'meridian', 'src', 'events.rs'), 'utf8');
+    const { EVENT_FIELDS } = await import('../src/index.ts');
+    const camel = (s: string) => s.replace(/_([a-z])/g, (_, c: string) => c.toUpperCase());
+    const structs = [...rust.matchAll(/#\[event\]\s*pub struct (\w+) \{([^}]*)\}/g)];
+    expect(structs).toHaveLength(21);
+    for (const [, name, body] of structs) {
+      const inProgram = [...body.matchAll(/^\s*pub (\w+):/gm)].map((m) => camel(m[1])).sort();
+      expect(Object.keys(EVENT_FIELDS[name as keyof typeof EVENT_FIELDS]).sort(), name).toEqual(inProgram);
+    }
+  });
+
   it('knows a MarketHeld by its reason and an admin note', () => {
     expect(isMeridianEvent({ kind: 'MarketHeld', market: A, reason: 'Admin', note: 'Checking a halted stock' })).toBe(true);
     expect(isMeridianEvent({ kind: 'MarketHeld', market: A, reason: 'Halted', note: '' })).toBe(false);

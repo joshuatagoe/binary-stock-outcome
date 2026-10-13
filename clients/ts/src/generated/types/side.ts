@@ -15,10 +15,10 @@ import {
   type FixedSizeEncoder,
 } from "@solana/kit";
 
-/** What the order does with Yes. Buy No and Sell No (M2) build on these. */
+/** What the order does with Yes. Buy No sells Yes and Sell No buys it (D5, D38). */
 export const Side = { 0: "Buy", 1: "Sell", Buy: 0, Sell: 1 } as const;
 
-/** What the order does with Yes. Buy No and Sell No (M2) build on these. */
+/** What the order does with Yes. Buy No sells Yes and Sell No buys it (D5, D38). */
 export type Side = (typeof Side)[Exclude<keyof typeof Side, number>];
 
 export type SideArgs = Side;

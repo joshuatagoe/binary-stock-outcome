@@ -40,7 +40,8 @@ pub struct Book {
     pub traders: [Trader; TRADER_CAPACITY],
 }
 
-/// A resting order (24 bytes): a bid locks price × quantity in USDC, an offer locks quantity in Yes.
+/// A resting order (24 bytes): a bid locks price × quantity in USDC, an offer locks quantity in Yes, and a paired
+/// offer's No wait in the book's No account (D142).
 #[zero_copy]
 #[derive(Debug, PartialEq, Eq)]
 pub struct Order {
@@ -57,8 +58,8 @@ pub struct Order {
     pub _pad: u8,
 }
 
-/// A trader with resting orders or free balances (64 bytes). Reused once both balances are zero and it has no open
-/// orders (D107).
+/// A trader with resting orders or free balances (64 bytes). Reused once its three balances (USDC, Yes, No) are zero
+/// and it has no open orders (D107, D142).
 #[zero_copy]
 #[derive(Debug, PartialEq, Eq)]
 pub struct Trader {
@@ -72,7 +73,7 @@ pub struct Trader {
     pub _pad: [u8; 6],
 }
 
-/// What the order does with Yes. Buy No and Sell No (M2) build on these.
+/// What the order does with Yes. Buy No sells Yes and Sell No buys it (D5, D38).
 #[derive(AnchorSerialize, AnchorDeserialize, Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Side {
     Buy,

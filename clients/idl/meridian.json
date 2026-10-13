@@ -4259,7 +4259,8 @@
     {
       "name": "BalanceReturned",
       "docs": [
-        "An owner's balance in the book paid to its own accounts (D99)."
+        "An owner's balance in the book paid to its own accounts: USDC, Yes, and No released from paired offers (D99, D142,",
+        "D144)."
       ],
       "type": {
         "kind": "struct",
@@ -4278,6 +4279,10 @@
           },
           {
             "name": "yes",
+            "type": "u64"
+          },
+          {
+            "name": "no",
             "type": "u64"
           }
         ]
@@ -4748,6 +4753,9 @@
           },
           {
             "name": "taker_order_id",
+            "docs": [
+              "The taker's order ID; 0 for Sell No, whose arguments have none (D143)."
+            ],
             "type": "u64"
           },
           {
@@ -5187,7 +5195,8 @@
     {
       "name": "Order",
       "docs": [
-        "A resting order (24 bytes): a bid locks price × quantity in USDC, an offer locks quantity in Yes."
+        "A resting order (24 bytes): a bid locks price × quantity in USDC, an offer locks quantity in Yes, and a paired",
+        "offer's No wait in the book's No account (D142)."
       ],
       "serialization": "bytemuck",
       "repr": {
@@ -5242,7 +5251,9 @@
     {
       "name": "OrderCancelled",
       "docs": [
-        "A resting order left the book; what it locked waits in its owner's book balance (D99)."
+        "A resting order left the book. What it locked waits in its owner's book balance (D99), except after a self-trade,",
+        "when it goes back to the wallet (D90). A paired offer's cancel is followed by Redeemed (pairs) for the pairs it",
+        "closed (D142, D143)."
       ],
       "type": {
         "kind": "struct",
@@ -5309,7 +5320,8 @@
     {
       "name": "OrderPlaced",
       "docs": [
-        "A Limit order's remainder now rests on the book."
+        "A Limit order's remainder now rests on the book. For Buy No, the unsold pairs' Yes rest as a paired offer and",
+        "their No wait in the book (D142)."
       ],
       "type": {
         "kind": "struct",
@@ -5545,7 +5557,8 @@
     {
       "name": "Redeemed",
       "docs": [
-        "Tokens redeemed or burned, and the USDC paid (§6, instruction 9)."
+        "Tokens redeemed or burned, and the USDC paid: Redeem (§6, instruction 9), Sell No's pair close (12), and a paired",
+        "offer's cancel (13), whose USDC goes to the owner's book balance (D143)."
       ],
       "type": {
         "kind": "struct",
@@ -5654,7 +5667,7 @@
     {
       "name": "Side",
       "docs": [
-        "What the order does with Yes. Buy No and Sell No (M2) build on these."
+        "What the order does with Yes. Buy No sells Yes and Sell No buys it (D5, D38)."
       ],
       "type": {
         "kind": "enum",
@@ -5793,8 +5806,8 @@
     {
       "name": "Trader",
       "docs": [
-        "A trader with resting orders or free balances (64 bytes). Reused once both balances are zero and it has no open",
-        "orders (D107)."
+        "A trader with resting orders or free balances (64 bytes). Reused once its three balances (USDC, Yes, No) are zero",
+        "and it has no open orders (D107, D142)."
       ],
       "serialization": "bytemuck",
       "repr": {

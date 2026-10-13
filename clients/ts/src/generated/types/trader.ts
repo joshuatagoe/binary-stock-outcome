@@ -28,8 +28,8 @@ import {
 } from "@solana/kit";
 
 /**
- * A trader with resting orders or free balances (64 bytes). Reused once both balances are zero and it has no open
- * orders (D107).
+ * A trader with resting orders or free balances (64 bytes). Reused once its three balances (USDC, Yes, No) are zero
+ * and it has no open orders (D107, D142).
  */
 export type Trader = {
   owner: Address;
