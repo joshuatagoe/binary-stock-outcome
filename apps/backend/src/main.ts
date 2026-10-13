@@ -7,9 +7,13 @@ import pino from 'pino';
 import { createApp, type Role } from './app.ts';
 import { createChainReader } from './chainReader.ts';
 import { rpcChainSource, type RpcLike } from './chainSource.ts';
+import { createCloseChain, type CloseRpc } from './closeChain.ts';
+import { createCloseJobs } from './closeJobs.ts';
 import { createChecker } from './checker.ts';
-import { databasePath, loadConfig } from './config.ts';
+import { databasePath, loadConfig, operatorSigner } from './config.ts';
 import { migrate, openDatabase } from './db.ts';
+import { rpcTransport, type TransportRpc } from './rpcTransport.ts';
+import { createSendQueue } from './sendQueue.ts';
 import { listen } from './server.ts';
 
 const env = process.env;
@@ -32,6 +36,18 @@ const reader = createChainReader({
   program: PROGRAM_ADDRESS,
   onProgress: (p) => log.info({ step: 'reader', outcome: 'page', ...p }, 'chain reader stored a page'),
 });
+// The close-time jobs (D37, D97): after a market's orders close, sweep its book and return every balance. They send transactions
+// signed with the operator key, so they run only on the primary and only when OPERATOR_SECRET_KEY is set.
+const operator = role === 'primary' ? await operatorSigner(env) : null;
+if (role === 'primary' && !operator) log.warn({ step: 'close', outcome: 'off' }, 'OPERATOR_SECRET_KEY is not set: closed markets will not be swept or returned by this backend');
+const closeJobs = operator
+  ? createCloseJobs({
+      db,
+      chain: createCloseChain({ rpc: rpc as unknown as CloseRpc, queue: createSendQueue({ transport: rpcTransport(rpc as unknown as TransportRpc), onEvent: (e) => log.info({ step: 'send', ...e }, 'send queue') }), operator }),
+      onStep: (s) => log.info({ ...s, action: s.step, step: 'close' }, 'close job'),
+    })
+  : null;
+
 const checker = createChecker({
   db,
   getSlot: (abortSignal) => rpc.getSlot({ commitment: 'confirmed' }).send({ abortSignal }),
@@ -42,10 +58,18 @@ const checker = createChecker({
     const { transactions, events } = await reader.catchUp();
     if (transactions > 0) log.info({ step: 'reader', outcome: 'caught up', transactions, events }, 'chain reader caught up');
   },
+  closeJobs: closeJobs
+    ? async () => {
+        const summary = await closeJobs.run();
+        if (summary.sweeps + summary.returns + summary.finished > 0) log.info({ step: 'close', outcome: 'pass', ...summary }, 'close jobs ran');
+      }
+    : undefined,
   // The reader's failures are errors, not warnings: it has stopped at its place and needs a person (an event it cannot read, a reset).
   onError: (error, job) =>
     job === 'reader'
       ? log.error({ step: 'reader', outcome: 'stopped', err: error }, 'chain reader stopped; it keeps its place and tries again next pass')
+      : job === 'close'
+        ? log.error({ step: 'close', outcome: 'failed', err: error }, 'close jobs failed; the next pass looks at the chain again and sends what is still missing')
       : log.warn({ step: 'check', outcome: 'rpc error', err: error }, 'chain read failed'),
 });
 

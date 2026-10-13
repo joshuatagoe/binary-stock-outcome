@@ -21,9 +21,11 @@ type Options = {
   readTimeoutMs?: number;
   /** The chain reader's catch-up (chainReader.ts). It has its own retries and timeouts, so it is not cut off here. */
   readChain?: () => Promise<unknown>;
+  /** The close-time jobs (closeJobs.ts): sweep and return once orders close. They read the book from the chain, so they do not wait for the reader. */
+  closeJobs?: () => Promise<unknown>;
   now?: () => Date;
   /** `job` says which read failed. */
-  onError?: (error: unknown, job: 'slot' | 'reader') => void;
+  onError?: (error: unknown, job: 'slot' | 'reader' | 'close') => void;
 };
 
 // Ends a read after `ms`, even one that ignores its signal, so a server that never answers can't hold a pass.
@@ -40,7 +42,7 @@ function within<T>(ms: number, read: Read<T>): Promise<T> {
 }
 
 export function createChecker(options: Options) {
-  const { db, getSlot, getGenesisHash, provider, heartbeatEverySecs, readTimeoutMs = 10_000, readChain, now = () => new Date(), onError } = options;
+  const { db, getSlot, getGenesisHash, provider, heartbeatEverySecs, readTimeoutMs = 10_000, readChain, closeJobs, now = () => new Date(), onError } = options;
   let lastPassAt: Date | null = null;
   let chain: Progress['chain'] = null;
   let lastHeartbeat = -Infinity;
@@ -68,6 +70,14 @@ export function createChecker(options: Options) {
         await readChain();
       } catch (error) {
         onError?.(error, 'reader');
+      }
+    }
+    // Each job fails on its own: a reader that has stopped must not keep a market from being swept.
+    if (closeJobs) {
+      try {
+        await closeJobs();
+      } catch (error) {
+        onError?.(error, 'close');
       }
     }
   }

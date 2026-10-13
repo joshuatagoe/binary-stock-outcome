@@ -282,3 +282,34 @@ describe('when the node misbehaves', () => {
     expect(most).toBe(3);
   });
 });
+
+describe('events stored before their position in the block was kept (migration 0003)', () => {
+  it('reads them again and fills the position in, without adding or changing anything else', async () => {
+    const db = freshDb();
+    const txs = history(5);
+    // The old rows: stored with no position, as the reader did before 0003.
+    const { source } = fakeSource(txs);
+    await reader(db, source).reader.catchUp();
+    db.prepare('UPDATE events SET tx_index = NULL').run();
+    const before = db.prepare('SELECT signature, ix_index, event_index, slot, data FROM events ORDER BY signature').all();
+
+    const { source: later, calls } = fakeSource(txs);
+    await reader(db, later).reader.catchUp();
+    const rows = db.prepare('SELECT signature, tx_index FROM events ORDER BY signature').all() as { signature: string; tx_index: number }[];
+    expect(rows).toEqual(txs.map((t) => ({ signature: t.signature, tx_index: t.index! })).sort((a, b) => (a.signature < b.signature ? -1 : 1)));
+    expect(db.prepare('SELECT signature, ix_index, event_index, slot, data FROM events ORDER BY signature').all()).toEqual(before);
+    expect(calls.transactions.sort()).toEqual(txs.map((t) => t.signature).sort());
+
+    // Once filled, a later pass does not fetch them again.
+    const { source: again, calls: calls2 } = fakeSource(txs);
+    await reader(db, again).reader.catchUp();
+    expect(calls2.transactions).toEqual([]);
+  });
+
+  it('stops with an error, storing nothing wrong, when the node gives no position for a transaction', async () => {
+    const db = freshDb();
+    const { source } = fakeSource([cpiTx('Fill', SAMPLES.Fill, { index: null })]);
+    await expect(reader(db, source).reader.catchUp()).rejects.toThrow(/position in its block/);
+    expect(count(db)).toBe(0);
+  });
+});

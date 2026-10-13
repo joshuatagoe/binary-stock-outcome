@@ -19,6 +19,8 @@ export interface RawTx {
   slot: bigint;
   /** Unix seconds; null when the node has none. */
   blockTime: number | null;
+  /** Its place in its block (the node's transactionIndex); null when the node did not give it. */
+  index: number | null;
   failed: boolean;
   logs: string[];
   /** Inner instructions by top-level instruction index, with their program and base58 data. */
@@ -95,6 +97,8 @@ export function createChainReader(options: ChainReaderOptions) {
         const signature = signatures[i]!;
         const tx = await retried(() => source.getTransaction(signature));
         if (!tx) throw new Error(`the node lists transaction ${signature} but cannot return it; the reader stays where it is and will try again`);
+        // Without it, events of one slot could not be put in the order they happened; a null would be stored and never filled in.
+        if (tx.index === null) throw new Error(`the node did not give transaction ${signature}'s position in its block; events of one slot could not be ordered, so the reader stays where it is`);
         out[i] = tx;
       }
     };
@@ -109,6 +113,20 @@ export function createChainReader(options: ChainReaderOptions) {
     return below.length > 0 && below[0]!.slot <= frontierSlot;
   }
 
+  // Rows stored before migration 0003 have no position. Their transactions are read again, a page at a time, and only the
+  // position is written; the events themselves are never touched.
+  const withoutPosition = db.prepare('SELECT DISTINCT signature FROM events WHERE tx_index IS NULL LIMIT ?').pluck();
+  async function fillPositions(): Promise<number> {
+    let filled = 0;
+    for (;;) {
+      const signatures = withoutPosition.all(pageSize) as string[];
+      if (signatures.length === 0) return filled;
+      const txs = await fetchAll(signatures);
+      db.transaction(() => txs.forEach((tx) => store.addPosition(tx.signature, tx.index!)))();
+      filled += txs.length;
+    }
+  }
+
   /**
    * Reads what the program has done that is not stored yet. One call walks from the newest transaction at its start down to the
    * stored frontier (plus, if it first had to finish a walk a crash cut short, one more walk for what came after that), then
@@ -117,6 +135,7 @@ export function createChainReader(options: ChainReaderOptions) {
    */
   async function catchUp(): Promise<CatchUpResult> {
     const result: CatchUpResult = { transactions: 0, events: 0, pages: 0 };
+    await fillPositions();
     const resumed = mark('pending_head') !== null;
 
     for (let walk = 1; ; walk++) {

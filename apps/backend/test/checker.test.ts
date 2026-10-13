@@ -10,7 +10,7 @@ import { migrate, openDatabase } from '../src/db.ts';
 const GENESIS = 'EtWTRABZaYq6iMfeYKouRu166VU2xqa1wcaWoxPkrZBG';
 type Answer<T> = T | Error | 'hang';
 
-function setup(slots: Answer<number>[], hashes: Answer<string>[] = [GENESIS, GENESIS, GENESIS], readChain?: () => Promise<void>) {
+function setup(slots: Answer<number>[], hashes: Answer<string>[] = [GENESIS, GENESIS, GENESIS], readChain?: () => Promise<void>, closeJobs?: () => Promise<unknown>) {
   const db = openDatabase(join(mkdtempSync(join(tmpdir(), 'meridian-checker-')), 'meridian.db'));
   migrate(db);
   let t = Date.parse('2026-10-12T13:00:00Z');
@@ -31,8 +31,9 @@ function setup(slots: Answer<number>[], hashes: Answer<string>[] = [GENESIS, GEN
     heartbeatEverySecs: 60,
     readTimeoutMs: 50,
     readChain,
+    closeJobs,
     now: clock.now,
-    onError: (e) => errors.push(e),
+    onError: (e, job) => errors.push(job === 'close' ? `close: ${String(e)}` : e),
   });
   const heartbeats = () =>
     db.prepare('SELECT at, provider, slot, genesis_hash FROM heartbeats ORDER BY at').all() as { slot: number; genesis_hash: string }[];
@@ -133,6 +134,25 @@ describe('the checker', () => {
       expect(checker.progress().lastPassAt).toEqual(new Date('2026-10-12T13:00:00Z'));
       release();
       await pass;
+    });
+  });
+  describe('with the close jobs', () => {
+    it('runs them on every pass, after the reader', async () => {
+      const order: string[] = [];
+      const { checker, clock } = setup([100, 130], undefined, async () => void order.push('reader'), async () => void order.push('close'));
+      await checker.pass();
+      clock.advance(30);
+      await checker.pass();
+      expect(order).toEqual(['reader', 'close', 'reader', 'close']);
+    });
+
+    it('runs them even when the reader has stopped, and reports each failure on its own', async () => {
+      let closed = 0;
+      const { checker, errors } = setup([100], undefined, async () => { throw new Error('reader stuck'); }, async () => { closed++; throw new Error('sweep failed'); });
+      await checker.pass();
+      expect(closed).toBe(1);
+      expect(errors.map(String)).toEqual(['Error: reader stuck', 'close: Error: sweep failed']);
+      expect(checker.progress().lastPassAt).not.toBeNull();
     });
   });
 });
