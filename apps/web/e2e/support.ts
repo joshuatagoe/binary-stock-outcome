@@ -17,6 +17,8 @@ export type Scenario = {
   /** 'down' answers every call with a 503. */
   devnet: 'up' | 'down';
   paused: boolean;
+  /** Yes and No the trader holds on particular markets (by address), instead of `yes` and `no` on every market. */
+  holdings?: Record<string, { yes?: bigint; no?: bigint }>;
   /** The trader's balances, in base units. */
   sol: bigint;
   usdc: bigint;
@@ -48,7 +50,7 @@ export async function f4Scenario(extra: Partial<Scenario> = {}): Promise<Scenari
     markets: [
       await chainMarket({ strikeDollars: 680 }, F4_BIDS, F4_ASKS),
       await chainMarket({ strikeDollars: 690 }, [], []),
-      await chainMarket({ symbol: 'AAPL', strikeDollars: 270 }, [[40, 3]], [[45, 4]]),
+      await chainMarket({ symbol: 'AAPL', strikeDollars: 270 }, [[40, 3, 1]], [[45, 4, 1]]),
     ],
     devnet: 'up',
     paused: false,
@@ -101,8 +103,12 @@ export async function fakeNetwork(page: Page, scenario: Scenario) {
     const a = await marketAccounts(m.address);
     const [yes] = await findAssociatedTokenPda({ owner: TRADER, mint: a.yesMint, tokenProgram: TOKEN_2022_PROGRAM_ADDRESS });
     const [no] = await findAssociatedTokenPda({ owner: TRADER, mint: a.noMint, tokenProgram: TOKEN_2022_PROGRAM_ADDRESS });
-    tokens.set(yes, () => (scenario.yes > 0n ? tokenAccount(scenario.yes) : null));
-    tokens.set(no, () => (scenario.no > 0n ? tokenAccount(scenario.no) : null));
+    const held = (side: 'yes' | 'no') => () => {
+      const amount = scenario.holdings ? (scenario.holdings[m.address]?.[side] ?? 0n) : scenario[side];
+      return amount > 0n ? tokenAccount(amount) : null;
+    };
+    tokens.set(yes, held('yes'));
+    tokens.set(no, held('no'));
   }
 
   let statusCalls = 0;

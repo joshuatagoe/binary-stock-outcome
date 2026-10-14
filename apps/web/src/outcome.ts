@@ -124,9 +124,44 @@ function noMovements(i: LandedInput, delta: Balances): Balances | null {
   return buying ? { usdc: -money, yes: 0n, no: BigInt(filled) } : { usdc: money, yes: 0n, no: -BigInt(filled) };
 }
 
+/**
+ * A Buy No limit order (F6, D39, D143). It mints a pair for every No it asks for: the sold ones keep their No and the rest rest as a
+ * paired offer (D142). So the wallet's USDC change is the bids' payment plus the refund of its own cancelled bids, less 1.00 for every
+ * pair, and its No change is the sold ones. Null unless the events, the book's count and the wallet all agree.
+ */
+function describeBuyNoLimit(i: LandedInput, delta: Balances): string | null {
+  if (!i.fills || i.pairsMinted === undefined || i.pairsClosed === undefined || i.resting === null) return null;
+  const filled = i.fills.reduce((n, f) => n + f.quantity, 0);
+  const proceeds = BigInt(i.fills.reduce((n, f) => n + f.quantity * f.priceCents, 0)) * USDC_UNITS_PER_CENT;
+  const refunded = i.selfTrades.filter((s) => s.side === 'Buy').reduce((n, s) => n + BigInt(s.quantity * s.priceCents), 0n) * USDC_UNITS_PER_CENT;
+  const pairs = BigInt(filled + i.resting);
+  if (i.pairsMinted !== pairs || i.pairsClosed !== 0n || delta.no !== BigInt(filled) || delta.yes !== 0n) return null;
+  if (delta.usdc !== refunded + proceeds - pairs * 1_000_000n) return null;
+  const price = formatCents(i.priceCents ?? 0);
+  const locked = `${formatUsdcUnits(BigInt(i.resting) * 1_000_000n)} locked`;
+  if (filled === 0) {
+    if (i.resting === 0) return 'Your order was not placed: it would have traded with your own resting order, which was cancelled.';
+    return `Order placed · Buy ${i.quantity} No at ${price} · selling ${i.resting} Yes at ${formatCents(100 - (i.priceCents ?? 0))} · ${locked}`;
+  }
+  // What the filled No really cost: 1.00 each, less what their Yes sold for.
+  const cost = BigInt(filled) * 1_000_000n - proceeds;
+  const average = formatCents(averageCents(cost, filled));
+  if (i.resting === 0) return filled >= i.quantity ? `Bought ${filled} No at ${average} · ${formatUsdcUnits(cost)}` : `Bought ${filled} of ${i.quantity} No at ${average} · ${formatUsdcUnits(cost)}`;
+  return `Bought ${filled} of ${i.quantity} No at ${average} · ${formatUsdcUnits(cost)}. ${i.resting} are resting on the book · ${locked}.`;
+}
+
 /** The done words, from the landed transaction's own movements and events (C, D90). */
 export function describeLanded(i: LandedInput): string {
   if (!i.delta) return COULD_NOT_TELL;
+  if (i.action === 'buyNo' && i.kind === 'Limit') {
+    const base = describeBuyNoLimit(i, i.delta);
+    if (base === null) return COULD_NOT_TELL;
+    if (i.selfTrades.length === 0) return base;
+    const own = i.selfTrades
+      .map((s) => `Your ${s.side === 'Sell' ? 'offer' : 'bid'} of ${s.quantity} Yes at ${s.priceCents}¢ was cancelled: your own order would have traded with it.`)
+      .join(' ');
+    return base.startsWith('Your order was not placed') ? own : `${own} ${base}`;
+  }
   const noToken = i.action === 'buyNo' || i.action === 'sellNo';
   // The No buttons are market orders. Their money comes from the events, never from a balance that includes refunds.
   const counted = noToken ? noMovements(i, i.delta) : i.delta;

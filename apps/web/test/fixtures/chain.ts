@@ -26,8 +26,14 @@ export const ticker = (symbol: string) => {
   return bytes;
 };
 
-/** [price in cents, quantity, trader index]. */
-export type Resting = readonly [price: number, quantity: number, trader?: number, orderId?: bigint];
+/** [price in cents, quantity, trader index, order ID, flags (1 is a paired offer, D142)]. */
+export type Resting = readonly [price: number, quantity: number, trader?: number, orderId?: bigint, flags?: number];
+
+/** A trader entry in the book: who, and what is waiting for Return to owner (D99), in USDC base units and whole tokens. */
+export type BookTrader = { owner: Address; freeUsdc?: bigint; freeYes?: bigint; freeNo?: bigint; openOrders?: number };
+
+/** Anyone but the test wallet: the bot and Dave of USERS.md F4. */
+export const OTHER_OWNER = address('AXwqBeBHE8S7YgngNQmudHYijxNpvQMPEkTymR59ZZXY');
 
 export type MarketOptions = {
   symbol?: string;
@@ -76,14 +82,24 @@ export function marketBytes(o: MarketOptions): Uint8Array {
   return new Uint8Array(getMarketEncoder().encode(marketData(o) as never));
 }
 
-export function bookBytes(market: Address, bids: readonly Resting[], asks: readonly Resting[], owner: Address = CREATOR): Uint8Array {
-  const order = (seq: number, [price, quantity, trader = 0, orderId]: Resting) => ({
-    seq: BigInt(seq), orderId: orderId ?? BigInt(1000 + seq), quantity, trader, price, flags: 0, pad: 0,
+export function bookBytes(
+  market: Address,
+  bids: readonly Resting[],
+  asks: readonly Resting[],
+  owner: Address = CREATOR,
+  traders: readonly BookTrader[] = [],
+): Uint8Array {
+  const order = (seq: number, [price, quantity, trader = 0, orderId, flags = 0]: Resting) => ({
+    seq: BigInt(seq), orderId: orderId ?? BigInt(1000 + seq), quantity, trader, price, flags, pad: 0,
   });
   const empty = { seq: 0n, orderId: 0n, quantity: 0, trader: 0, price: 0, flags: 0, pad: 0 };
   const fill = (rows: readonly Resting[], first: number) =>
     Array.from({ length: 64 }, (_, i) => (rows[i] ? order(first + i, rows[i]!) : empty));
-  const noTrader = { owner, freeUsdc: 0n, freeYes: 0n, freeNo: 0n, openOrders: 0, pad: new Uint8Array(6) };
+  // Without a trader table the first entry is the owner's (the test wallet, who rests orders as trader 0) and the rest are the
+  // bot's and Dave's, other wallets. A table fills the first entries itself, and the rest belong to someone else.
+  const noTrader = { owner: OTHER_OWNER, freeUsdc: 0n, freeYes: 0n, freeNo: 0n, openOrders: 0, pad: new Uint8Array(6) };
+  const first = traders.length > 0 ? traders : [{ owner }];
+  const entry = (t: BookTrader) => ({ owner: t.owner, freeUsdc: t.freeUsdc ?? 0n, freeYes: t.freeYes ?? 0n, freeNo: t.freeNo ?? 0n, openOrders: t.openOrders ?? 0, pad: new Uint8Array(6) });
   return new Uint8Array(
     getBookEncoder().encode({
       market,
@@ -94,7 +110,7 @@ export function bookBytes(market: Address, bids: readonly Resting[], asks: reado
       reserved: new Uint8Array(18),
       bids: fill(bids, 1),
       asks: fill(asks, 100),
-      traders: Array.from({ length: 64 }, () => noTrader),
+      traders: Array.from({ length: 64 }, (_, i) => (first[i] ? entry(first[i]!) : noTrader)),
     } as never),
   );
 }
@@ -103,10 +119,10 @@ export const toBase64 = (bytes: Uint8Array) => base64.decode(bytes);
 
 export type ChainMarket = { address: Address; market: Uint8Array; book: Uint8Array };
 
-/** One market with its book, at the address the program derives (D139). */
-export async function chainMarket(o: MarketOptions, bids: readonly Resting[], asks: readonly Resting[]): Promise<ChainMarket> {
+/** One market with its book, at the address the program derives (D139). A trader table names who owns the entries. */
+export async function chainMarket(o: MarketOptions, bids: readonly Resting[], asks: readonly Resting[], traders: readonly BookTrader[] = []): Promise<ChainMarket> {
   const addr = await marketAddress(o.symbol ?? 'META', o.day ?? DAY, o.strikeDollars * 100);
-  return { address: addr, market: marketBytes(o), book: bookBytes(addr, bids, asks) };
+  return { address: addr, market: marketBytes(o), book: bookBytes(addr, bids, asks, CREATOR, traders) };
 }
 
 /** The F4 book. */

@@ -11,8 +11,7 @@ import {
   type Signature,
   type SolanaRpcApi,
 } from '@solana/kit';
-import type { TradeAction } from '@meridian/shared';
-import { SimulationFailed } from './failures.ts';
+import { SimulationFailed, type Tracked } from './failures.ts';
 import type { Steps, TxStatus } from './tracker.ts';
 import type { Lifetime } from './trade-tx.ts';
 
@@ -30,7 +29,7 @@ export const POLL_MS = 800;
 
 export function liveSteps(options: {
   rpc: Rpc<SolanaRpcApi>;
-  action: TradeAction;
+  action: Tracked;
   /** Builds the transaction around a fresh blockhash. */
   build: (lifetime: Lifetime) => Promise<Message>;
 }): Steps {

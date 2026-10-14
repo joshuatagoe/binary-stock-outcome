@@ -3,6 +3,7 @@
 // the M2 program is on devnet (M3, P31; turned on in M5-b), so the devnet simulation refuses them before the wallet opens.
 import {
   getBuyNoInstructionAsync,
+  getCancelOrderInstructionAsync,
   getPlaceOrderInstructionAsync,
   getSellNoInstructionAsync,
   MERIDIAN_PROGRAM_ADDRESS,
@@ -126,4 +127,34 @@ export async function buildTrade(i: TradeInput) {
 export async function marketMints(market: Address) {
   const { yesMint, noMint } = await marketAccounts(market);
   return { yesMint, noMint };
+}
+
+export type CancelInput = {
+  owner: TransactionSigner;
+  market: Address;
+  usdcMint: Address;
+  orderId: bigint;
+  lifetime: Lifetime;
+};
+
+/**
+ * Cancel order (F6): one instruction, signed by the order's owner. It moves what the order locked into the owner's balance in the
+ * book, which Return to owner pays to the wallet (D99); a paired offer's pairs close instead (D142, D143). It touches none of the
+ * wallet's token accounts, so it opens none. Never paused (D68).
+ */
+export async function buildCancel(i: CancelInput) {
+  const instruction = await getCancelOrderInstructionAsync({
+    market: i.market,
+    owner: i.owner,
+    usdcMint: i.usdcMint,
+    eventAuthority: await eventAuthority(),
+    program: MERIDIAN_PROGRAM_ADDRESS,
+    orderId: i.orderId,
+  });
+  return pipe(
+    createTransactionMessage({ version: 0 }),
+    (m) => setTransactionMessageFeePayerSigner(i.owner, m),
+    (m) => setTransactionMessageLifetimeUsingBlockhash(i.lifetime, m),
+    (m) => appendTransactionMessageInstructions([instruction], m),
+  );
 }

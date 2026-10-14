@@ -5,6 +5,7 @@ import { createBrowserRouter, RouterProvider } from 'react-router';
 import { Home } from './pages/Home.tsx';
 import { Markets } from './pages/Markets.tsx';
 import { NotFound } from './pages/NotFound.tsx';
+import { Portfolio } from './pages/Portfolio.tsx';
 import { Trade } from './pages/Trade.tsx';
 import { Shell } from './Shell.tsx';
 import './theme.css';
@@ -27,6 +28,7 @@ const router = createBrowserRouter([
       { path: '/', element: <Home /> },
       { path: '/markets', element: <Markets /> },
       { path: '/trade', element: <Trade /> },
+      { path: '/portfolio', element: <Portfolio /> },
       ...devOnly, { path: '*', element: <NotFound /> },
     ],
   },

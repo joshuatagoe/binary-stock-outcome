@@ -1,6 +1,6 @@
 // What the site says when a wallet or the program refuses (D13, D115, D136; ARCHITECTURE.md §6 "Errors, in USERS.md's words").
 import { describe, expect, it } from 'vitest';
-import { describeConnectFailure, describeSimulationFailure, describeWalletFailure, WALLET_WORDS } from '../src/failures.ts';
+import { describeConnectFailure, describeLandedFailure, describeSimulationFailure, describeWalletFailure, WALLET_WORDS } from '../src/failures.ts';
 
 const walletError = (code: number, message = 'x') => Object.assign(new Error(message), { code });
 
@@ -121,5 +121,40 @@ describe("the program's refusals, seen in the devnet simulation before the walle
     expect(f.kind).toBe('refused');
     expect(f.message).toMatch(/^Devnet refused this order, so nothing was sent\./);
     expect(f.message).toContain('9999');
+  });
+});
+
+describe('Cancel order refused (F6, D68, D90)', () => {
+  const custom = (code: number) => ({ InstructionError: [0, { Custom: code }] });
+  const GONE = 'That order is no longer open: it was filled or cancelled before this cancel arrived. Nothing was changed; your balances and positions show what happened.';
+
+  it('an order that already filled (or was cancelled) says so, and that nothing changed', () => {
+    expect(describeSimulationFailure(custom(6031), 'cancel', 0)).toEqual({ kind: 'refused', message: GONE });
+  });
+
+  it('the same refusal after the cancel was sent costs the network fee, and says so', () => {
+    expect(describeLandedFailure(custom(6031), 'cancel')).toEqual({ kind: 'refused', message: `${GONE} Only the network fee was charged.` });
+  });
+
+  it('is never refused for a pause or the close, which do not stop a cancel (D68): an unexpected code is shown plainly', () => {
+    expect(describeSimulationFailure(custom(6012), 'cancel', 0).message).not.toMatch(/paused by the admin/);
+    expect(describeSimulationFailure(custom(6022), 'cancel', 0).message).not.toMatch(/Trading has ended/);
+  });
+
+  it('a wallet with no SOL for the fee is told where to get some', () => {
+    expect(describeSimulationFailure('InsufficientFundsForFee', 'cancel')).toMatchObject({ kind: 'no-sol' });
+  });
+
+  it('a short token balance is not "not enough USDC": a cancel moves none of the wallet’s tokens', () => {
+    expect(describeSimulationFailure(custom(1), 'cancel', 0).message).not.toMatch(/enough USDC/);
+  });
+});
+
+describe('a full book refuses a Buy No limit whole (D138, D143)', () => {
+  it('in the simulation, before the wallet opens: "This market’s order book is full."', () => {
+    expect(describeSimulationFailure({ InstructionError: [2, { Custom: 6009 }] }, 'buyNo', 2)).toEqual({
+      kind: 'refused',
+      message: "This market's order book is full.",
+    });
   });
 });

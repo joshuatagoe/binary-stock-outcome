@@ -182,3 +182,9 @@ How AI was used on this project: tools, what worked, where it misled us, and how
 ### Where AI misled us or we course-corrected
 
 42. **P33 said a node orders one slot's transactions by signature, and the plan assumed Surfpool would show the real order; both were wrong.** Agave's address-signatures key holds the block position, and devnet returned block order in 10 slots out of 10. Surfpool, the local chain meant to prove the fix, doesn't return `transactionIndex`, so the first live run failed at the reader until the source learned to read the block's signature list instead. The same run also spent 9 minutes waiting after an early failure had left its database empty. Lesson: check that the test node supports a field before building on it, measure what a node returns before writing down why, and make a live test fail fast when its setup is empty.
+
+## 2026-10-13 — M5-c (Portfolio, Cancel and Buy No limits)
+
+### Where AI misled us or we course-corrected
+
+43. **The website agent's first test fixtures and its first "on its way" rule were both wrong, and its own tests caught them.** It let every order and trader the fixture didn't specify belong to the test wallet, so the bot's and Dave's orders showed as the wallet's own open orders; only the first trader slot is the wallet's now. Its first rule counted the read just after a cancel as one of the two empty reads that end "on its way to your wallet"; a unit test and a browser test written from F6 caught it, and the rule now counts consecutive empty reads. Separately, the coordinator's look at the dev server found "Markets" and "Portfolio" 4 px apart in the nav; a layout test now measures it. Lesson: a fixture's defaults are part of what a test claims, so make them the least surprising owner, not the convenient one.

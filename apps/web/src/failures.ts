@@ -1,6 +1,9 @@
 // What the site says when a wallet or the program refuses (D13, D115, D136; ARCHITECTURE.md §6, "Errors, in USERS.md's words").
 import type { TradeAction } from '@meridian/shared';
 
+/** What an attempt is for: one of the four buttons, or Cancel order (F6). */
+export type Tracked = TradeAction | 'cancel';
+
 export type FailureKind =
   | 'closed'
   | 'wrong-network'
@@ -98,14 +101,31 @@ const notImplemented = (action: TradeAction): Failure => ({
   message: `${action === 'buyNo' ? 'Buy No' : 'Sell No'} isn't switched on yet: the program accepts it in a later release. Nothing was sent.`,
 });
 
+const NO_SOL: Failure = {
+  kind: 'no-sol',
+  message: "You need a little devnet SOL for network fees, about 0.01 SOL. It's free at faucet.solana.com: choose Devnet and paste your address.",
+};
+
 const ALREADY_PLACED: Failure = {
   kind: 'already-placed',
   message: 'This order was already placed. The book and your balances show what happened to it.',
 };
 
+// A cancel's own refusals. Pause and the close don't stop it (D68, D143), so none of the order words apply: the one thing that
+// goes wrong is an order that is no longer there, because it filled, or was cancelled some other way, first.
+const ORDER_GONE =
+  'That order is no longer open: it was filled or cancelled before this cancel arrived. Nothing was changed; your balances and positions show what happened.';
+const ORDER_NOT_FOUND = 6031;
+
 /** A refusal in the devnet simulation, before the wallet opens: nothing was sent, so nothing was charged (D115). */
-export function describeSimulationFailure(err: unknown, action: TradeAction, tradeIndex?: number): Failure {
+export function describeSimulationFailure(err: unknown, tracked: Tracked, tradeIndex?: number): Failure {
   const { custom, name, index } = instructionError(err);
+  if (tracked === 'cancel') {
+    if (custom === ORDER_NOT_FOUND) return { kind: 'refused', message: ORDER_GONE };
+    if (err === 'InsufficientFundsForFee' || err === 'AccountNotFound') return NO_SOL;
+    return { kind: 'refused', message: `Devnet refused this cancel, so nothing was sent. (${show(err)})` };
+  }
+  const action = tracked;
   const noToken = action === 'buyNo' || action === 'sellNo';
   if (noToken && (custom === 6015 || name === 'InvalidInstructionData')) return notImplemented(action);
   if (custom === 6022) return { kind: 'orders-closed', message: `Trading has ended, so nothing was ${done(action)} and nothing was sent.` };
@@ -117,18 +137,18 @@ export function describeSimulationFailure(err: unknown, action: TradeAction, tra
     const short = action === 'buyYes' || action === 'buyNo' ? 'USDC for this order' : `${action === 'sellYes' ? 'Yes' : 'No'} to sell`;
     return { kind: 'not-enough-usdc', message: `Your wallet doesn't hold enough ${short}. Nothing was sent.` };
   }
-  if (err === 'InsufficientFundsForFee' || err === 'AccountNotFound') {
-    return {
-      kind: 'no-sol',
-      message: "You need a little devnet SOL for network fees, about 0.01 SOL. It's free at faucet.solana.com: choose Devnet and paste your address.",
-    };
-  }
+  if (err === 'InsufficientFundsForFee' || err === 'AccountNotFound') return NO_SOL;
   return { kind: 'refused', message: `Devnet refused this order, so nothing was sent. (${show(err)})` };
 }
 
 /** An order that was sent and landed with an error: the network fee was charged (ARCHITECTURE.md §6). */
-export function describeLandedFailure(err: unknown, action: TradeAction): Failure {
+export function describeLandedFailure(err: unknown, tracked: Tracked): Failure {
   const { custom } = instructionError(err);
+  if (tracked === 'cancel') {
+    if (custom === ORDER_NOT_FOUND) return { kind: 'refused', message: `${ORDER_GONE} Only the network fee was charged.` };
+    return { kind: 'failed', message: `The program refused your cancel after it was sent; only the network fee was charged. (${show(err)})` };
+  }
+  const action = tracked;
   if (custom === 6022) {
     return {
       kind: 'orders-closed',
