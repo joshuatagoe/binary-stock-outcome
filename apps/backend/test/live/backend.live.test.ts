@@ -28,7 +28,7 @@ const fresh = () => {
 const source = () => rpcChainSource(createSolanaRpc(url!) as unknown as RpcLike, PROGRAM_ADDRESS);
 
 type Row = { signature: string; ix_index: number; event_index: number; slot: number; block_time: string | null; kind: string; market: string | null; market_key: string | null; trading_day: number | null; wallet: string | null; counterparty: string | null; price_cents: number | null; qty: number | null; usdc_units: number | null; data: string };
-const rowsOf = (db: Db) => db.prepare('SELECT * FROM events ORDER BY slot, ix_index, event_index').all() as Row[];
+const rowsOf = (db: Db) => db.prepare('SELECT * FROM events ORDER BY slot, tx_index, ix_index, event_index').all() as Row[];
 
 /** What the program wrote, counted without the reader's code: every event call (an inner instruction of the program that starts with
  *  Anchor's event tag) and every "Program data" log line, in every transaction that touched the program, failed or not. */
@@ -272,7 +272,7 @@ describe.skipIf(!url)('the running backend', () => {
     const whole = fresh();
     await createChainReader({ db: whole, source: source(), program: PROGRAM_ADDRESS }).catchUp();
     const db = new Database(path, { readonly: true });
-    const theirs = db.prepare('SELECT * FROM events ORDER BY slot, ix_index, event_index').all();
+    const theirs = db.prepare('SELECT * FROM events ORDER BY slot, tx_index, ix_index, event_index').all();
     db.close();
     expect(theirs).toEqual(rowsOf(whole));
     expect(one.output() + two.output()).not.toMatch(/"level":50/); // no error-level log line in either run

@@ -27,11 +27,11 @@ import {
   type KeyPairSigner,
 } from '@solana/kit';
 
-const TOKEN = address('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
-const TOKEN_2022 = address('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
+export const TOKEN = address('TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA');
+export const TOKEN_2022 = address('TokenzQdBNbLqP5VEhdkAS6EPFLC1PHnBqCXEpPxuEb');
 const ATA_PROGRAM = address('ATokenGPvbdGVxr1b2hvZbsiqW5xWH25efTNsLJA8knL');
 const SYSTEM = address('11111111111111111111111111111111');
-const USDC_MINT = address('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU'); // config/program-local.json's usdcMint
+export const USDC_MINT = address('4zMMC9srt5Ri5X14GAgXhaHii3GnPAEERYPJgZJDncDU'); // config/program-local.json's usdcMint
 
 /** An event as the store should hold it: its kind and the fields of `data` (big numbers as text, as the store keeps them). */
 export type Expected = { kind: string } & Record<string, unknown>;
@@ -65,16 +65,16 @@ export async function rpcCall(url: string, method: string, params: unknown[] = [
   return body.result;
 }
 
-const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+export const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-async function ata(owner: Address, mint: Address, program: Address): Promise<Address> {
+export async function ata(owner: Address, mint: Address, program: Address): Promise<Address> {
   const enc = getAddressEncoder();
   const [pda] = await getProgramDerivedAddress({ programAddress: ATA_PROGRAM, seeds: [enc.encode(owner), enc.encode(program), enc.encode(mint)] });
   return pda;
 }
 
 /** Creates an associated token account if it is missing (the idempotent instruction), paid by `payer`. */
-const createAta = (payer: KeyPairSigner, account: Address, owner: Address, mint: Address, program: Address): Instruction => ({
+export const createAta = (payer: KeyPairSigner, account: Address, owner: Address, mint: Address, program: Address): Instruction => ({
   programAddress: ATA_PROGRAM,
   accounts: [
     { address: payer.address, role: AccountRole.WRITABLE_SIGNER, signer: payer } as never,

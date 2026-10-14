@@ -176,3 +176,9 @@ How AI was used on this project: tools, what worked, where it misled us, and how
 ### Where AI misled us or we course-corrected
 
 41. **The coordinator's brief expected the 4:00 PM fixtures to come from Zach's posts; his accounts can't hold one after 4:05.** Push accounts keep only their latest price (PS.03); read at 6:10 PM, they held a 6:06 PM after-hours price. The real 4:00:00 PM close in the tests is a classmate's post through the upgraded receiver (PS.06), found by scanning both receivers for META's feed; Zach's account serves as the legacy-receiver fixture, and a real partly verified post as the unverified case. The card also placed the band check in Settle while §6's error table lists BandTooWide under Record close; both now check it (D147). Lesson: before naming a fixture, check that the account still holds the moment the test needs.
+
+## 2026-10-13 — M4-c (event order and the close-time jobs)
+
+### Where AI misled us or we course-corrected
+
+42. **P33 said a node orders one slot's transactions by signature, and the plan assumed Surfpool would show the real order; both were wrong.** Agave's address-signatures key holds the block position, and devnet returned block order in 10 slots out of 10. Surfpool, the local chain meant to prove the fix, doesn't return `transactionIndex`, so the first live run failed at the reader until the source learned to read the block's signature list instead. The same run also spent 9 minutes waiting after an early failure had left its database empty. Lesson: check that the test node supports a field before building on it, measure what a node returns before writing down why, and make a live test fail fast when its setup is empty.

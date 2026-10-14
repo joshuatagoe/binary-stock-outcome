@@ -33,6 +33,35 @@ describe('rpcChainSource', () => {
     expect(isMeridianEvent(events[0]!.event)).toBe(true);
   });
 
+  it('reads the transaction’s place in its block (transactionIndex), which the node gives with the transaction', async () => {
+    const source = rpcChainSource(node().rpc, PROGRAM_ADDRESS);
+    expect((await source.getTransaction(INIT))!.index).toBe(9);
+    const reply = fixture('devnet-initialize-config.json');
+    delete reply.transactionIndex;
+    expect((await rpcChainSource(node({ transaction: reply }).rpc, PROGRAM_ADDRESS).getTransaction(INIT))!.index).toBeNull();
+  });
+
+  it('asks the block for the place when the node does not give it with the transaction (Surfpool, older nodes), once per slot', async () => {
+    const reply = fixture('devnet-initialize-config.json');
+    delete reply.transactionIndex;
+    const blocks: unknown[] = [];
+    const rpc = {
+      ...node({ transaction: reply }).rpc,
+      getBlock: (slot: unknown, config: unknown) => ({ send: async () => (blocks.push([slot, config]), { signatures: ['other', 'another', INIT, 'last'] }) }),
+    } as unknown as RpcLike;
+    const source = rpcChainSource(rpc, PROGRAM_ADDRESS);
+    expect((await source.getTransaction(INIT))!.index).toBe(2);
+    expect((await source.getTransaction(INIT))!.index).toBe(2);
+    expect(blocks).toEqual([[509_925_181n, { transactionDetails: 'signatures', rewards: false, maxSupportedTransactionVersion: 0, commitment: 'confirmed' }]]);
+  });
+
+  it('gives no place when the block does not list the transaction', async () => {
+    const reply = fixture('devnet-initialize-config.json');
+    delete reply.transactionIndex;
+    const rpc = { ...node({ transaction: reply }).rpc, getBlock: () => ({ send: async () => ({ signatures: ['other'] }) }) } as unknown as RpcLike;
+    expect((await rpcChainSource(rpc, PROGRAM_ADDRESS).getTransaction(INIT))!.index).toBeNull();
+  });
+
   it('drops parsed inner instructions (the system program’s createAccount) and keeps raw ones', async () => {
     const tx = (await rpcChainSource(node().rpc, PROGRAM_ADDRESS).getTransaction(INIT))!;
     expect(tx.inner).toEqual([{ index: 0, instructions: [] }]);
@@ -87,7 +116,7 @@ describe('rpcChainSource', () => {
       }),
       getTransaction: (s: string) => ({
         // The second recorded transaction is the program's deployment; it has no events, and only the first is on file in full.
-        send: async () => (s === INIT ? fixture('devnet-initialize-config.json') : { slot: 1, blockTime: null, meta: { err: null, logMessages: [], innerInstructions: [] } }),
+        send: async () => (s === INIT ? fixture('devnet-initialize-config.json') : { slot: 1, transactionIndex: 3, blockTime: null, meta: { err: null, logMessages: [], innerInstructions: [] } }),
       }),
     } as unknown as RpcLike;
     const result = await createChainReader({ db, source: rpcChainSource(rpc, PROGRAM_ADDRESS), program: PROGRAM_ADDRESS }).catchUp();

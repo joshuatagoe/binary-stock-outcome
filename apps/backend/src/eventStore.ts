@@ -44,12 +44,15 @@ function numbersOf(e: MeridianEvent): { price: number | null; qty: number | bigi
 
 const iso = (seconds: number | bigint) => new Date(Number(seconds) * 1000).toISOString();
 
+/** The order things happened in: the slot, the transaction's place in its block, then the instruction and the event. */
+export const EVENTS_IN_ORDER = 'slot, tx_index, ix_index, event_index';
+
 export function createEventStore(db: Db, options: { networkEpoch?: number } = {}) {
   const { networkEpoch = 0 } = options;
   // ON CONFLICT, never INSERT OR IGNORE: that would also swallow a row the CHECK rules refuse, and drop a bad event without a word.
   const insertEvent = db.prepare(`
-    INSERT INTO events (signature, ix_index, event_index, slot, block_time, kind, market, market_key, trading_day, wallet, counterparty, price_cents, qty, usdc_units, data, network_epoch)
-    VALUES (@signature, @ix, @index, @slot, @blockTime, @kind, @market, (SELECT market_key FROM markets WHERE market = @market), COALESCE(@day, (SELECT trading_day FROM markets WHERE market = @market)), @wallet, @counterparty, @price, @qty, @usdc, @data, @epoch)
+    INSERT INTO events (signature, ix_index, event_index, slot, tx_index, block_time, kind, market, market_key, trading_day, wallet, counterparty, price_cents, qty, usdc_units, data, network_epoch)
+    VALUES (@signature, @ix, @index, @slot, @txIndex, @blockTime, @kind, @market, (SELECT market_key FROM markets WHERE market = @market), COALESCE(@day, (SELECT trading_day FROM markets WHERE market = @market)), @wallet, @counterparty, @price, @qty, @usdc, @data, @epoch)
     ON CONFLICT (signature, ix_index, event_index) DO NOTHING`);
   const insertMarket = db.prepare(`
     INSERT INTO markets (market, market_key, network_epoch, stock, trading_day, strike_cents, mint_open_at, open_at, close_at)
@@ -67,7 +70,7 @@ export function createEventStore(db: Db, options: { networkEpoch?: number } = {}
         const market = 'market' in event ? event.market : null;
         const day = event.kind === 'MarketCreated' || event.kind === 'CloseRecorded' ? event.day : null;
         added += insertEvent.run({
-          signature: tx.signature, ix: ixIndex, index: eventIndex, slot: tx.slot, blockTime: tx.blockTime === null ? null : iso(tx.blockTime),
+          signature: tx.signature, ix: ixIndex, index: eventIndex, slot: tx.slot, txIndex: tx.index, blockTime: tx.blockTime === null ? null : iso(tx.blockTime),
           kind: event.kind, market, day, wallet: walletOf(event), counterparty: event.kind === 'Fill' ? event.maker : null, price, qty, usdc, data: toJson(event), epoch: networkEpoch,
         }).changes;
         if (event.kind === 'MarketCreated') {
@@ -83,7 +86,11 @@ export function createEventStore(db: Db, options: { networkEpoch?: number } = {}
     })();
   }
 
-  return { addTransaction };
+  const setPosition = db.prepare('UPDATE events SET tx_index = ? WHERE signature = ? AND tx_index IS NULL');
+  /** Fills in the position of a transaction whose events were stored before it was kept. Returns the rows changed. */
+  const addPosition = (signature: string, index: number) => setPosition.run(index, signature).changes;
+
+  return { addTransaction, addPosition };
 }
 
 export type EventStore = ReturnType<typeof createEventStore>;

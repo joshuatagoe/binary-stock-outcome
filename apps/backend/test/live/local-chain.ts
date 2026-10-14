@@ -4,7 +4,7 @@
 //   node apps/backend/test/live/local-chain.ts start   # ports 8909 (RPC) and 8910 (websocket); needs .local/meridian.so
 //   node apps/backend/test/live/local-chain.ts stop
 // Environment: MERIDIAN_TEST_RPC_PORT (default 8909); MERIDIAN_PROGRAM_SO, a WSL path to the built program
-// (default /home/joshu/.cache/meridian-target/backend-m4b/deploy/meridian.so), is copied to .local/meridian.so.
+// (default /home/joshu/.cache/meridian-target/backend-m4c/deploy/meridian.so), is copied to .local/meridian.so.
 import { execFileSync, spawnSync } from 'node:child_process';
 import { existsSync, mkdirSync, readFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
@@ -57,7 +57,7 @@ function stop() {
 
 async function start() {
   mkdirSync(LOCAL, { recursive: true });
-  const so = process.env.MERIDIAN_PROGRAM_SO ?? '/home/joshu/.cache/meridian-target/backend-m4b/deploy/meridian.so';
+  const so = process.env.MERIDIAN_PROGRAM_SO ?? '/home/joshu/.cache/meridian-target/backend-m4c/deploy/meridian.so';
   linux(`cp ${quote(so)} .local/meridian.so`);
   const program = readFileSync(join(ROOT, 'Anchor.toml'), 'utf8').match(/\[programs\.localnet\]\s*meridian\s*=\s*"(\w+)"/)![1]!;
   const out = linux(

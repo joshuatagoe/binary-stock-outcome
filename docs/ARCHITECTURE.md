@@ -631,6 +631,7 @@ erDiagram
     int16 ix_index
     int16 event_index
     int64 slot
+    int32 tx_index
     utc_time block_time
     text kind
     text market
@@ -703,6 +704,7 @@ erDiagram
 - **The network epoch** goes up by one at each devnet reset, which the heartbeat's genesis hash detects. History from before a reset stays visible and labelled (D19).
 - **Rules the store refuses bad data with:**
   - each event is stored once, keyed by signature, instruction index and event index, where the event index counts all of our program's event calls and data lines in the transaction;
+  - events are ordered by slot, the transaction's position in its block (`tx_index`), instruction index and event index; a transaction whose position can't be read stops the reader (P34);
   - a row the rules refuse stops the reader rather than being skipped (P32);
   - prices are 1 to 99¢, quantities are above 0, and USDC amounts are at least 0;
   - report text is at most 500 characters (D91);

@@ -184,3 +184,35 @@ describe('a market recreated at a new program address (a devnet reset, D19)', ()
     ]);
   });
 });
+
+// A node lists a slot's transactions newest first, by their place in the block (Agave's address-signatures key holds the
+// transaction index), and getTransaction gives that place as `transactionIndex`. The store keeps it so the Timeline can order
+// events by what happened first, not by signature, which is random.
+describe('the order of events within a slot', () => {
+  const inOrder = 'SELECT signature, tx_index FROM events ORDER BY slot, tx_index, ix_index, event_index';
+
+  it('stores the transaction’s place in its block and orders two transactions of one slot by it, not by signature', () => {
+    const { db, add } = fresh();
+    // The later one in the block has the smaller signature, so ordering by signature would give the wrong answer.
+    add(cpiTx('Fill', SAMPLES.Fill, { signature: 'zzz-first-in-block', slot: 700, index: 2 }));
+    add(cpiTx('Fill', SAMPLES.Fill, { signature: 'aaa-second-in-block', slot: 700, index: 9 }));
+    expect(rows(db, inOrder).map((r) => [r.signature, r.tx_index])).toEqual([['zzz-first-in-block', 2], ['aaa-second-in-block', 9]]);
+  });
+
+  it('puts the slot before the position, and the instruction and event after it', () => {
+    const { db, add } = fresh();
+    add(cpiTx('Fill', SAMPLES.Fill, { signature: 'later-slot', slot: 701, index: 0 }));
+    add(tx({ signature: 'two', slot: 700, index: 4, calls: [{ index: 0, events: [eventBytes('Fill', SAMPLES.Fill)] }, { index: 1, events: [eventBytes('OrderPlaced', SAMPLES.OrderPlaced)] }] }));
+    add(cpiTx('Fill', SAMPLES.Fill, { signature: 'one', slot: 700, index: 3 }));
+    expect(rows(db, 'SELECT signature, ix_index FROM events ORDER BY slot, tx_index, ix_index, event_index').map((r) => [r.signature, r.ix_index])).toEqual([
+      ['one', 0], ['two', 0], ['two', 1], ['later-slot', 0],
+    ]);
+  });
+
+  it('refuses a negative position', () => {
+    const { db } = fresh();
+    const insert = db.prepare("INSERT INTO events (signature, ix_index, event_index, slot, tx_index, kind, data) VALUES ('x', 0, 0, 1, ?, 'Paused', '{}')");
+    expect(() => insert.run(-1)).toThrow(/CHECK/);
+    expect(insert.run(0).changes).toBe(1);
+  });
+});

@@ -72,6 +72,17 @@ export const MIGRATIONS: Migration[] = [
       );
     `,
   },
+  {
+    // The transaction's place in its block (M4-c). Agave lists a slot's transactions by it, newest first, and getTransaction gives it
+    // as transactionIndex (a node without that field is asked for the block's list instead). Rows stored before this migration have
+    // none (NULL) until the reader reads them again.
+    name: '0003_events_tx_index',
+    sql: `
+      ALTER TABLE events ADD COLUMN tx_index INTEGER CHECK (tx_index IS NULL OR tx_index >= 0);
+      CREATE INDEX events_in_order ON events (slot, tx_index, ix_index, event_index);
+      CREATE INDEX events_without_position ON events (signature) WHERE tx_index IS NULL;
+    `,
+  },
 ];
 
 export function openDatabase(path: string): Db {

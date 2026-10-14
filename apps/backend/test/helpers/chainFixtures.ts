@@ -68,6 +68,8 @@ export interface TxSpec {
   signature?: string;
   slot?: number;
   blockTime?: number | null;
+  /** Its place in its block; the default is its number, so a later transaction is later in the slot. */
+  index?: number | null;
   failed?: boolean;
   /** Event calls, grouped by the top-level instruction that made them. */
   calls?: { index: number; events: Uint8Array[]; programId?: string; tag?: Uint8Array }[];
@@ -81,6 +83,7 @@ export function tx(spec: TxSpec = {}): RawTx {
     signature: spec.signature ?? signatureOf(n),
     slot: BigInt(spec.slot ?? 1000 + n),
     blockTime: spec.blockTime === undefined ? 1_791_811_900 + n : spec.blockTime,
+    index: spec.index === undefined ? n : spec.index,
     failed: spec.failed ?? false,
     logs: spec.logs ?? [],
     inner: (spec.calls ?? []).map((c) => ({
