@@ -1,20 +1,26 @@
 // Trade (F4 to F7): one market's book, and the ticket for the four buttons. The page names its market in its address
 // (D72). All four buttons go through the transaction tracker (D13): Buy Yes and Sell Yes send Place order, Buy No and Sell
-// No their own instructions (D143; market orders only, M5-b). Until the new program is on devnet (M3, P31) devnet's
-// simulation refuses the No buttons before the wallet opens, and the page says so in plain words. Attempts live above the
-// page (attempts.ts), so leaving it during "may still land" can't lead to a second order.
+// No their own instructions (D143). Buy Yes, Sell Yes and Buy No can be limit orders (F6); a Buy No limit's unsold pairs rest
+// as a paired offer, and the wallet's own resting orders are listed here with a Cancel order button (M5-c). Until the new program
+// is on devnet (M3, P31) devnet's simulation refuses the No buttons before the wallet opens, and the page says so in plain words.
+// Attempts live above the page (attempts.ts), so leaving it during "may still land" can't lead to a second order.
+import type { Book } from '@meridian/client';
 import { formatCents, formatDollars, formatUsdc, marketAddress, type TradeAction } from '@meridian/shared';
 import type { Address } from '@solana/kit';
 import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react';
 import { Link, useSearchParams } from 'react-router';
 import { attempts, useAttempt, type Saved } from '../attempts.ts';
 import { useChainConfig } from '../chain-config.tsx';
+import { Status } from '../Status.tsx';
 import { isLive, type TrackerState } from '../tracker.ts';
 import { liveSteps } from '../send.ts';
 import { dayWords, marketState, parseMarketSlug, quotes, type Levels, type MarketView } from '../markets.ts';
 import { CHAIN } from '../network.ts';
 import { useNow } from '../now.ts';
 import { describeLanded, type Balances } from '../outcome.ts';
+import { OpenOrders } from '../OpenOrders.tsx';
+import { lockedYes, ownBalance, ownOrders } from '../orders.ts';
+import { placed } from '../placed.ts';
 import { chainRpc } from '../read-config.ts';
 import { readBalances, readLanded, readMarket, readResting } from '../read-markets.ts';
 import { actionName, isBuy, largeOrderConfirm, planLimit, planTicket, sameOrder, TRADE_ACTIONS } from '../ticket.ts';
@@ -28,7 +34,7 @@ type Load =
   | { kind: 'loading' }
   | { kind: 'error' }
   | { kind: 'missing' }
-  | { kind: 'ready'; market: MarketView; levels: Levels };
+  | { kind: 'ready'; market: MarketView; levels: Levels; book: Book };
 
 export function Trade() {
   const [params] = useSearchParams();
@@ -54,6 +60,8 @@ function Market({ parsed, slug }: { parsed: NonNullable<ReturnType<typeof parseM
   const [address, setAddress] = useState<Address | null>(null);
   const [load, setLoad] = useState<Load>({ kind: 'loading' });
   const [attempt, setAttempt] = useState(0);
+  // How many times the book has been read: a cancel's money has left the book once it has been read empty (D99).
+  const [reads, setReads] = useState(0);
   const heading = useRef<HTMLHeadingElement>(null);
   const now = useNow(5000);
   const { refresh } = useChainConfig();
@@ -77,7 +85,11 @@ function Market({ parsed, slug }: { parsed: NonNullable<ReturnType<typeof parseM
     const read = (first: boolean) => {
       refresh(); // the pause flag is re-read on the same poll as the book
       return readMarket(chainRpc, address, controller.signal).then(
-        (row) => !controller.signal.aborted && setLoad(row ? { kind: 'ready', ...row } : { kind: 'missing' }),
+        (row) => {
+          if (controller.signal.aborted) return;
+          setLoad(row ? { kind: 'ready', ...row } : { kind: 'missing' });
+          setReads((n) => n + 1);
+        },
         (error) => {
           if (controller.signal.aborted) return;
           console.error(`Reading the market from ${CHAIN.name} failed:`, error);
@@ -128,13 +140,35 @@ function Market({ parsed, slug }: { parsed: NonNullable<ReturnType<typeof parseM
           </p>
         </div>
       )}
-      {load.kind === 'ready' && <Ready market={load.market} levels={load.levels} now={now} title={title} slug={slug} onChanged={() => readNow.current()} />}
+      {load.kind === 'ready' && (
+        <Ready market={load.market} levels={load.levels} book={load.book} reads={reads} now={now} title={title} slug={slug} onChanged={() => readNow.current()} />
+      )}
     </>
   );
 }
 
-function Ready({ market, levels, now, title, slug, onChanged }: { market: MarketView; levels: Levels; now: number; title: string; slug: string; onChanged: () => void }) {
+function Ready({
+  market,
+  levels,
+  book,
+  reads,
+  now,
+  title,
+  slug,
+  onChanged,
+}: {
+  market: MarketView;
+  levels: Levels;
+  book: Book;
+  reads: number;
+  now: number;
+  title: string;
+  slug: string;
+  onChanged: () => void;
+}) {
+  const wallet = useWallet();
   const state = marketState(market, now);
+  const orders = useMemo(() => (wallet.address ? ownOrders(book, wallet.address) : []), [book, wallet.address]);
   const q = quotes(levels);
   const price = (label: string, cents: number | null) => (cents === null ? `${label}: no quotes yet` : `${label} ${formatCents(cents)}`);
   const spoken = (label: string, cents: number | null) => (cents === null ? `${label}: no quotes yet` : `${label} ${cents} cents`);
@@ -161,7 +195,20 @@ function Ready({ market, levels, now, title, slug, onChanged }: { market: Market
         </ul>
       </section>
       <BookTable levels={levels} />
-      <TicketPanel market={market} levels={levels} state={state} title={title} slug={slug} onChanged={onChanged} />
+      <TicketPanel market={market} levels={levels} state={state} title={title} slug={slug} onChanged={onChanged} inOrders={lockedYes(orders)} />
+      {wallet.address && (
+        <section className="card" aria-labelledby="orders-heading">
+          <h2 id="orders-heading">Your open orders</h2>
+          <OpenOrders
+            groups={[{ market, orders }]}
+            reads={reads}
+            balanceOf={() => (wallet.address ? ownBalance(book, wallet.address) : null)}
+            onChanged={onChanged}
+            showMarket={false}
+            emptyWords="You have no open orders on this market. A limit order that does not fill at once rests here, and you can cancel it."
+          />
+        </section>
+      )}
     </>
   );
 }
@@ -228,6 +275,7 @@ function TicketPanel({
   title,
   slug,
   onChanged,
+  inOrders,
 }: {
   market: MarketView;
   levels: Levels;
@@ -235,6 +283,8 @@ function TicketPanel({
   title: string;
   slug: string;
   onChanged: () => void;
+  /** Yes the wallet has resting in its own sell offers on this market (F6). */
+  inOrders: bigint;
 }) {
   const wallet = useWallet();
   const { config } = useChainConfig();
@@ -344,10 +394,19 @@ function TicketPanel({
     if (m.kind === 'Limit') setLimitText(String(m.sendPriceCents));
   }, [attemptMeta]);
 
+  // A limit price typed for Buy Yes or Sell Yes is a Yes price, and on Buy No it is a No price: carrying it across would silently
+  // mean 100 minus it. So it is cleared when the price changes meaning, and the trader types the new one.
+  const switchTo = (next: TradeAction) => {
+    if ((next === 'buyNo') !== (action === 'buyNo')) setLimitText('');
+    setAction(next);
+  };
+
   const quantity = Number(quantityText);
   const limitCents = Number(limitText);
   const yesAction = action === 'buyYes' || action === 'sellYes';
-  const effectiveMode: Mode = yesAction ? mode : 'Market';
+  // Sell No never rests (D38), so it is a market order only; the other three can rest what they cannot trade at once (F6).
+  const limitable = action !== 'sellNo';
+  const effectiveMode: Mode = limitable ? mode : 'Market';
   const usdc = held?.usdc ?? wallet.funds?.usdc ?? null;
 
   // A changed ticket is a new order: it gets a new ID, and a pending confirm is withdrawn (D101).
@@ -362,15 +421,16 @@ function TicketPanel({
     quantity,
     usdc,
     held: held ? (action === 'sellYes' ? held.yes : held.no) : null,
+    inOrders,
     ticker: market.ticker,
     strikeCents: market.strikeCents,
   });
-  const limit = planLimit({ action, quantity, priceCents: limitCents, usdc });
+  const limit = planLimit({ action, quantity, priceCents: limitCents, usdc, book: levels, held: held ? held.yes : null, inOrders });
   type Plan = { ok: false; message: string } | { ok: true; sendPriceCents: number; payoff: string; limitLine: string; blocked: string | null; worstCents: number; totalCents: number };
   const plan: Plan =
     effectiveMode === 'Limit'
       ? limit.ok
-        ? { ...limit, worstCents: limit.sendPriceCents, totalCents: limit.sendPriceCents * quantity }
+        ? { ...limit, worstCents: limit.sendPriceCents, totalCents: limit.totalCents ?? limit.sendPriceCents * quantity }
         : limit
       : marketPlan.ok
         ? { ...marketPlan, worstCents: marketPlan.traderCents }
@@ -404,6 +464,8 @@ function TicketPanel({
     setConfirming(false);
     orderId.current ??= newOrderId();
     const id = orderId.current;
+    // The chain keeps only what is left of a resting order, so Portfolio's "4 filled · 6 open" needs the size it was placed at.
+    if (effectiveMode === 'Limit' && owner) placed.remember(owner, market.address, id, quantity);
     const meta: Meta = { action, quantity, kind: effectiveMode, sendPriceCents: plan.sendPriceCents, worst: plan.worstCents, orderId: String(id) };
     const steps = liveSteps({
       rpc: chainRpc,
@@ -438,12 +500,12 @@ function TicketPanel({
           <div className="choices" role="radiogroup" aria-label="Action">
             {TRADE_ACTIONS.map((a) => (
               <label key={a} className={`choice ${a === action ? 'selected' : ''}`}>
-                <input type="radio" name="action" value={a} checked={a === action} onChange={() => setAction(a)} />
+                <input type="radio" name="action" value={a} checked={a === action} onChange={() => switchTo(a)} />
                 {actionName(a)}
               </label>
             ))}
           </div>
-          {yesAction && (
+          {limitable && (
             <div className="choices" role="radiogroup" aria-label="Order type">
               {(['Market', 'Limit'] as const).map((m) => (
                 <label key={m} className={`choice ${m === effectiveMode ? 'selected' : ''}`}>
@@ -538,68 +600,5 @@ function TicketPanel({
         </p>
       )}
     </section>
-  );
-}
-
-function Status({
-  tracked,
-  result,
-  statusRef,
-  name,
-  retry,
-  canRetry,
-}: {
-  tracked: TrackerState;
-  result: string | null;
-  statusRef: React.RefObject<HTMLDivElement | null>;
-  name: string;
-  retry: () => void;
-  canRetry: boolean;
-}) {
-  const link = (signature?: string) =>
-    signature ? (
-      <>
-        {' '}
-        <a href={`https://explorer.solana.com/tx/${signature}?cluster=devnet`}>View the transaction</a>
-      </>
-    ) : null;
-  const blocking = ['refused', 'orders-closed', 'not-implemented', 'not-enough-usdc', 'no-sol', 'wrong-network', 'failed', 'expired', 'already-placed'].includes(tracked.kind);
-  const polite =
-    tracked.kind === 'checking'
-      ? 'Checking your order on devnet…'
-      : tracked.kind === 'awaitingWallet'
-        ? 'Waiting for your wallet…'
-        : tracked.kind === 'sending'
-          ? 'Sending…'
-          : tracked.kind === 'mayStillLand'
-            ? 'Sent, may still land. This can take up to a minute. Don’t send it again.'
-            : tracked.kind === 'closed'
-              ? 'message' in tracked
-                ? tracked.message
-                : ''
-              : tracked.kind === 'done'
-                ? (result ?? `${name} landed.`)
-                : '';
-  return (
-    <div ref={statusRef} tabIndex={-1} className="status-line">
-      <div role="status" aria-live="polite" className={tracked.kind === 'done' ? 'notice ok' : polite ? 'notice' : undefined}>
-        {polite}
-        {(tracked.kind === 'done' || tracked.kind === 'mayStillLand') && link(tracked.signature)}
-      </div>
-      {blocking && 'message' in tracked && (
-        <div role="alert" className="notice danger">
-          <p>{tracked.message}</p>
-          {link(tracked.signature)}
-          {(tracked.kind === 'expired' || tracked.kind === 'failed' || tracked.kind === 'wrong-network') &&
-            (canRetry ? (
-              <button type="button" onClick={retry}>
-                Try again
-              </button>
-            ) : (
-              <p className="muted">Your ticket has changed since this order. Press {name} to place it as a new order.</p>
-            ))}
-        </div>
-      )}
-    </div>
   );
 }

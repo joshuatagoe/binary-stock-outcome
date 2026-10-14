@@ -1,8 +1,7 @@
 // The transaction tracker (D13, D115, ARCHITECTURE.md §7). One attempt per order: simulate on devnet, ask the wallet to
 // sign, send from the site, and wait for "finalized". "Not found yet" is never a failure: only an expired blockhash ends
 // the wait, and then nothing was spent. The steps are passed in, so tests need no network and no clock.
-import type { TradeAction } from '@meridian/shared';
-import { describeLandedFailure, describeSimulationFailure, describeWalletFailure, type Failure } from './failures.ts';
+import { describeLandedFailure, describeSimulationFailure, describeWalletFailure, type Failure, type Tracked } from './failures.ts';
 
 export type TrackerState =
   | { kind: 'idle' }
@@ -32,7 +31,7 @@ export interface Steps {
   /** How long to wait for an answer before showing "Sent, may still land". */
   mayStillLandAfterMs: number;
   pollMs: number;
-  action?: TradeAction;
+  action?: Tracked;
   /** The index of the trade instruction in the transaction, so an earlier instruction's error isn't read as the trade's. */
   tradeIndex?: number;
 }
@@ -120,7 +119,10 @@ export async function watch(steps: Steps, signature: string, emit: (s: TrackerSt
     if (nones >= 2) {
       return end({
         kind: 'expired',
-        message: 'Your order expired before it reached the network. Nothing was spent. Try again to send a new one.',
+        message:
+          action === 'cancel'
+            ? 'Your cancel expired before it reached the network. Nothing was spent, and the order is still open. Try again to send a new cancel.'
+            : 'Your order expired before it reached the network. Nothing was spent. Try again to send a new one.',
         signature,
       });
     }

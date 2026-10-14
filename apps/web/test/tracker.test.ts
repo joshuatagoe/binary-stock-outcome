@@ -115,6 +115,16 @@ describe('the tracker', () => {
     expect(final).toMatchObject({ kind: 'expired', signature: 'SIG' });
   });
 
+  it('a cancel that expires says the order is still open, and offers Try again (F6)', async () => {
+    let height = 100n;
+    const s = steps({ action: 'cancel', send: failWith(new Error('fetch failed')), status: async () => 'none' as const, blockHeight: async () => (height += 1n) });
+    const { final } = await run(s);
+    expect(final).toMatchObject({
+      kind: 'expired',
+      message: 'Your cancel expired before it reached the network. Nothing was spent, and the order is still open. Try again to send a new cancel.',
+    });
+  });
+
   it('a transaction that is confirmed (landed, not final) never expires, however high the block height', async () => {
     let polls = 0;
     const s = steps({ blockHeight: async () => 9999n, status: async () => (++polls < 5 ? 'pending' : 'finalized') });

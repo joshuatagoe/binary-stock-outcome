@@ -2,6 +2,7 @@
 // the program answers NotImplemented to them until M2 lands (P31).
 import {
   getBuyNoInstructionDataDecoder,
+  getCancelOrderInstructionDataDecoder,
   getPlaceOrderInstructionDataDecoder,
   getSellNoInstructionDataDecoder,
   MERIDIAN_PROGRAM_ADDRESS,
@@ -12,7 +13,7 @@ import { marketAccounts } from '@meridian/shared';
 import { address, createNoopSigner, getBase64EncodedWireTransaction, compileTransaction, type Blockhash } from '@solana/kit';
 import { findAssociatedTokenPda, TOKEN_2022_PROGRAM_ADDRESS, TOKEN_PROGRAM_ADDRESS } from '@solana-program/token-2022';
 import { describe, expect, it } from 'vitest';
-import { buildTrade, newOrderId } from '../src/trade-tx.ts';
+import { buildCancel, buildTrade, newOrderId } from '../src/trade-tx.ts';
 import { chainMarket, config } from './fixtures/chain.ts';
 
 const trader = createNoopSigner(address('5LKyP7WchayADj5zwowChWizkyW3vHtWWj9nFYmz8Z5Q'));
@@ -93,5 +94,29 @@ describe('order IDs (D101)', () => {
       expect(id).toBeGreaterThan(0n);
       expect(id).toBeLessThan(1n << 64n);
     }
+  });
+});
+
+describe('Cancel order (F6, D68)', () => {
+  it('is one instruction with the order’s ID, signed by the owner, on the order’s market and book, and opens no account', async () => {
+    const { address: market } = await chainMarket({ strikeDollars: 680 }, [], []);
+    const message = await buildCancel({ owner: trader, market, usdcMint, orderId: 4242n, lifetime });
+    const accounts = await marketAccounts(market);
+    expect(message.feePayer.address).toBe(trader.address);
+    expect(message.instructions).toHaveLength(1);
+    const ix = message.instructions[0]!;
+    expect(ix.programAddress).toBe(MERIDIAN_PROGRAM_ADDRESS);
+    expect(getCancelOrderInstructionDataDecoder().decode(dataOf(ix))).toMatchObject({ orderId: 4242n });
+    const keys = ix.accounts!.map((a) => a.address);
+    expect(keys).toContain(market);
+    expect(keys).toContain(accounts.book);
+    expect(keys).toContain(accounts.bookNo);
+    expect(keys).toContain(trader.address);
+  });
+
+  it('serializes to a transaction a wallet can sign', async () => {
+    const { address: market } = await chainMarket({ strikeDollars: 680 }, [], []);
+    const message = await buildCancel({ owner: trader, market, usdcMint, orderId: 1n, lifetime });
+    expect(getBase64EncodedWireTransaction(compileTransaction(message)).length).toBeGreaterThan(100);
   });
 });

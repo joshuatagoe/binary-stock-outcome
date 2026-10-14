@@ -22,7 +22,7 @@ export function Shell() {
               Meridian
             </Link>
             <nav aria-label="Main">
-              <NavLink to="/markets">Markets</NavLink>
+              <NavLink to="/markets">Markets</NavLink> <NavLink to="/portfolio">Portfolio</NavLink>
             </nav>
             <WalletBar />
           </div>

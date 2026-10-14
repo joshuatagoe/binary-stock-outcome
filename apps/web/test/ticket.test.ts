@@ -177,8 +177,82 @@ describe('a limit order (F6): the trader names the price, and the order rests wh
     expect(planLimit({ action: 'buyYes', quantity: 0, priceCents: 60, usdc: null })).toMatchObject({ ok: false });
   });
 
-  it('is for Yes only: the No buttons are market orders', () => {
-    expect(planLimit({ action: 'buyNo', quantity: 1, priceCents: 40, usdc: null })).toMatchObject({ ok: false });
+  it('is not for Sell No, which never rests (D38)', () => {
+    expect(planLimit({ action: 'sellNo', quantity: 1, priceCents: 40, usdc: null })).toMatchObject({ ok: false });
+  });
+});
+
+describe('a Buy No limit order (F6, D39): the trader names the No price, and the rest is offered as paired Yes', () => {
+  const usdc = (dollars: number) => BigInt(Math.round(dollars * 1_000_000));
+  const noBids = { bids: [] as const };
+
+  it('Buy No 10 at 33¢ sends 33 as the price, offers the matching Yes at 67¢ and says up to 10.00 USDC is locked as pairs', () => {
+    expect(planLimit({ action: 'buyNo', quantity: 10, priceCents: 33, usdc: usdc(20), book: noBids })).toEqual({
+      ok: true,
+      sendPriceCents: 33,
+      totalCents: 1000,
+      payoff:
+        'You offer to buy 10 No at 33¢ each by selling their Yes at 67¢. Whatever is not bought at once rests on the book, and up to 10.00 USDC is locked as pairs until it sells or you cancel.',
+      limitLine: 'You pay at most 3.30 USDC once it has sold.',
+      blocked: null,
+    });
+  });
+
+  it('is blocked when the wallet cannot lock a pair for each No that would rest: 5.00 against 10.00', () => {
+    expect(planLimit({ action: 'buyNo', quantity: 10, priceCents: 33, usdc: usdc(5), book: noBids })).toMatchObject({
+      blocked: 'You need up to 10.00 USDC; you have 5.00.',
+    });
+  });
+
+  it('needs only the net price for the part the bids take at once (D143): bids at 67¢ take all 10 for 3.30', () => {
+    const book = { bids: [[67, 10]] } as const;
+    expect(planLimit({ action: 'buyNo', quantity: 10, priceCents: 33, usdc: usdc(5), book })).toMatchObject({ blocked: null });
+    expect(planLimit({ action: 'buyNo', quantity: 10, priceCents: 33, usdc: usdc(3.29), book })).toMatchObject({ blocked: 'You need up to 3.30 USDC; you have 3.29.' });
+  });
+
+  it('a part-filled book: 4 sell at 67¢ for 1.32 and 6 rest as pairs for 6.00', () => {
+    const book = { bids: [[67, 4], [60, 9]] } as const;
+    expect(planLimit({ action: 'buyNo', quantity: 10, priceCents: 33, usdc: usdc(7.31), book })).toMatchObject({ blocked: 'You need up to 7.32 USDC; you have 7.31.' });
+    expect(planLimit({ action: 'buyNo', quantity: 10, priceCents: 33, usdc: usdc(7.32), book })).toMatchObject({ blocked: null });
+  });
+
+  it('refuses a No price outside 1¢ to 99¢ and a quantity that is not whole', () => {
+    for (const priceCents of [0, 100, 33.5]) {
+      expect(planLimit({ action: 'buyNo', quantity: 10, priceCents, usdc: null, book: noBids })).toMatchObject({ ok: false, message: 'Enter a price from 1¢ to 99¢.' });
+    }
+    expect(planLimit({ action: 'buyNo', quantity: 0, priceCents: 33, usdc: null, book: noBids })).toMatchObject({ ok: false });
+  });
+});
+
+describe('selling Yes that sits in an open order (F6)', () => {
+  const strike = { ticker: 'META', strikeCents: 68000 };
+  const book = { asks: [[65, 10]], bids: [[64, 10]] } as const;
+  const words = '4 of your Yes are in an open order. Cancel it to sell them.';
+
+  it('a Sell Yes with no Yes in the wallet says where they are', () => {
+    expect(planTicket({ action: 'sellYes', book, quantity: 4, usdc: null, held: 0n, inOrders: 4n, ...strike })).toMatchObject({ blocked: words });
+  });
+
+  it('a Sell Yes for more than the wallet holds says what can be sold, then where the rest are', () => {
+    const t = planTicket({ action: 'sellYes', book, quantity: 10, usdc: null, held: 6n, inOrders: 4n, ...strike });
+    expect(t).toMatchObject({ blocked: `You hold 6 Yes; you can sell at most 6. ${words}` });
+  });
+
+  it('is not blocked when the wallet holds enough, whatever sits in orders', () => {
+    expect(planTicket({ action: 'sellYes', book, quantity: 4, usdc: null, held: 6n, inOrders: 4n, ...strike })).toMatchObject({ blocked: null });
+  });
+
+  it('keeps the old words when nothing sits in an order', () => {
+    expect(planTicket({ action: 'sellYes', book, quantity: 5, usdc: null, held: 3n, inOrders: 0n, ...strike })).toMatchObject({ blocked: 'You hold 3 Yes; you can sell at most 3.' });
+    expect(planTicket({ action: 'sellYes', book, quantity: 5, usdc: null, held: 0n, ...strike })).toMatchObject({ blocked: 'You hold no Yes to sell.' });
+  });
+
+  it('a Sell Yes limit says it too', () => {
+    expect(planLimit({ action: 'sellYes', quantity: 4, priceCents: 70, usdc: null, held: 0n, inOrders: 4n })).toMatchObject({ blocked: words });
+  });
+
+  it('a Sell Yes limit with an unknown holding is not blocked (the devnet simulation decides)', () => {
+    expect(planLimit({ action: 'sellYes', quantity: 4, priceCents: 70, usdc: null, held: null, inOrders: 0n })).toMatchObject({ blocked: null });
   });
 });
 

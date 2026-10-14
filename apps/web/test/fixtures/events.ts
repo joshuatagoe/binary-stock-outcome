@@ -38,3 +38,19 @@ export const selfTradeEvent = (owner: string, side: Side, price: number, quantit
       getOrderCancelledEventEncoder().encode({ market: MARKET_FOR_EVENTS, owner: address(owner), orderId: 9, side, price, quantity, reason: CancelReason.SelfTrade }),
     ),
   );
+
+/** The owner's own Cancel order: the resting order's side, price and what was still open (reason Owner). */
+export const ownerCancelEvent = (owner: string, side: Side, price: number, quantity: number, orderId = 9) =>
+  tagged(
+    new Uint8Array(
+      getOrderCancelledEventEncoder().encode({ market: MARKET_FOR_EVENTS, owner: address(owner), orderId, side, price, quantity, reason: CancelReason.Owner }),
+    ),
+  );
+
+/** The 4:00 sweep's cancel of someone's order (reason Sweep). */
+export const sweepCancelEvent = (owner: string, side: Side, price: number, quantity: number) =>
+  tagged(
+    new Uint8Array(
+      getOrderCancelledEventEncoder().encode({ market: MARKET_FOR_EVENTS, owner: address(owner), orderId: 9, side, price, quantity, reason: CancelReason.Sweep }),
+    ),
+  );
